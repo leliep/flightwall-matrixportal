@@ -34,10 +34,11 @@ Umgebungsvariable `MATRIXPORTAL_OTA_PASSWORD` und wird nicht eingecheckt.
 
 ## Stabilität
 
-Die Farbtiefe bleibt standardmäßig bei 2 Bit. Damit stehen die drei sichtbar
-unterscheidbaren Stufen 30 %, 60 % und 100 % zur Verfügung. Höhere Farbtiefen
-sind auf der 128×32-Matrix experimentell und nicht Bestandteil von Version
-2.0.0.
+Der aktuelle Teststand verwendet 3 Bit Farbtiefe. Damit stehen sieben
+Helligkeitsstufen von 15 % bis 100 % zur Verfügung. Die automatische Regelung
+verteilt diese logarithmisch zwischen den eingestellten Lux-Schwellen. Falls
+auf der 128×32-Matrix Bildstörungen auftreten, kann `BIT_DEPTH` in
+`src/main.cpp` wieder auf 2 gesetzt werden.
 
 ## Datenschutz
 

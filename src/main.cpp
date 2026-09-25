@@ -1,4 +1,4 @@
-// Version generated: 2026-09-25 19:19:20 CEST (Europe/Berlin)
+// Version generated: 2026-09-25 19:48:45 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -18,7 +18,7 @@
 #endif
 
 constexpr uint16_t MATRIX_WIDTH = 128;
-constexpr uint8_t BIT_DEPTH = 2;
+constexpr uint8_t BIT_DEPTH = 3;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
 constexpr uint32_t WIFI_RETRY_MS = 60000;
@@ -48,8 +48,8 @@ constexpr float DEFAULT_DISPLAY_RADIUS_KM = 10.0f;
 constexpr char FLIGHTWALL_HOST[] = "raspi-flw";
 constexpr uint16_t FLIGHTWALL_PORT = 8088;
 constexpr char FLIGHTWALL_URL[] = "http://raspi-flw:8088/api/state";
-// At 2-bit color depth, these are the three useful non-zero PWM levels.
-constexpr uint8_t BRIGHTNESS_LEVELS[] = {30, 60, 100};
+// At 3-bit color depth, seven non-zero PWM levels are available.
+constexpr uint8_t BRIGHTNESS_LEVELS[] = {15, 30, 45, 60, 75, 90, 100};
 constexpr uint8_t BRIGHTNESS_LEVEL_COUNT =
     sizeof(BRIGHTNESS_LEVELS) / sizeof(BRIGHTNESS_LEVELS[0]);
 
@@ -563,15 +563,24 @@ bool readBh1750(float &lux) {
 
 
 uint8_t automaticBrightnessIndex(float lux) {
-  const float lowDown = lowLuxThreshold * 0.75f;
-  const float lowUp = lowLuxThreshold * 1.25f;
-  const float highDown = highLuxThreshold * 0.875f;
-  const float highUp = highLuxThreshold * 1.125f;
-  if (brightnessIndex == 0) return lux > lowUp ? 1 : 0;
-  if (brightnessIndex == 2) return lux < highDown ? 1 : 2;
-  if (lux < lowDown) return 0;
-  if (lux > highUp) return 2;
-  return 1;
+  if (lux <= lowLuxThreshold) return 0;
+  if (lux >= highLuxThreshold) return BRIGHTNESS_LEVEL_COUNT - 1;
+
+  const float normalized = logf(lux / lowLuxThreshold) /
+                           logf(highLuxThreshold / lowLuxThreshold);
+  const float scaled = normalized * (BRIGHTNESS_LEVEL_COUNT - 1);
+  const uint8_t target = constrain(
+      static_cast<int>(roundf(scaled)), 0,
+      static_cast<int>(BRIGHTNESS_LEVEL_COUNT - 1));
+
+  // Require a little extra movement across a boundary to avoid flickering.
+  if (target > brightnessIndex && scaled < brightnessIndex + 0.65f) {
+    return brightnessIndex;
+  }
+  if (target < brightnessIndex && scaled > brightnessIndex - 0.65f) {
+    return brightnessIndex;
+  }
+  return target;
 }
 
 
@@ -1044,8 +1053,16 @@ void setup() {
       digitalPinToInterrupt(BUTTON_DOWN_PIN), onButtonDownPressed, FALLING);
 
   preferences.begin("flightwall", false);
+  const uint8_t settingsVersion = preferences.getUChar("settingsVer", 1);
   manualBrightnessIndex = preferences.getUChar("brightness", 1);
-  if (manualBrightnessIndex >= BRIGHTNESS_LEVEL_COUNT) manualBrightnessIndex = 1;
+  if (settingsVersion < 2) {
+    const uint8_t migratedLevels[] = {1, 3, 6};
+    manualBrightnessIndex = manualBrightnessIndex < 3
+        ? migratedLevels[manualBrightnessIndex] : 3;
+    preferences.putUChar("brightness", manualBrightnessIndex);
+    preferences.putUChar("settingsVer", 2);
+  }
+  if (manualBrightnessIndex >= BRIGHTNESS_LEVEL_COUNT) manualBrightnessIndex = 3;
   brightnessIndex = manualBrightnessIndex;
   automaticBrightnessEnabled = preferences.getBool("autoLight", true);
   displayEnabled = preferences.getBool("displayOn", true);

@@ -7,7 +7,7 @@ auf einer 128×32-Pixel-Anzeige an.
 ## Version 2.0
 
 - FlightWall-Daten von `http://raspi-flw:8088/api/state`
-- stabile HUB75-Ausgabe mit 2 Bit Farbtiefe
+- HUB75-Ausgabe mit 3 Bit Farbtiefe und sieben Helligkeitsstufen
 - Dual-Core-Betrieb: Netzwerk und Webserver auf Core 0, Display und Sensorik
   auf Core 1
 - Webinterface unter `http://matrixportal.local`
