@@ -1,0 +1,21 @@
+# Version generated: 2026-09-25 16:55:08 CEST (Europe/Berlin)
+name: PlatformIO Build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Install PlatformIO
+        run: pip install platformio
+      - name: Prepare build-only secrets
+        run: cp include/secrets.h.example include/secrets.h
+      - name: Build firmware
+        run: pio run

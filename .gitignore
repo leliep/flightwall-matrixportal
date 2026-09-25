@@ -1,0 +1,15 @@
+.pio/
+.vscode/.browse.c_cpp.db*
+.vscode/c_cpp_properties.json
+.vscode/launch.json
+.vscode/ipch/
+include/secrets.h
+.DS_Store
+work/
+outputs/
+code.py
+settings.toml
+settings.toml.example
+requirements.txt
+fonts/
+arduino/
