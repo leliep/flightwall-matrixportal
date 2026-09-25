@@ -33,6 +33,8 @@ Zeichen lang ist. Das Webinterface bietet dann einen passwortgeschützten
 Upload für `firmware.bin`. Für PlatformIO steht zusätzlich das Environment
 `adafruit_matrixportal_esp32s3_ota` bereit. Sein Passwort kommt aus der
 Umgebungsvariable `MATRIXPORTAL_OTA_PASSWORD` und wird nicht eingecheckt.
+Der Web-Upload besitzt Firmwareprüfung, Bestätigungsdialog, Fortschrittsanzeige
+und einen Versionsvergleich nach dem automatischen Neustart.
 
 ## Stabilität
 

@@ -57,6 +57,9 @@ gesetzt werden:
 Danach erscheint im Webinterface der Link **Firmware drahtlos aktualisieren**.
 Die Anmeldung verwendet den Benutzernamen `admin` und das gesetzte
 OTA-Passwort. Hochgeladen wird die von PlatformIO erzeugte `firmware.bin`.
+Die Updateseite prüft Dateityp und ESP32-Dateikopf, verlangt eine Bestätigung,
+zeigt den Uploadfortschritt und vergleicht nach dem Neustart die Firmwareversion
+vor und nach dem Update. Flash- und Prüfungsfehler werden einzeln gemeldet.
 
 Alternativ kann das OTA-Environment von PlatformIO verwendet werden. Das
 Passwort wird dabei bewusst nicht in `platformio.ini` gespeichert:
@@ -88,6 +91,15 @@ erneut.
 - **UP:** manueller Modus, Helligkeit erhöhen
 - **DOWN:** manueller Modus, Helligkeit verringern
 - **UP + DOWN:** Helligkeitsautomatik aktivieren
+
+## Diagnose
+
+Die Statusseite zeigt Firmwareversion und Erstellungszeitpunkt, Laufzeit,
+freien und minimal freien RAM, WLAN-Signal, Luxwert, Helligkeitsstufe,
+Zeitpunkt des letzten FlightWall-Abrufs, Core-Zuordnung, Stackreserven und den
+Grund des letzten Neustarts. Über eine bestätigungspflichtige Schaltfläche kann
+der ESP neu gestartet werden. Maschinenlesbare Basiswerte stehen zusätzlich
+unter `/api/status` als JSON bereit.
 
 ## Hardware
 

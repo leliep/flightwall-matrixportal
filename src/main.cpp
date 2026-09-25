@@ -1,4 +1,4 @@
-// Version generated: 2026-09-25 22:02:25 CEST (Europe/Berlin)
+// Version generated: 2026-09-25 22:32:56 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -8,6 +8,7 @@
 #include <WebServer.h>
 #include <WiFi.h>
 #include <Wire.h>
+#include <esp_system.h>
 
 #include <Adafruit_GFX.h>
 #include <Adafruit_Protomatter.h>
@@ -19,6 +20,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
+constexpr char APP_VERSION[] = "2.1.0-dev";
+constexpr char BUILD_TIMESTAMP[] = "2026-09-25 22:32:56 CEST";
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
 constexpr uint32_t WIFI_RETRY_MS = 60000;
@@ -97,11 +100,16 @@ WebServer webServer(80);
 SemaphoreHandle_t flightMutex;
 SemaphoreHandle_t preferencesMutex;
 TaskHandle_t networkTaskHandle = nullptr;
+TaskHandle_t displayTaskHandle = nullptr;
 bool webServerStarted = false;
 bool otaStarted = false;
 uint32_t otaRebootAt = 0;
+uint32_t manualRebootAt = 0;
 volatile bool otaInProgress = false;
 volatile bool otaPreparing = false;
+bool otaUploadValid = false;
+size_t otaBytesWritten = 0;
+String otaErrorMessage;
 uint8_t brightnessIndex = 1;
 uint8_t manualBrightnessIndex = 1;
 bool automaticBrightnessEnabled = true;
@@ -995,6 +1003,42 @@ String pageName(uint8_t page) {
 }
 
 
+String resetReasonText() {
+  switch (esp_reset_reason()) {
+    case ESP_RST_POWERON: return "Einschalten";
+    case ESP_RST_SW: return "Software-Neustart";
+    case ESP_RST_PANIC: return "Absturz/Panic";
+    case ESP_RST_INT_WDT: return "Interrupt-Watchdog";
+    case ESP_RST_TASK_WDT: return "Task-Watchdog";
+    case ESP_RST_WDT: return "Watchdog";
+    case ESP_RST_BROWNOUT: return "Unterspannung";
+    case ESP_RST_EXT: return "Externer Reset";
+    case ESP_RST_DEEPSLEEP: return "Deep-Sleep";
+    default: return "Unbekannt (" + String(static_cast<int>(esp_reset_reason())) + ")";
+  }
+}
+
+
+String uptimeText() {
+  uint32_t seconds = millis() / 1000;
+  const uint32_t days = seconds / 86400;
+  seconds %= 86400;
+  const uint8_t hours = seconds / 3600;
+  seconds %= 3600;
+  const uint8_t minutes = seconds / 60;
+  return String(days) + "d " + String(hours) + "h " + String(minutes) + "m";
+}
+
+
+String jsonEscape(String value) {
+  value.replace("\\", "\\\\");
+  value.replace("\"", "\\\"");
+  value.replace("\r", " ");
+  value.replace("\n", " ");
+  return value;
+}
+
+
 String webPage() {
   FlightData statusFlight;
   String statusError;
@@ -1076,7 +1120,25 @@ String webPage() {
   html += htmlEscape(flightwallHost + ":" + String(flightwallPort) + flightwallPath);
   html += F("</b><span>Letzter Abruf</span><b>");
   html += statusUpdated ? String((millis() - statusUpdated) / 1000) + " s" : "-";
-  html += F("</b></div></fieldset>");
+  html += F("</b><span>Firmware</span><b>");
+  html += APP_VERSION;
+  html += F("</b><span>Erstellt</span><b>");
+  html += BUILD_TIMESTAMP;
+  html += F("</b><span>Laufzeit</span><b>");
+  html += uptimeText();
+  html += F("</b><span>Freier RAM</span><b>");
+  html += String(ESP.getFreeHeap() / 1024) + " KiB (Minimum " +
+          String(ESP.getMinFreeHeap() / 1024) + " KiB)";
+  html += F("</b><span>Helligkeit</span><b>");
+  html += String(BRIGHTNESS_LEVELS[brightnessIndex]) + "% / " +
+          (automaticBrightnessEnabled ? "Automatik" : "manuell");
+  html += F("</b><span>Tasks</span><b>Netz Core 0 / Display Core 1</b><span>Stackreserve</span><b>");
+  html += networkTaskHandle ? String(uxTaskGetStackHighWaterMark(networkTaskHandle) * sizeof(StackType_t)) : "-";
+  html += " / ";
+  html += displayTaskHandle ? String(uxTaskGetStackHighWaterMark(displayTaskHandle) * sizeof(StackType_t)) : "-";
+  html += F(" Bytes</b><span>Letzter Reset</span><b>");
+  html += resetReasonText();
+  html += F("</b></div><form method='post' action='/restart' onsubmit=\"return confirm('ESP wirklich neu starten?')\"><p><button type='submit'>ESP neu starten</button></p></form></fieldset>");
   if (strlen(OTA_PASSWORD) >= 8) {
     html += F("<p><a href='/update'>Firmware drahtlos aktualisieren</a></p>");
   }
@@ -1183,6 +1245,28 @@ void handleFlightWallTest() {
 }
 
 
+void handleStatusApi() {
+  String json = "{\"version\":\"" + jsonEscape(APP_VERSION) +
+      "\",\"build\":\"" + jsonEscape(BUILD_TIMESTAMP) +
+      "\",\"uptime_seconds\":" + String(millis() / 1000) +
+      ",\"free_heap\":" + String(ESP.getFreeHeap()) +
+      ",\"rssi\":" + String(WiFi.RSSI()) +
+      ",\"lux\":" + (isnan(filteredLux) ? String("null") : String(filteredLux, 1)) +
+      ",\"brightness_percent\":" + String(BRIGHTNESS_LEVELS[brightnessIndex]) +
+      ",\"reset_reason\":\"" + jsonEscape(resetReasonText()) + "\"}";
+  webServer.send(200, "application/json; charset=utf-8", json);
+}
+
+
+void handleRestart() {
+  webServer.send(200, "text/html; charset=utf-8",
+      "<!doctype html><html lang='de'><meta name='viewport' content='width=device-width'>"
+      "<body style='font:18px system-ui;max-width:600px;margin:40px auto'>"
+      "<h1>Neustart</h1><p>Der ESP wird neu gestartet.</p></body></html>");
+  manualRebootAt = millis() + 750;
+}
+
+
 bool otaAuthenticated() {
   if (strlen(OTA_PASSWORD) < 8) {
     webServer.send(503, "text/plain; charset=utf-8", "OTA ist nicht konfiguriert.");
@@ -1198,14 +1282,26 @@ bool otaAuthenticated() {
 
 void handleOtaPage() {
   if (!otaAuthenticated()) return;
-  webServer.send(200, "text/html; charset=utf-8",
-      "<!doctype html><html lang='de'><meta name='viewport' content='width=device-width'>"
-      "<title>Firmware-Update</title><body style='font:16px system-ui;max-width:600px;margin:40px auto'>"
-      "<h1>Firmware-Update</h1><p>PlatformIO-Datei <b>firmware.bin</b> auswählen.</p>"
-      "<form method='post' action='/update' enctype='multipart/form-data'>"
-      "<input type='file' name='firmware' accept='.bin' required> "
-      "<button type='submit'>Installieren</button></form>"
-      "<p>Während des Updates die Stromversorgung nicht trennen.</p></body></html>");
+  String html = R"HTML(<!doctype html><html lang="de"><meta name="viewport" content="width=device-width">
+<title>Firmware-Update</title><style>body{font:16px system-ui;max-width:600px;margin:40px auto;padding:16px}progress{width:100%;height:24px}button{padding:10px}</style>
+<body><h1>Firmware-Update</h1><p>Installierte Version: <b id="before">%VERSION%</b></p>
+<p>PlatformIO-Datei <b>firmware.bin</b> auswählen. Während des Updates die Stromversorgung nicht trennen.</p>
+<form id="upload"><input id="file" type="file" name="firmware" accept=".bin" required> <button>Prüfen und installieren</button></form>
+<p><progress id="progress" max="100" value="0"></progress> <span id="percent">0%</span></p><p id="result"></p>
+<script>
+const form=document.getElementById('upload'),file=document.getElementById('file'),result=document.getElementById('result');
+form.addEventListener('submit',async e=>{e.preventDefault();const f=file.files[0];if(!f||!f.name.toLowerCase().endsWith('.bin')){result.textContent='Bitte eine .bin-Firmware auswählen.';return}
+const head=new Uint8Array(await f.slice(0,1).arrayBuffer());if(head[0]!==0xE9){result.textContent='Ungültige ESP32-Firmware: Dateikopf fehlt.';return}
+if(!confirm('Firmware '+f.name+' wirklich installieren?'))return;const x=new XMLHttpRequest();x.open('POST','/update');
+x.upload.onprogress=e=>{if(e.lengthComputable){const p=Math.round(e.loaded/e.total*100);progress.value=p;percent.textContent=p+'%'}};
+x.onerror=()=>result.textContent='Netzwerkfehler während des Uploads.';
+x.onload=()=>{let r;try{r=JSON.parse(x.responseText)}catch(e){result.textContent='Ungültige Antwort des ESP.';return}result.textContent=r.message;if(r.ok)pollVersion()};
+const data=new FormData();data.append('firmware',f);result.textContent='Upload läuft…';x.send(data)});
+function pollVersion(){let tries=0;result.textContent+=' Warte auf Neustart…';const timer=setInterval(async()=>{if(++tries>30){clearInterval(timer);result.textContent+=' ESP nicht wieder erreichbar.';return}try{const r=await fetch('/api/status',{cache:'no-store'});if(r.ok){const s=await r.json();clearInterval(timer);result.textContent='Update abgeschlossen. Version vorher: %VERSION%, danach: '+s.version+' ('+s.build+').' }}catch(e){}},2000)}
+</script><p><a href="/">Zurück</a></p></body></html>)HTML";
+  html.replace("%VERSION%", APP_VERSION);
+  html.replace("%VERSION%", APP_VERSION);
+  webServer.send(200, "text/html; charset=utf-8", html);
 }
 
 
@@ -1214,23 +1310,52 @@ void handleOtaUpload() {
       !webServer.authenticate("admin", OTA_PASSWORD)) return;
   HTTPUpload &upload = webServer.upload();
   if (upload.status == UPLOAD_FILE_START) {
+    otaUploadValid = false;
+    otaBytesWritten = 0;
+    otaErrorMessage = "";
+    String filename = upload.filename;
+    filename.toLowerCase();
+    if (!filename.endsWith(".bin")) {
+      otaErrorMessage = "Nur .bin-Firmwaredateien sind erlaubt.";
+      return;
+    }
     otaPreparing = true;
     vTaskDelay(pdMS_TO_TICKS(900));
     otaPreparing = false;
     otaInProgress = true;
     vTaskDelay(pdMS_TO_TICKS(100));
     Serial.printf("Web OTA start: %s\n", upload.filename.c_str());
-    Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH);
+    otaUploadValid = Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH);
+    if (!otaUploadValid) otaErrorMessage = "OTA-Partition konnte nicht geöffnet werden.";
   } else if (upload.status == UPLOAD_FILE_WRITE) {
-    if (!Update.hasError()) Update.write(upload.buf, upload.currentSize);
+    if (!otaUploadValid || Update.hasError()) return;
+    if (otaBytesWritten == 0 &&
+        (upload.currentSize == 0 || upload.buf[0] != 0xE9)) {
+      otaUploadValid = false;
+      otaErrorMessage = "Ungültige ESP32-Firmware: falscher Dateikopf.";
+      Update.abort();
+      return;
+    }
+    const size_t written = Update.write(upload.buf, upload.currentSize);
+    otaBytesWritten += written;
+    if (written != upload.currentSize) {
+      otaUploadValid = false;
+      otaErrorMessage = "Flash-Schreibfehler während des Updates.";
+    }
   } else if (upload.status == UPLOAD_FILE_END) {
-    if (!Update.hasError() && Update.end(true)) {
+    if (otaUploadValid && otaBytesWritten > 0 &&
+        !Update.hasError() && Update.end(true)) {
       Serial.printf("Web OTA complete: %u bytes\n", upload.totalSize);
+    } else if (!otaErrorMessage.length()) {
+      otaUploadValid = false;
+      otaErrorMessage = "Firmwareprüfung oder Abschluss des Updates fehlgeschlagen.";
     }
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
     Update.abort();
     otaPreparing = false;
     otaInProgress = false;
+    otaUploadValid = false;
+    otaErrorMessage = "Upload wurde abgebrochen.";
     Serial.println("Web OTA aborted");
   }
 }
@@ -1238,11 +1363,19 @@ void handleOtaUpload() {
 
 void finishOtaUpload() {
   if (!otaAuthenticated()) return;
-  const bool success = !Update.hasError() && Update.isFinished();
-  webServer.send(success ? 200 : 500, "text/plain; charset=utf-8",
-                 success ? "Update erfolgreich. Neustart..." : "Update fehlgeschlagen.");
-  if (success) otaRebootAt = millis() + 1000;
-  else otaInProgress = false;
+  const bool success = otaUploadValid && !Update.hasError() && Update.isFinished();
+  if (!success && !otaErrorMessage.length()) otaErrorMessage = "Update fehlgeschlagen.";
+  const String message = success ?
+      "Firmware geprüft und installiert. Der ESP startet neu." : otaErrorMessage;
+  const String json = String("{\"ok\":") + (success ? "true" : "false") +
+      ",\"message\":\"" + jsonEscape(message) +
+      "\",\"version_before\":\"" + APP_VERSION + "\"}";
+  webServer.send(success ? 200 : 500, "application/json; charset=utf-8", json);
+  if (success) otaRebootAt = millis() + 1500;
+  else {
+    otaPreparing = false;
+    otaInProgress = false;
+  }
 }
 
 
@@ -1275,8 +1408,10 @@ void startArduinoOta() {
 void startWebServer() {
   if (webServerStarted) return;
   webServer.on("/", HTTP_GET, []() { webServer.send(200, "text/html; charset=utf-8", webPage()); });
+  webServer.on("/api/status", HTTP_GET, handleStatusApi);
   webServer.on("/save", HTTP_POST, handleWebSave);
   webServer.on("/test-flightwall", HTTP_POST, handleFlightWallTest);
+  webServer.on("/restart", HTTP_POST, handleRestart);
   webServer.on("/update", HTTP_GET, handleOtaPage);
   webServer.on("/update", HTTP_POST, finishOtaUpload, handleOtaUpload);
   webServer.onNotFound([]() { webServer.send(404, "text/plain; charset=utf-8", "Nicht gefunden"); });
@@ -1302,6 +1437,7 @@ void networkTask(void *) {
       if (otaStarted) ArduinoOTA.handle();
     }
     if (otaRebootAt && static_cast<int32_t>(now - otaRebootAt) >= 0) ESP.restart();
+    if (manualRebootAt && static_cast<int32_t>(now - manualRebootAt) >= 0) ESP.restart();
     if (WiFi.status() != WL_CONNECTED && now - lastWiFiAttempt >= WIFI_RETRY_MS) {
       lastWiFiAttempt = now;
       if (connectWiFi(10000)) startWebServer();
@@ -1318,6 +1454,7 @@ void networkTask(void *) {
 void setup() {
   Serial.begin(115200);
   delay(250);
+  displayTaskHandle = xTaskGetCurrentTaskHandle();
   flightMutex = xSemaphoreCreateMutex();
   preferencesMutex = xSemaphoreCreateMutex();
   if (flightMutex == nullptr || preferencesMutex == nullptr) {
