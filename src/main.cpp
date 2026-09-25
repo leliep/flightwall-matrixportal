@@ -1,4 +1,4 @@
-// Version generated: 2026-09-25 19:48:45 CEST (Europe/Berlin)
+// Version generated: 2026-09-25 20:22:39 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -99,6 +99,7 @@ TaskHandle_t networkTaskHandle = nullptr;
 bool webServerStarted = false;
 bool otaStarted = false;
 uint32_t otaRebootAt = 0;
+volatile bool otaInProgress = false;
 uint8_t brightnessIndex = 1;
 uint8_t manualBrightnessIndex = 1;
 bool automaticBrightnessEnabled = true;
@@ -470,6 +471,11 @@ void drawIdleDisplay() {
 
 
 void drawDisplay() {
+  if (otaInProgress) {
+    matrix.fillScreen(0);
+    matrix.show();
+    return;
+  }
   if (static_cast<int32_t>(brightnessMessageUntil - millis()) > 0) {
     drawStatus(brightnessMessageTitle, brightnessMessageValue);
     return;
@@ -945,6 +951,8 @@ void handleOtaUpload() {
       !webServer.authenticate("admin", OTA_PASSWORD)) return;
   HTTPUpload &upload = webServer.upload();
   if (upload.status == UPLOAD_FILE_START) {
+    otaInProgress = true;
+    vTaskDelay(pdMS_TO_TICKS(100));
     Serial.printf("Web OTA start: %s\n", upload.filename.c_str());
     Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH);
   } else if (upload.status == UPLOAD_FILE_WRITE) {
@@ -955,6 +963,7 @@ void handleOtaUpload() {
     }
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
     Update.abort();
+    otaInProgress = false;
     Serial.println("Web OTA aborted");
   }
 }
@@ -966,6 +975,7 @@ void finishOtaUpload() {
   webServer.send(success ? 200 : 500, "text/plain; charset=utf-8",
                  success ? "Update erfolgreich. Neustart..." : "Update fehlgeschlagen.");
   if (success) otaRebootAt = millis() + 1000;
+  else otaInProgress = false;
 }
 
 
@@ -974,11 +984,14 @@ void startArduinoOta() {
   ArduinoOTA.setHostname("matrixportal");
   ArduinoOTA.setPassword(OTA_PASSWORD);
   ArduinoOTA.onStart([]() {
+    otaInProgress = true;
+    vTaskDelay(pdMS_TO_TICKS(100));
     Serial.println("PlatformIO OTA start");
     setNetworkError("OTA UPDATE");
   });
   ArduinoOTA.onEnd([]() { Serial.println("PlatformIO OTA complete"); });
   ArduinoOTA.onError([](ota_error_t error) {
+    otaInProgress = false;
     Serial.printf("PlatformIO OTA error: %u\n", error);
     setNetworkError("OTA FEHLER");
   });

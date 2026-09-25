@@ -5,6 +5,7 @@
 - passwortgeschütztes Firmware-Update über das Webinterface
 - passwortgeschützter OTA-Upload aus PlatformIO
 - 3 Bit Farbtiefe mit sieben Helligkeitsstufen und logarithmischer Lux-Regelung
+- schwarzes Display während OTA-Flashzugriffen zur Unterdrückung sichtbarer Störungen
 
 ## 2.0.0 – 2026-09-25
 
