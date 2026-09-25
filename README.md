@@ -40,12 +40,12 @@ derzeit keine eigene Anmeldung.
 
 ## BH1750
 
-| BH1750 | Standard | Alternative ohne STEMMA |
+| BH1750 | Standard: gelötet | Alternative: STEMMA QT |
 |---|---|---|
 | VIN | 3,3 V | 3,3 V |
 | GND | GND | GND |
-| SDA | GPIO 16 | A1 / GPIO 3 |
-| SCL | GPIO 17 | A2 / GPIO 9 |
+| SDA | A1 / GPIO 3 | GPIO 16 |
+| SCL | A2 / GPIO 9 | GPIO 17 |
 
 Die Pins stehen gut sichtbar am Anfang von `src/main.cpp`. Die Adressen `0x23`
 und `0x5C` werden automatisch erkannt. Antwortet der Sensor nicht, verwendet

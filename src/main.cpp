@@ -1,4 +1,4 @@
-// Version generated: 2026-09-25 16:55:08 CEST (Europe/Berlin)
+// Version generated: 2026-09-25 17:03:15 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ESPmDNS.h>
 #include <HTTPClient.h>
@@ -26,10 +26,10 @@ constexpr uint32_t LIGHT_SENSOR_INTERVAL_MS = 2000;
 constexpr uint32_t LIGHT_SENSOR_RETRY_MS = 10000;
 constexpr uint8_t LIGHT_SENSOR_FAILURE_LIMIT = 3;
 
-// BH1750 connection. Default: MatrixPortal S3 STEMMA QT (SDA 16, SCL 17).
-// For a separately wired sensor, free alternatives are SDA 3 and SCL 9.
-constexpr int8_t LIGHT_SENSOR_SDA_PIN = 16;
-constexpr int8_t LIGHT_SENSOR_SCL_PIN = 17;
+// BH1750 soldered connection: A1/GPIO 3 = SDA, A2/GPIO 9 = SCL.
+// STEMMA QT remains an alternative with SDA 16 and SCL 17.
+constexpr int8_t LIGHT_SENSOR_SDA_PIN = 3;
+constexpr int8_t LIGHT_SENSOR_SCL_PIN = 9;
 // ADD open/LOW uses 0x23; ADD connected to 3.3 V uses 0x5C.
 // Both addresses are probed automatically, starting with this one.
 constexpr uint8_t BH1750_PREFERRED_ADDRESS = 0x23;
