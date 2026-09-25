@@ -24,6 +24,14 @@ Nach dem WLAN-Verbindungsaufbau startet der HTTP-Server auf Port 80. Er ist
 über `http://matrixportal.local` oder die im seriellen Monitor genannte
 IP-Adresse erreichbar. Einstellungen werden in NVS gespeichert.
 
+## OTA
+
+OTA ist nur aktiv, wenn `OTA_PASSWORD` in `include/secrets.h` mindestens acht
+Zeichen lang ist. Das Webinterface bietet dann einen passwortgeschützten
+Upload für `firmware.bin`. Für PlatformIO steht zusätzlich das Environment
+`adafruit_matrixportal_esp32s3_ota` bereit. Sein Passwort kommt aus der
+Umgebungsvariable `MATRIXPORTAL_OTA_PASSWORD` und wird nicht eingecheckt.
+
 ## Stabilität
 
 Die Farbtiefe bleibt standardmäßig bei 2 Bit. Damit stehen die drei sichtbar

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- passwortgeschütztes Firmware-Update über das Webinterface
+- passwortgeschützter OTA-Upload aus PlatformIO
+
 ## 2.0.0 – 2026-09-25
 
 - Dual-Core-Aufteilung für stabile Anzeige während blockierender Netzwerkzugriffe

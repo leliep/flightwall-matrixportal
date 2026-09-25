@@ -1,8 +1,10 @@
-// Version generated: 2026-09-25 17:03:15 CEST (Europe/Berlin)
+// Version generated: 2026-09-25 19:19:20 CEST (Europe/Berlin)
 #include <Arduino.h>
+#include <ArduinoOTA.h>
 #include <ESPmDNS.h>
 #include <HTTPClient.h>
 #include <Preferences.h>
+#include <Update.h>
 #include <WebServer.h>
 #include <WiFi.h>
 #include <Wire.h>
@@ -10,6 +12,10 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_Protomatter.h>
 #include "secrets.h"
+
+#ifndef OTA_PASSWORD
+#define OTA_PASSWORD ""
+#endif
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 2;
@@ -91,6 +97,8 @@ SemaphoreHandle_t flightMutex;
 SemaphoreHandle_t preferencesMutex;
 TaskHandle_t networkTaskHandle = nullptr;
 bool webServerStarted = false;
+bool otaStarted = false;
+uint32_t otaRebootAt = 0;
 uint8_t brightnessIndex = 1;
 uint8_t manualBrightnessIndex = 1;
 bool automaticBrightnessEnabled = true;
@@ -861,7 +869,11 @@ String webPage() {
   html += statusError.length() ? displayAscii(statusError) : "OK";
   html += F("</b><span>Letzter Abruf</span><b>");
   html += statusUpdated ? String((millis() - statusUpdated) / 1000) + " s" : "-";
-  html += F("</b></div></fieldset><p class='muted'>UP/DOWN: manuell; beide Tasten: Automatik.</p></body></html>");
+  html += F("</b></div></fieldset>");
+  if (strlen(OTA_PASSWORD) >= 8) {
+    html += F("<p><a href='/update'>Firmware drahtlos aktualisieren</a></p>");
+  }
+  html += F("<p class='muted'>UP/DOWN: manuell; beide Tasten: Automatik.</p></body></html>");
   return html;
 }
 
@@ -893,14 +905,91 @@ void handleWebSave() {
 }
 
 
+bool otaAuthenticated() {
+  if (strlen(OTA_PASSWORD) < 8) {
+    webServer.send(503, "text/plain; charset=utf-8", "OTA ist nicht konfiguriert.");
+    return false;
+  }
+  if (!webServer.authenticate("admin", OTA_PASSWORD)) {
+    webServer.requestAuthentication();
+    return false;
+  }
+  return true;
+}
+
+
+void handleOtaPage() {
+  if (!otaAuthenticated()) return;
+  webServer.send(200, "text/html; charset=utf-8",
+      "<!doctype html><html lang='de'><meta name='viewport' content='width=device-width'>"
+      "<title>Firmware-Update</title><body style='font:16px system-ui;max-width:600px;margin:40px auto'>"
+      "<h1>Firmware-Update</h1><p>PlatformIO-Datei <b>firmware.bin</b> auswählen.</p>"
+      "<form method='post' action='/update' enctype='multipart/form-data'>"
+      "<input type='file' name='firmware' accept='.bin' required> "
+      "<button type='submit'>Installieren</button></form>"
+      "<p>Während des Updates die Stromversorgung nicht trennen.</p></body></html>");
+}
+
+
+void handleOtaUpload() {
+  if (strlen(OTA_PASSWORD) < 8 ||
+      !webServer.authenticate("admin", OTA_PASSWORD)) return;
+  HTTPUpload &upload = webServer.upload();
+  if (upload.status == UPLOAD_FILE_START) {
+    Serial.printf("Web OTA start: %s\n", upload.filename.c_str());
+    Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH);
+  } else if (upload.status == UPLOAD_FILE_WRITE) {
+    if (!Update.hasError()) Update.write(upload.buf, upload.currentSize);
+  } else if (upload.status == UPLOAD_FILE_END) {
+    if (!Update.hasError() && Update.end(true)) {
+      Serial.printf("Web OTA complete: %u bytes\n", upload.totalSize);
+    }
+  } else if (upload.status == UPLOAD_FILE_ABORTED) {
+    Update.abort();
+    Serial.println("Web OTA aborted");
+  }
+}
+
+
+void finishOtaUpload() {
+  if (!otaAuthenticated()) return;
+  const bool success = !Update.hasError() && Update.isFinished();
+  webServer.send(success ? 200 : 500, "text/plain; charset=utf-8",
+                 success ? "Update erfolgreich. Neustart..." : "Update fehlgeschlagen.");
+  if (success) otaRebootAt = millis() + 1000;
+}
+
+
+void startArduinoOta() {
+  if (otaStarted || strlen(OTA_PASSWORD) < 8) return;
+  ArduinoOTA.setHostname("matrixportal");
+  ArduinoOTA.setPassword(OTA_PASSWORD);
+  ArduinoOTA.onStart([]() {
+    Serial.println("PlatformIO OTA start");
+    setNetworkError("OTA UPDATE");
+  });
+  ArduinoOTA.onEnd([]() { Serial.println("PlatformIO OTA complete"); });
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("PlatformIO OTA error: %u\n", error);
+    setNetworkError("OTA FEHLER");
+  });
+  ArduinoOTA.begin();
+  otaStarted = true;
+  Serial.println("PlatformIO OTA enabled for matrixportal.local");
+}
+
+
 void startWebServer() {
   if (webServerStarted) return;
   webServer.on("/", HTTP_GET, []() { webServer.send(200, "text/html; charset=utf-8", webPage()); });
   webServer.on("/save", HTTP_POST, handleWebSave);
+  webServer.on("/update", HTTP_GET, handleOtaPage);
+  webServer.on("/update", HTTP_POST, finishOtaUpload, handleOtaUpload);
   webServer.onNotFound([]() { webServer.send(404, "text/plain; charset=utf-8", "Nicht gefunden"); });
   webServer.begin();
   if (MDNS.begin("matrixportal")) MDNS.addService("http", "tcp", 80);
   webServerStarted = true;
+  startArduinoOta();
   Serial.println("Web interface: http://matrixportal.local");
 }
 
@@ -914,7 +1003,11 @@ void networkTask(void *) {
   }
   for (;;) {
     const uint32_t now = millis();
-    if (WiFi.status() == WL_CONNECTED) webServer.handleClient();
+    if (WiFi.status() == WL_CONNECTED) {
+      webServer.handleClient();
+      if (otaStarted) ArduinoOTA.handle();
+    }
+    if (otaRebootAt && static_cast<int32_t>(now - otaRebootAt) >= 0) ESP.restart();
     if (WiFi.status() != WL_CONNECTED && now - lastWiFiAttempt >= WIFI_RETRY_MS) {
       lastWiFiAttempt = now;
       if (connectWiFi(10000)) startWebServer();

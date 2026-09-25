@@ -38,6 +38,30 @@ Lux-Schwellen, lokaler Anzeigeradius und Dauer einer Anzeigeseite. Das
 Webinterface ist für ein vertrauenswürdiges lokales WLAN gedacht und hat
 derzeit keine eigene Anmeldung.
 
+## OTA-Updates
+
+In `include/secrets.h` muss ein eigenes Passwort mit mindestens acht Zeichen
+gesetzt werden:
+
+```cpp
+#define OTA_PASSWORD "ein-langes-eigenes-passwort"
+```
+
+Danach erscheint im Webinterface der Link **Firmware drahtlos aktualisieren**.
+Die Anmeldung verwendet den Benutzernamen `admin` und das gesetzte
+OTA-Passwort. Hochgeladen wird die von PlatformIO erzeugte `firmware.bin`.
+
+Alternativ kann das OTA-Environment von PlatformIO verwendet werden. Das
+Passwort wird dabei bewusst nicht in `platformio.ini` gespeichert:
+
+```bash
+export MATRIXPORTAL_OTA_PASSWORD='ein-langes-eigenes-passwort'
+pio run -e adafruit_matrixportal_esp32s3_ota -t upload
+```
+
+Das erste Aufspielen einer OTA-fähigen Firmware muss weiterhin per USB
+erfolgen. Ohne gültiges `OTA_PASSWORD` sind beide OTA-Wege deaktiviert.
+
 ## BH1750
 
 | BH1750 | Standard: gelötet | Alternative: STEMMA QT |
