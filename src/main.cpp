@@ -1,4 +1,4 @@
-// Version generated: 2026-09-25 20:22:39 CEST (Europe/Berlin)
+// Version generated: 2026-09-25 21:57:24 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -24,6 +24,7 @@ constexpr uint8_t BUTTON_DOWN_PIN = 7;
 constexpr uint32_t WIFI_RETRY_MS = 60000;
 constexpr uint32_t POLL_INTERVAL_MS = 5000;
 constexpr uint32_t DEFAULT_PAGE_INTERVAL_MS = 5000;
+constexpr uint32_t PAGE_TRANSITION_MS = 350;
 constexpr uint32_t STALE_AFTER_MS = 20000;
 constexpr uint32_t BUTTON_DEBOUNCE_MS = 150;
 constexpr uint32_t BRIGHTNESS_MESSAGE_MS = 1200;
@@ -45,9 +46,9 @@ constexpr uint8_t BH1750_ALTERNATE_ADDRESS = 0x5C;
 // adjust the local display radius without modifying the FlightWall server.
 constexpr float DEFAULT_DISPLAY_RADIUS_KM = 10.0f;
 
-constexpr char FLIGHTWALL_HOST[] = "raspi-flw";
-constexpr uint16_t FLIGHTWALL_PORT = 8088;
-constexpr char FLIGHTWALL_URL[] = "http://raspi-flw:8088/api/state";
+constexpr char DEFAULT_FLIGHTWALL_HOST[] = "raspi-flw";
+constexpr uint16_t DEFAULT_FLIGHTWALL_PORT = 8088;
+constexpr char DEFAULT_FLIGHTWALL_PATH[] = "/api/state";
 // At 3-bit color depth, seven non-zero PWM levels are available.
 constexpr uint8_t BRIGHTNESS_LEVELS[] = {15, 30, 45, 60, 75, 90, 100};
 constexpr uint8_t BRIGHTNESS_LEVEL_COUNT =
@@ -100,6 +101,7 @@ bool webServerStarted = false;
 bool otaStarted = false;
 uint32_t otaRebootAt = 0;
 volatile bool otaInProgress = false;
+volatile bool otaPreparing = false;
 uint8_t brightnessIndex = 1;
 uint8_t manualBrightnessIndex = 1;
 bool automaticBrightnessEnabled = true;
@@ -119,6 +121,21 @@ float displayRadiusKm = DEFAULT_DISPLAY_RADIUS_KM;
 uint32_t pageIntervalMs = DEFAULT_PAGE_INTERVAL_MS;
 float lowLuxThreshold = 20.0f;
 float highLuxThreshold = 800.0f;
+String flightwallHost = DEFAULT_FLIGHTWALL_HOST;
+uint16_t flightwallPort = DEFAULT_FLIGHTWALL_PORT;
+String flightwallPath = DEFAULT_FLIGHTWALL_PATH;
+bool pageEnabled[] = {true, true, true};
+uint8_t pageOrder[] = {0, 1, 2};
+uint32_t pageDurationMs[] = {
+    DEFAULT_PAGE_INTERVAL_MS, DEFAULT_PAGE_INTERVAL_MS,
+    DEFAULT_PAGE_INTERVAL_MS};
+bool smoothTransitions = true;
+uint8_t currentPageSlot = 0;
+uint32_t currentPageStarted = 0;
+uint32_t transitionStarted = 0;
+uint8_t transitionPercent = 100;
+enum class TransitionPhase { Normal, FadeOut, FadeIn };
+TransitionPhase transitionPhase = TransitionPhase::Normal;
 
 constexpr uint8_t BUTTON_EVENT_UP = 0x01;
 constexpr uint8_t BUTTON_EVENT_DOWN = 0x02;
@@ -162,7 +179,8 @@ constexpr uint8_t ARROW_UP_LEFT[7] = {
 
 
 uint8_t scaledChannel(uint8_t value) {
-  return static_cast<uint16_t>(value) * BRIGHTNESS_LEVELS[brightnessIndex] / 100;
+  return static_cast<uint32_t>(value) * BRIGHTNESS_LEVELS[brightnessIndex] *
+         transitionPercent / 10000;
 }
 
 
@@ -176,8 +194,15 @@ void updateColors() {
   orange = matrix.color565(scaledChannel(255), scaledChannel(170), 0);
   cyan = matrix.color565(0, scaledChannel(255), scaledChannel(255));
   violet = matrix.color565(scaledChannel(180), 0, scaledChannel(255));
-  // Faint but still visible at the 2-bit color depth.
-  idlePixel = matrix.color565(85, 85, 85);
+  idlePixel = matrix.color565(scaledChannel(85), scaledChannel(85), scaledChannel(85));
+}
+
+
+void setTransitionPercent(uint8_t percent) {
+  percent = min<uint8_t>(percent, 100);
+  if (percent == transitionPercent) return;
+  transitionPercent = percent;
+  updateColors();
 }
 
 
@@ -308,18 +333,50 @@ void drawLine(int16_t x, int16_t y, const String &text, uint16_t color,
 uint16_t aircraftColor() {
   String category = flight.specialType;
   category.toUpperCase();
-  if (category.indexOf("POLIZEI") >= 0) return cyan;
+  if (category.indexOf("POLICE") >= 0 || category.indexOf("POLIZEI") >= 0) return cyan;
   if (category.indexOf("MILIT") >= 0) return red;
-  if (category.indexOf("HUBSCHRAUBER") >= 0) return yellow;
+  if (category.indexOf("HELICOPTER") >= 0 || category.indexOf("HUBSCHRAUBER") >= 0) return yellow;
   if (category.indexOf("A380") >= 0) return violet;
-  if (category.indexOf("REGIERUNG") >= 0) return blue;
+  if (category.indexOf("GOVERNMENT") >= 0 || category.indexOf("REGIERUNG") >= 0) return blue;
   return red;
+}
+
+
+void drawSpecialIcon() {
+  if (!flight.specialType.length()) return;
+  String category = flight.specialType;
+  category.toUpperCase();
+  const uint16_t color = aircraftColor();
+  if (category.indexOf("HELICOPTER") >= 0 || category.indexOf("HUBSCHRAUBER") >= 0) {
+    matrix.drawFastHLine(96, 1, 7, color);
+    matrix.drawFastVLine(99, 0, 7, color);
+    matrix.drawFastHLine(97, 5, 5, color);
+  } else if (category.indexOf("A380") >= 0) {
+    matrix.drawPixel(99, 0, color);
+    matrix.drawFastVLine(99, 1, 6, color);
+    matrix.drawFastHLine(96, 3, 7, color);
+    matrix.drawFastHLine(98, 6, 3, color);
+  } else if (category.indexOf("MILIT") >= 0) {
+    matrix.drawPixel(99, 0, color);
+    matrix.drawFastHLine(98, 1, 3, color);
+    matrix.drawFastHLine(97, 2, 5, color);
+    matrix.drawFastHLine(98, 3, 3, color);
+    matrix.drawPixel(99, 4, color);
+  } else {
+    matrix.drawFastHLine(97, 0, 5, color);
+    matrix.drawFastVLine(96, 1, 5, color);
+    matrix.drawFastVLine(102, 1, 5, color);
+    matrix.drawFastHLine(97, 6, 5, color);
+    matrix.drawPixel(99, 2, color);
+    matrix.drawPixel(99, 4, color);
+  }
 }
 
 
 void drawHeader() {
   String callsign = clipped(flight.flight.length() ? flight.flight : "UNBEKANNT", 8);
   drawLine(0, 0, callsign, aircraftColor(), callsign.length() <= 8 ? 2 : 1);
+  drawSpecialIcon();
   drawLine(104, 0, clipped(flight.type, 4), white);
 }
 
@@ -470,36 +527,119 @@ void drawIdleDisplay() {
 }
 
 
+bool selectEnabledPage() {
+  for (uint8_t offset = 0; offset < 3; ++offset) {
+    const uint8_t slot = (currentPageSlot + offset) % 3;
+    const uint8_t page = pageOrder[slot];
+    if (page < 3 && pageEnabled[page]) {
+      currentPageSlot = slot;
+      return true;
+    }
+  }
+  return false;
+}
+
+
+void advancePage() {
+  currentPageSlot = (currentPageSlot + 1) % 3;
+  selectEnabledPage();
+}
+
+
+void drawConfiguredPage(uint8_t page) {
+  switch (page) {
+    case 0: drawMainPage(); break;
+    case 1: drawRoutePage(); break;
+    default: drawCpaPage(); break;
+  }
+}
+
+
+void resetPageTransition() {
+  transitionPhase = TransitionPhase::Normal;
+  currentPageStarted = 0;
+  setTransitionPercent(100);
+}
+
+
 void drawDisplay() {
+  if (otaPreparing) {
+    setTransitionPercent(100);
+    drawStatus("OTA UPDATE", "BITTE WARTEN");
+    return;
+  }
   if (otaInProgress) {
     matrix.fillScreen(0);
     matrix.show();
     return;
   }
   if (static_cast<int32_t>(brightnessMessageUntil - millis()) > 0) {
+    resetPageTransition();
     drawStatus(brightnessMessageTitle, brightnessMessageValue);
     return;
   }
   if (!displayEnabled) {
+    resetPageTransition();
     matrix.fillScreen(0);
     matrix.show();
     return;
   }
   if (!aircraftIsInsideDisplayRadius()) {
+    resetPageTransition();
     drawIdleDisplay();
     return;
   }
   if (lastSuccessfulPoll == 0 || millis() - lastSuccessfulPoll > STALE_AFTER_MS) {
+    resetPageTransition();
     drawStatus("DATEN VERALTET", lastError);
     return;
   }
 
-  matrix.fillScreen(0);
-  switch ((millis() / pageIntervalMs) % 3) {
-    case 0: drawMainPage(); break;
-    case 1: drawRoutePage(); break;
-    default: drawCpaPage(); break;
+  if (!selectEnabledPage()) {
+    resetPageTransition();
+    matrix.fillScreen(0);
+    matrix.show();
+    return;
   }
+
+  const uint32_t now = millis();
+  if (currentPageStarted == 0) currentPageStarted = now;
+  const uint8_t page = pageOrder[currentPageSlot];
+  const uint32_t duration = pageDurationMs[page];
+
+  if (transitionPhase == TransitionPhase::Normal &&
+      now - currentPageStarted >= duration) {
+    if (smoothTransitions) {
+      transitionPhase = TransitionPhase::FadeOut;
+      transitionStarted = now;
+    } else {
+      advancePage();
+      currentPageStarted = now;
+    }
+  }
+  if (transitionPhase == TransitionPhase::FadeOut) {
+    const uint32_t elapsed = now - transitionStarted;
+    if (elapsed >= PAGE_TRANSITION_MS) {
+      setTransitionPercent(0);
+      advancePage();
+      transitionPhase = TransitionPhase::FadeIn;
+      transitionStarted = now;
+    } else {
+      setTransitionPercent(100 - elapsed * 100 / PAGE_TRANSITION_MS);
+    }
+  } else if (transitionPhase == TransitionPhase::FadeIn) {
+    const uint32_t elapsed = now - transitionStarted;
+    if (elapsed >= PAGE_TRANSITION_MS) {
+      setTransitionPercent(100);
+      transitionPhase = TransitionPhase::Normal;
+      currentPageStarted = now;
+    } else {
+      setTransitionPercent(elapsed * 100 / PAGE_TRANSITION_MS);
+    }
+  }
+
+  matrix.fillScreen(0);
+  drawConfiguredPage(pageOrder[currentPageSlot]);
   matrix.show();
 }
 
@@ -747,14 +887,18 @@ bool fetchFlightWall() {
   }
 
   IPAddress serverAddress;
-  if (WiFi.hostByName(FLIGHTWALL_HOST, serverAddress) != 1) {
+  const String host = flightwallHost;
+  const uint16_t port = flightwallPort;
+  String path = flightwallPath;
+  if (!path.startsWith("/")) path = "/" + path;
+  if (WiFi.hostByName(host.c_str(), serverAddress) != 1) {
     setNetworkError("DNS FEHLER");
     Serial.print("FlightWall: DNS lookup failed for ");
-    Serial.println(FLIGHTWALL_HOST);
+    Serial.println(host);
     return false;
   }
   Serial.print("FlightWall: ");
-  Serial.print(FLIGHTWALL_HOST);
+  Serial.print(host);
   Serial.print(" resolved to ");
   Serial.println(serverAddress);
 
@@ -764,7 +908,8 @@ bool fetchFlightWall() {
   http.setConnectTimeout(3000);
   http.setTimeout(4000);
 
-  if (!http.begin(client, FLIGHTWALL_URL)) {
+  const String url = "http://" + host + ":" + String(port) + path;
+  if (!http.begin(client, url)) {
     setNetworkError("URL FEHLER");
     return false;
   }
@@ -828,6 +973,27 @@ String checked(bool value) {
 }
 
 
+String selected(bool value) {
+  return value ? " selected" : "";
+}
+
+
+String htmlEscape(String value) {
+  value.replace("&", "&amp;");
+  value.replace("\"", "&quot;");
+  value.replace("<", "&lt;");
+  value.replace(">", "&gt;");
+  return value;
+}
+
+
+String pageName(uint8_t page) {
+  if (page == 0) return "Flugdaten";
+  if (page == 1) return "Airline und Route";
+  return "CPA und Sondertyp";
+}
+
+
 String webPage() {
   FlightData statusFlight;
   String statusError;
@@ -840,7 +1006,7 @@ String webPage() {
   }
 
   String html;
-  html.reserve(6000);
+  html.reserve(9000);
   html += F("<!doctype html><html lang='de'><head><meta charset='utf-8'>");
   html += F("<meta name='viewport' content='width=device-width,initial-scale=1'>");
   html += F("<title>FlightWall MatrixPortal</title><style>");
@@ -854,9 +1020,32 @@ String webPage() {
   html += checked(displayEnabled);
   html += F("> Display eingeschaltet</label><label>Anzeigeradius (km)<input type='number' name='radius' min='1' max='100' step='0.5' value='");
   html += String(displayRadiusKm, 1);
-  html += F("'></label><label>Seitenwechsel (Sekunden)<input type='number' name='pageSeconds' min='2' max='60' value='");
-  html += String(pageIntervalMs / 1000);
-  html += F("'></label></fieldset><fieldset><legend>Helligkeit</legend>");
+  html += F("'></label></fieldset><fieldset><legend>FlightWall-Verbindung</legend><label>Host<input name='fwHost' maxlength='63' value='");
+  html += htmlEscape(flightwallHost);
+  html += F("'></label><label>Port<input type='number' name='fwPort' min='1' max='65535' value='");
+  html += String(flightwallPort);
+  html += F("'></label><label>API-Pfad<input name='fwPath' maxlength='96' value='");
+  html += htmlEscape(flightwallPath);
+  html += F("'></label><button type='submit' formaction='/test-flightwall'>Verbindung testen</button></fieldset>");
+  html += F("<fieldset><legend>Anzeigeseiten</legend><label><input type='checkbox' name='smooth' value='1'");
+  html += checked(smoothTransitions);
+  html += F("> Sanfte Übergänge</label>");
+  for (uint8_t page = 0; page < 3; ++page) {
+    html += "<label><input type='checkbox' name='page" + String(page) + "On' value='1'";
+    html += checked(pageEnabled[page]);
+    html += "> " + pageName(page) + "</label><label>Dauer (Sekunden)<input type='number' name='page";
+    html += String(page) + "Sec' min='2' max='60' value='" + String(pageDurationMs[page] / 1000) + "'></label>";
+  }
+  html += F("<p class='muted'>Reihenfolge:</p>");
+  for (uint8_t slot = 0; slot < 3; ++slot) {
+    html += "<label>Position " + String(slot + 1) + "<select name='order" + String(slot) + "'>";
+    for (uint8_t page = 0; page < 3; ++page) {
+      html += "<option value='" + String(page) + "'" +
+              selected(pageOrder[slot] == page) + ">" + pageName(page) + "</option>";
+    }
+    html += "</select></label>";
+  }
+  html += F("</fieldset><fieldset><legend>Helligkeit</legend>");
   html += F("<label><input type='checkbox' name='autoLight' value='1'");
   html += checked(automaticBrightnessEnabled);
   html += F("> BH1750-Automatik</label><label>Manuelle Stufe<select name='brightness'>");
@@ -882,6 +1071,8 @@ String webPage() {
   html += statusFlight.available ? displayAscii(statusFlight.flight) : "keiner";
   html += F("</b><span>FlightWall</span><b>");
   html += statusError.length() ? displayAscii(statusError) : "OK";
+  html += F("</b><span>API</span><b>");
+  html += htmlEscape(flightwallHost + ":" + String(flightwallPort) + flightwallPath);
   html += F("</b><span>Letzter Abruf</span><b>");
   html += statusUpdated ? String((millis() - statusUpdated) / 1000) + " s" : "-";
   html += F("</b></div></fieldset>");
@@ -893,15 +1084,60 @@ String webPage() {
 }
 
 
-void handleWebSave() {
+bool validFlightWallHost(const String &host) {
+  if (!host.length()) return false;
+  for (size_t i = 0; i < host.length(); ++i) {
+    const char c = host[i];
+    if (!isalnum(static_cast<unsigned char>(c)) && c != '.' && c != '-' && c != '_') {
+      return false;
+    }
+  }
+  return true;
+}
+
+
+void applyWebSettings() {
   if (xSemaphoreTake(preferencesMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
     displayEnabled = webServer.hasArg("display");
     automaticBrightnessEnabled = webServer.hasArg("autoLight");
     displayRadiusKm = constrain(webServer.arg("radius").toFloat(), 1.0f, 100.0f);
-    pageIntervalMs = constrain(webServer.arg("pageSeconds").toInt(), 2L, 60L) * 1000UL;
     lowLuxThreshold = constrain(webServer.arg("lowLux").toFloat(), 1.0f, 500.0f);
     highLuxThreshold = constrain(webServer.arg("highLux").toFloat(), 50.0f, 50000.0f);
     if (highLuxThreshold <= lowLuxThreshold) highLuxThreshold = lowLuxThreshold + 50.0f;
+    String requestedHost = webServer.arg("fwHost");
+    requestedHost.trim();
+    if (validFlightWallHost(requestedHost)) flightwallHost = requestedHost;
+    flightwallPort = constrain(webServer.arg("fwPort").toInt(), 1, 65535);
+    String requestedPath = webServer.arg("fwPath");
+    requestedPath.trim();
+    if (!requestedPath.startsWith("/")) requestedPath = "/" + requestedPath;
+    if (requestedPath.length() >= 2 && requestedPath.length() <= 96) {
+      flightwallPath = requestedPath;
+    }
+    smoothTransitions = webServer.hasArg("smooth");
+    bool anyPageEnabled = false;
+    for (uint8_t page = 0; page < 3; ++page) {
+      pageEnabled[page] = webServer.hasArg("page" + String(page) + "On");
+      anyPageEnabled |= pageEnabled[page];
+      pageDurationMs[page] = constrain(
+          webServer.arg("page" + String(page) + "Sec").toInt(), 2L, 60L) * 1000UL;
+    }
+    if (!anyPageEnabled) pageEnabled[0] = true;
+    bool usedPages[] = {false, false, false};
+    bool validOrder = true;
+    for (uint8_t slot = 0; slot < 3; ++slot) {
+      const int page = webServer.arg("order" + String(slot)).toInt();
+      if (page < 0 || page > 2 || usedPages[page]) validOrder = false;
+      else {
+        pageOrder[slot] = page;
+        usedPages[page] = true;
+      }
+    }
+    if (!validOrder) {
+      pageOrder[0] = 0;
+      pageOrder[1] = 1;
+      pageOrder[2] = 2;
+    }
     const int requestedBrightness = webServer.arg("brightness").toInt();
     if (requestedBrightness >= 0 && requestedBrightness < BRIGHTNESS_LEVEL_COUNT) {
       manualBrightnessIndex = requestedBrightness;
@@ -910,13 +1146,39 @@ void handleWebSave() {
     preferences.putBool("autoLight", automaticBrightnessEnabled);
     preferences.putUChar("brightness", manualBrightnessIndex);
     preferences.putFloat("radiusKm", displayRadiusKm);
-    preferences.putUInt("pageMs", pageIntervalMs);
     preferences.putFloat("lowLux", lowLuxThreshold);
     preferences.putFloat("highLux", highLuxThreshold);
+    preferences.putString("fwHost", flightwallHost);
+    preferences.putUShort("fwPort", flightwallPort);
+    preferences.putString("fwPath", flightwallPath);
+    preferences.putBool("smooth", smoothTransitions);
+    for (uint8_t page = 0; page < 3; ++page) {
+      preferences.putBool(("p" + String(page) + "On").c_str(), pageEnabled[page]);
+      preferences.putUInt(("p" + String(page) + "Ms").c_str(), pageDurationMs[page]);
+      preferences.putUChar(("order" + String(page)).c_str(), pageOrder[page]);
+    }
     xSemaphoreGive(preferencesMutex);
   }
+  resetPageTransition();
+}
+
+
+void handleWebSave() {
+  applyWebSettings();
   webServer.sendHeader("Location", "/");
   webServer.send(303, "text/plain", "Gespeichert");
+}
+
+
+void handleFlightWallTest() {
+  applyWebSettings();
+  const bool success = fetchFlightWall();
+  const String message = success ? "Verbindung erfolgreich." :
+      "Verbindung fehlgeschlagen: " + networkLastError;
+  webServer.send(success ? 200 : 502, "text/html; charset=utf-8",
+      "<!doctype html><html lang='de'><meta name='viewport' content='width=device-width'>"
+      "<body style='font:18px system-ui;max-width:600px;margin:40px auto'><h1>FlightWall-Test</h1><p>" +
+      htmlEscape(message) + "</p><p><a href='/'>Zurueck</a></p></body></html>");
 }
 
 
@@ -951,6 +1213,9 @@ void handleOtaUpload() {
       !webServer.authenticate("admin", OTA_PASSWORD)) return;
   HTTPUpload &upload = webServer.upload();
   if (upload.status == UPLOAD_FILE_START) {
+    otaPreparing = true;
+    vTaskDelay(pdMS_TO_TICKS(900));
+    otaPreparing = false;
     otaInProgress = true;
     vTaskDelay(pdMS_TO_TICKS(100));
     Serial.printf("Web OTA start: %s\n", upload.filename.c_str());
@@ -963,6 +1228,7 @@ void handleOtaUpload() {
     }
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
     Update.abort();
+    otaPreparing = false;
     otaInProgress = false;
     Serial.println("Web OTA aborted");
   }
@@ -984,6 +1250,9 @@ void startArduinoOta() {
   ArduinoOTA.setHostname("matrixportal");
   ArduinoOTA.setPassword(OTA_PASSWORD);
   ArduinoOTA.onStart([]() {
+    otaPreparing = true;
+    vTaskDelay(pdMS_TO_TICKS(900));
+    otaPreparing = false;
     otaInProgress = true;
     vTaskDelay(pdMS_TO_TICKS(100));
     Serial.println("PlatformIO OTA start");
@@ -991,6 +1260,7 @@ void startArduinoOta() {
   });
   ArduinoOTA.onEnd([]() { Serial.println("PlatformIO OTA complete"); });
   ArduinoOTA.onError([](ota_error_t error) {
+    otaPreparing = false;
     otaInProgress = false;
     Serial.printf("PlatformIO OTA error: %u\n", error);
     setNetworkError("OTA FEHLER");
@@ -1005,6 +1275,7 @@ void startWebServer() {
   if (webServerStarted) return;
   webServer.on("/", HTTP_GET, []() { webServer.send(200, "text/html; charset=utf-8", webPage()); });
   webServer.on("/save", HTTP_POST, handleWebSave);
+  webServer.on("/test-flightwall", HTTP_POST, handleFlightWallTest);
   webServer.on("/update", HTTP_GET, handleOtaPage);
   webServer.on("/update", HTTP_POST, finishOtaUpload, handleOtaUpload);
   webServer.onNotFound([]() { webServer.send(404, "text/plain; charset=utf-8", "Nicht gefunden"); });
@@ -1083,8 +1354,32 @@ void setup() {
   pageIntervalMs = preferences.getUInt("pageMs", DEFAULT_PAGE_INTERVAL_MS);
   lowLuxThreshold = preferences.getFloat("lowLux", 20.0f);
   highLuxThreshold = preferences.getFloat("highLux", 800.0f);
+  flightwallHost = preferences.getString("fwHost", DEFAULT_FLIGHTWALL_HOST);
+  flightwallPort = preferences.getUShort("fwPort", DEFAULT_FLIGHTWALL_PORT);
+  flightwallPath = preferences.getString("fwPath", DEFAULT_FLIGHTWALL_PATH);
+  smoothTransitions = preferences.getBool("smooth", true);
+  for (uint8_t page = 0; page < 3; ++page) {
+    pageEnabled[page] = preferences.getBool(
+        ("p" + String(page) + "On").c_str(), true);
+    pageDurationMs[page] = preferences.getUInt(
+        ("p" + String(page) + "Ms").c_str(), pageIntervalMs);
+    pageOrder[page] = preferences.getUChar(
+        ("order" + String(page)).c_str(), page);
+  }
+  if (settingsVersion < 3) preferences.putUChar("settingsVer", 3);
   displayRadiusKm = constrain(displayRadiusKm, 1.0f, 100.0f);
   pageIntervalMs = constrain(pageIntervalMs, 2000UL, 60000UL);
+  for (uint8_t page = 0; page < 3; ++page) {
+    pageDurationMs[page] = constrain(pageDurationMs[page], 2000UL, 60000UL);
+    if (pageOrder[page] > 2) pageOrder[page] = page;
+  }
+  if (pageOrder[0] == pageOrder[1] || pageOrder[0] == pageOrder[2] ||
+      pageOrder[1] == pageOrder[2]) {
+    pageOrder[0] = 0;
+    pageOrder[1] = 1;
+    pageOrder[2] = 2;
+  }
+  if (!pageEnabled[0] && !pageEnabled[1] && !pageEnabled[2]) pageEnabled[0] = true;
   lowLuxThreshold = constrain(lowLuxThreshold, 1.0f, 500.0f);
   highLuxThreshold = constrain(highLuxThreshold, 50.0f, 50000.0f);
   if (highLuxThreshold <= lowLuxThreshold) highLuxThreshold = lowLuxThreshold + 50.0f;
@@ -1114,7 +1409,7 @@ void loop() {
   }
 
   static uint32_t lastDraw = 0;
-  if (now - lastDraw >= 250) {
+  if (now - lastDraw >= 50) {
     lastDraw = now;
     drawDisplay();
   }

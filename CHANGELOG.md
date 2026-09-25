@@ -6,6 +6,10 @@
 - passwortgeschützter OTA-Upload aus PlatformIO
 - 3 Bit Farbtiefe mit sieben Helligkeitsstufen und logarithmischer Lux-Regelung
 - schwarzes Display während OTA-Flashzugriffen zur Unterdrückung sichtbarer Störungen
+- konfigurierbarer FlightWall-Host, Port und API-Pfad mit Verbindungstest
+- einzeln aktivierbare und frei sortierbare Seiten mit eigener Anzeigedauer
+- optionale sanfte Seitenübergänge und Symbole für Special Types
+- sichtbare OTA-Vorankündigung vor dem Abdunkeln
 
 ## 2.0.0 – 2026-09-25
 

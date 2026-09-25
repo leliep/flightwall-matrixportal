@@ -34,9 +34,16 @@ Nach erfolgreicher WLAN-Verbindung ist die Konfiguration normalerweise unter
 funktioniert, zeigt der serielle Monitor die IP-Adresse an.
 
 Konfigurierbar sind Display ein/aus, automatische oder manuelle Helligkeit,
-Lux-Schwellen, lokaler Anzeigeradius und Dauer einer Anzeigeseite. Das
-Webinterface ist für ein vertrauenswürdiges lokales WLAN gedacht und hat
-derzeit keine eigene Anmeldung.
+Lux-Schwellen und lokaler Anzeigeradius. Host, Port und API-Pfad des
+FlightWall-Servers lassen sich ändern und direkt testen. Die drei
+Anzeigeseiten können einzeln aktiviert, frei sortiert und mit einer eigenen
+Dauer versehen werden. Sanfte Übergänge sind optional. Das Webinterface ist
+für ein vertrauenswürdiges lokales WLAN gedacht und hat derzeit keine eigene
+Anmeldung.
+
+Special Types erhalten ein kleines farbiges Symbol neben der Flugzeugkennung.
+Vor einem OTA-Flashvorgang erscheint kurz `OTA UPDATE / BITTE WARTEN`; danach
+bleibt das Display bis zum Neustart schwarz.
 
 ## OTA-Updates
 

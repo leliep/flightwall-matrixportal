@@ -22,7 +22,9 @@ Der serielle Monitor verwendet 115200 Baud.
 
 Nach dem WLAN-Verbindungsaufbau startet der HTTP-Server auf Port 80. Er ist
 über `http://matrixportal.local` oder die im seriellen Monitor genannte
-IP-Adresse erreichbar. Einstellungen werden in NVS gespeichert.
+IP-Adresse erreichbar. Einstellungen werden in NVS gespeichert. Dazu gehören
+auch FlightWall-Host, Port und Pfad sowie Aktivierung, Reihenfolge und Dauer
+der drei Anzeigeseiten.
 
 ## OTA
 
