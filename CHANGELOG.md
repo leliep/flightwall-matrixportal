@@ -10,6 +10,7 @@
 - einzeln aktivierbare und frei sortierbare Seiten mit eigener Anzeigedauer
 - optionale sanfte Seitenübergänge und Symbole für Special Types
 - sichtbare OTA-Vorankündigung vor dem Abdunkeln
+- bei jeder Helligkeitsstufe sichtbarer Betriebs-Pixel im Ruhezustand
 
 ## 2.0.0 – 2026-09-25
 

@@ -1,4 +1,4 @@
-// Version generated: 2026-09-25 21:57:24 CEST (Europe/Berlin)
+// Version generated: 2026-09-25 22:02:25 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -194,7 +194,8 @@ void updateColors() {
   orange = matrix.color565(scaledChannel(255), scaledChannel(170), 0);
   cyan = matrix.color565(0, scaledChannel(255), scaledChannel(255));
   violet = matrix.color565(scaledChannel(180), 0, scaledChannel(255));
-  idlePixel = matrix.color565(scaledChannel(85), scaledChannel(85), scaledChannel(85));
+  // Fixed first non-zero 3-bit level, independent of automatic brightness.
+  idlePixel = matrix.color565(48, 48, 48);
 }
 
 
