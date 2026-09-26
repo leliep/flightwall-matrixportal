@@ -18,6 +18,7 @@
 - Flughafennamen-Seite wird ohne Routendaten übersprungen und bleibt für einen vollständigen Lauftext sichtbar
 - korrekte ASCII-Umschrift von `š` und `Š`, beispielsweise `Priština` als `Pristina`
 - ASCII-Umschrift von `â`, `ā` und `ă`, beispielsweise `Coandă` als `Coanda`
+- über das Webinterface start- und stoppbarer zwölfsekündiger Displaytest
 
 ## 2.0.0 – 2026-09-25
 

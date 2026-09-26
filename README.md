@@ -41,6 +41,11 @@ Dauer versehen werden. Sanfte Übergänge sind optional. Das Webinterface ist
 für ein vertrauenswürdiges lokales WLAN gedacht und hat derzeit keine eigene
 Anmeldung.
 
+Der Displaytest im Webinterface prüft die gesamte Matrix für jeweils kurze
+Zeit mit Rot, Grün, Blau, Weiß, einem Pixelraster, geometrischen Linien, Text
+und Farbbalken. Nach zwölf Sekunden endet er automatisch; über denselben
+Schalter kann er vorher beendet werden.
+
 Die Seite **Flughafennamen** zeigt – sofern vom FlightWall-Server geliefert –
 die Langnamen des Start- und Zielflughafens. Namen, die breiter als das Display
 sind, werden vollständig horizontal gescrollt; dafür verlängert die Firmware

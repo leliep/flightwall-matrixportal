@@ -1,4 +1,4 @@
-// Version generated: 2026-09-26 22:09:08 CEST (Europe/Berlin)
+// Version generated: 2026-09-26 22:17:58 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -21,7 +21,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "2.1.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-09-26 22:09:08 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-09-26 22:17:58 CEST";
 constexpr uint8_t PAGE_COUNT = 4;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -110,6 +110,9 @@ uint32_t otaRebootAt = 0;
 uint32_t manualRebootAt = 0;
 volatile bool otaInProgress = false;
 volatile bool otaPreparing = false;
+volatile uint8_t displayTestCommand = 0;
+volatile bool displayTestActive = false;
+uint32_t displayTestStarted = 0;
 bool otaUploadValid = false;
 size_t otaBytesWritten = 0;
 String otaErrorMessage;
@@ -639,6 +642,70 @@ void resetPageTransition() {
 }
 
 
+bool serviceDisplayTest() {
+  const uint8_t command = displayTestCommand;
+  displayTestCommand = 0;
+  if (command == 1) {
+    displayTestActive = true;
+    displayTestStarted = millis();
+    resetPageTransition();
+  } else if (command == 2) {
+    displayTestActive = false;
+    resetPageTransition();
+  }
+  if (!displayTestActive) return false;
+
+  constexpr uint32_t STAGE_MS = 1500;
+  constexpr uint8_t STAGE_COUNT = 8;
+  const uint32_t elapsed = millis() - displayTestStarted;
+  if (elapsed >= STAGE_MS * STAGE_COUNT) {
+    displayTestActive = false;
+    resetPageTransition();
+    return false;
+  }
+
+  // Use the configured brightness to avoid an unexpected full-current test.
+  const uint16_t testRed = red;
+  const uint16_t testGreen = green;
+  const uint16_t testBlue = blue;
+  const uint16_t testWhite = white;
+  const uint8_t stage = elapsed / STAGE_MS;
+  matrix.fillScreen(0);
+  if (stage == 0) matrix.fillScreen(testRed);
+  else if (stage == 1) matrix.fillScreen(testGreen);
+  else if (stage == 2) matrix.fillScreen(testBlue);
+  else if (stage == 3) matrix.fillScreen(testWhite);
+  else if (stage == 4) {
+    for (int16_t y = 0; y < 32; y += 4) {
+      for (int16_t x = 0; x < MATRIX_WIDTH; x += 4) {
+        if (((x / 4) + (y / 4)) % 2 == 0) {
+          matrix.fillRect(x, y, 4, 4, testWhite);
+        }
+      }
+    }
+  } else if (stage == 5) {
+    matrix.drawRect(0, 0, MATRIX_WIDTH, 32, testWhite);
+    matrix.drawLine(0, 0, MATRIX_WIDTH - 1, 31, testRed);
+    matrix.drawLine(MATRIX_WIDTH - 1, 0, 0, 31, testGreen);
+    matrix.drawFastVLine(63, 0, 32, testBlue);
+    matrix.drawFastVLine(64, 0, 32, testBlue);
+  } else if (stage == 6) {
+    drawLine(0, 0, "DISPLAYTEST", testWhite);
+    drawLine(0, 11, "0123456789", testGreen);
+    drawLine(0, 22, "RGB 128x32", testBlue);
+  } else {
+    const int16_t bandWidth = MATRIX_WIDTH / 4;
+    matrix.fillRect(0, 0, bandWidth, 32, testRed);
+    matrix.fillRect(bandWidth, 0, bandWidth, 32, testGreen);
+    matrix.fillRect(bandWidth * 2, 0, bandWidth, 32, testBlue);
+    matrix.fillRect(bandWidth * 3, 0,
+                    MATRIX_WIDTH - bandWidth * 3, 32, testWhite);
+  }
+  matrix.show();
+  return true;
+}
+
+
 void drawDisplay() {
   if (otaPreparing) {
     setTransitionPercent(100);
@@ -650,6 +717,7 @@ void drawDisplay() {
     matrix.show();
     return;
   }
+  if (serviceDisplayTest()) return;
   if (static_cast<int32_t>(brightnessMessageUntil - millis()) > 0) {
     resetPageTransition();
     drawStatus(brightnessMessageTitle, brightnessMessageValue);
@@ -1137,7 +1205,10 @@ String webPage() {
   html += checked(displayEnabled);
   html += F("> Display eingeschaltet</label><label>Anzeigeradius (km)<input type='number' name='radius' min='1' max='100' step='0.5' value='");
   html += String(displayRadiusKm, 1);
-  html += F("'></label></fieldset><fieldset><legend>FlightWall-Verbindung</legend><label>Host<input name='fwHost' maxlength='63' value='");
+  html += F("'></label><button type='submit' formaction='/display-test'>");
+  html += (displayTestActive || displayTestCommand == 1) ?
+      "Displaytest beenden" : "Displaytest starten";
+  html += F("</button><p class='muted'>12 Sekunden: Rot, Grün, Blau, Weiß, Pixelraster, Geometrie, Text und Farbbalken.</p></fieldset><fieldset><legend>FlightWall-Verbindung</legend><label>Host<input name='fwHost' maxlength='63' value='");
   html += htmlEscape(flightwallHost);
   html += F("'></label><label>Port<input type='number' name='fwPort' min='1' max='65535' value='");
   html += String(flightwallPort);
@@ -1323,6 +1394,7 @@ void handleStatusApi() {
       ",\"rssi\":" + String(WiFi.RSSI()) +
       ",\"lux\":" + (isnan(filteredLux) ? String("null") : String(filteredLux, 1)) +
       ",\"brightness_percent\":" + String(BRIGHTNESS_LEVELS[brightnessIndex]) +
+      ",\"display_test\":" + String(displayTestActive ? "true" : "false") +
       ",\"reset_reason\":\"" + jsonEscape(resetReasonText()) + "\"}";
   webServer.send(200, "application/json; charset=utf-8", json);
 }
@@ -1334,6 +1406,14 @@ void handleRestart() {
       "<body style='font:18px system-ui;max-width:600px;margin:40px auto'>"
       "<h1>Neustart</h1><p>Der ESP wird neu gestartet.</p></body></html>");
   manualRebootAt = millis() + 750;
+}
+
+
+void handleDisplayTest() {
+  if (displayTestActive || displayTestCommand == 1) displayTestCommand = 2;
+  else displayTestCommand = 1;
+  webServer.sendHeader("Location", "/");
+  webServer.send(303, "text/plain; charset=utf-8", "Displaytest umgeschaltet");
 }
 
 
@@ -1481,6 +1561,7 @@ void startWebServer() {
   webServer.on("/api/status", HTTP_GET, handleStatusApi);
   webServer.on("/save", HTTP_POST, handleWebSave);
   webServer.on("/test-flightwall", HTTP_POST, handleFlightWallTest);
+  webServer.on("/display-test", HTTP_POST, handleDisplayTest);
   webServer.on("/restart", HTTP_POST, handleRestart);
   webServer.on("/update", HTTP_GET, handleOtaPage);
   webServer.on("/update", HTTP_POST, finishOtaUpload, handleOtaUpload);
