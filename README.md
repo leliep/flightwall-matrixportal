@@ -34,7 +34,12 @@ Nach erfolgreicher WLAN-Verbindung ist die Konfiguration normalerweise unter
 funktioniert, zeigt der serielle Monitor die IP-Adresse an.
 
 Konfigurierbar sind Display ein/aus, automatische oder manuelle Helligkeit,
-Lux-Schwellen und lokaler Anzeigeradius. Host, Port und API-Pfad des
+Lux-Schwellen, lokaler Anzeigeradius und eine tägliche Nachtruhe. Der Zeitraum
+darf über Mitternacht reichen, beispielsweise von 23:55 bis 05:55. Während
+dieser Zeit bleibt die Matrix einschließlich Betriebs-Pixel vollständig dunkel;
+Netzwerk, Datenabruf, Webinterface und OTA bleiben aktiv. Die lokale Uhrzeit
+wird per NTP bezogen und automatisch zwischen MEZ und MESZ umgestellt.
+Host, Port und API-Pfad des
 FlightWall-Servers lassen sich ändern und direkt testen. Die vier
 Anzeigeseiten können einzeln aktiviert, frei sortiert und mit einer eigenen
 Dauer versehen werden. Sanfte Übergänge sind optional. Das Webinterface ist

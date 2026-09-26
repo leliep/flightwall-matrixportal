@@ -19,6 +19,7 @@
 - korrekte ASCII-Umschrift von `š` und `Š`, beispielsweise `Priština` als `Pristina`
 - ASCII-Umschrift von `â`, `ā` und `ă`, beispielsweise `Coandă` als `Coanda`
 - über das Webinterface start- und stoppbarer zwölfsekündiger Displaytest
+- konfigurierbare tägliche Nachtruhe mit NTP-Zeit und automatischer MEZ-/MESZ-Umschaltung
 
 ## 2.0.0 – 2026-09-25
 

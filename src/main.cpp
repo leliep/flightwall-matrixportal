@@ -1,4 +1,4 @@
-// Version generated: 2026-09-26 22:17:58 CEST (Europe/Berlin)
+// Version generated: 2026-09-26 23:23:46 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -9,6 +9,7 @@
 #include <WiFi.h>
 #include <Wire.h>
 #include <esp_system.h>
+#include <time.h>
 
 #include <Adafruit_GFX.h>
 #include <Adafruit_Protomatter.h>
@@ -21,7 +22,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "2.1.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-09-26 22:17:58 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-09-26 23:23:46 CEST";
 constexpr uint8_t PAGE_COUNT = 4;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -53,6 +54,9 @@ constexpr float DEFAULT_DISPLAY_RADIUS_KM = 10.0f;
 constexpr char DEFAULT_FLIGHTWALL_HOST[] = "raspi-flw";
 constexpr uint16_t DEFAULT_FLIGHTWALL_PORT = 8088;
 constexpr char DEFAULT_FLIGHTWALL_PATH[] = "/api/state";
+constexpr char LOCAL_TIME_ZONE[] = "CET-1CEST,M3.5.0,M10.5.0/3";
+constexpr char NTP_SERVER_PRIMARY[] = "pool.ntp.org";
+constexpr char NTP_SERVER_SECONDARY[] = "time.cloudflare.com";
 // At 3-bit color depth, seven non-zero PWM levels are available.
 constexpr uint8_t BRIGHTNESS_LEVELS[] = {15, 30, 45, 60, 75, 90, 100};
 constexpr uint8_t BRIGHTNESS_LEVEL_COUNT =
@@ -131,6 +135,9 @@ String brightnessMessageTitle = "HELLIGKEIT";
 String brightnessMessageValue;
 volatile uint8_t pendingButtonEvents = 0;
 bool displayEnabled = true;
+bool quietHoursEnabled = false;
+uint16_t quietHoursStartMinutes = 23 * 60 + 55;
+uint16_t quietHoursEndMinutes = 5 * 60 + 55;
 float displayRadiusKm = DEFAULT_DISPLAY_RADIUS_KM;
 uint32_t pageIntervalMs = DEFAULT_PAGE_INTERVAL_MS;
 float lowLuxThreshold = 20.0f;
@@ -706,6 +713,30 @@ bool serviceDisplayTest() {
 }
 
 
+bool readLocalClock(struct tm &localClock) {
+  const time_t now = time(nullptr);
+  if (now < 1700000000) return false;
+  localtime_r(&now, &localClock);
+  return true;
+}
+
+
+bool quietHoursAreActive() {
+  if (!quietHoursEnabled || quietHoursStartMinutes == quietHoursEndMinutes) {
+    return false;
+  }
+  struct tm localClock;
+  if (!readLocalClock(localClock)) return false;
+  const uint16_t currentMinutes = localClock.tm_hour * 60 + localClock.tm_min;
+  if (quietHoursStartMinutes < quietHoursEndMinutes) {
+    return currentMinutes >= quietHoursStartMinutes &&
+           currentMinutes < quietHoursEndMinutes;
+  }
+  return currentMinutes >= quietHoursStartMinutes ||
+         currentMinutes < quietHoursEndMinutes;
+}
+
+
 void drawDisplay() {
   if (otaPreparing) {
     setTransitionPercent(100);
@@ -718,6 +749,12 @@ void drawDisplay() {
     return;
   }
   if (serviceDisplayTest()) return;
+  if (quietHoursAreActive()) {
+    resetPageTransition();
+    matrix.fillScreen(0);
+    matrix.show();
+    return;
+  }
   if (static_cast<int32_t>(brightnessMessageUntil - millis()) > 0) {
     resetPageTransition();
     drawStatus(brightnessMessageTitle, brightnessMessageValue);
@@ -1001,6 +1038,8 @@ bool connectWiFi(uint32_t timeoutMs) {
   }
   Serial.print("Wi-Fi connected: ");
   Serial.println(WiFi.localIP());
+  configTzTime(
+      LOCAL_TIME_ZONE, NTP_SERVER_PRIMARY, NTP_SERVER_SECONDARY);
   return true;
 }
 
@@ -1126,6 +1165,26 @@ String selected(bool value) {
 }
 
 
+String minutesAsTime(uint16_t minutes) {
+  minutes %= 24 * 60;
+  char value[6];
+  snprintf(value, sizeof(value), "%02u:%02u", minutes / 60, minutes % 60);
+  return String(value);
+}
+
+
+bool parseTimeMinutes(const String &value, uint16_t &minutes) {
+  if (value.length() != 5 || value[2] != ':' ||
+      !isDigit(value[0]) || !isDigit(value[1]) ||
+      !isDigit(value[3]) || !isDigit(value[4])) return false;
+  const uint8_t hours = value.substring(0, 2).toInt();
+  const uint8_t mins = value.substring(3, 5).toInt();
+  if (hours > 23 || mins > 59) return false;
+  minutes = hours * 60 + mins;
+  return true;
+}
+
+
 String htmlEscape(String value) {
   value.replace("&", "&amp;");
   value.replace("\"", "&quot;");
@@ -1205,7 +1264,13 @@ String webPage() {
   html += checked(displayEnabled);
   html += F("> Display eingeschaltet</label><label>Anzeigeradius (km)<input type='number' name='radius' min='1' max='100' step='0.5' value='");
   html += String(displayRadiusKm, 1);
-  html += F("'></label><button type='submit' formaction='/display-test'>");
+  html += F("'></label><label><input type='checkbox' name='quietHours' value='1'");
+  html += checked(quietHoursEnabled);
+  html += F("> Nachtruhe aktiv</label><label>Display dunkel ab<input type='time' name='quietStart' value='");
+  html += minutesAsTime(quietHoursStartMinutes);
+  html += F("'></label><label>Display wieder aktiv ab<input type='time' name='quietEnd' value='");
+  html += minutesAsTime(quietHoursEndMinutes);
+  html += F("'></label><p class='muted'>Die Nachtruhe darf über Mitternacht reichen. Gleiche Zeiten deaktivieren die Abdunklung.</p><button type='submit' formaction='/display-test'>");
   html += (displayTestActive || displayTestCommand == 1) ?
       "Displaytest beenden" : "Displaytest starten";
   html += F("</button><p class='muted'>12 Sekunden: Rot, Grün, Blau, Weiß, Pixelraster, Geometrie, Text und Farbbalken.</p></fieldset><fieldset><legend>FlightWall-Verbindung</legend><label>Host<input name='fwHost' maxlength='63' value='");
@@ -1275,6 +1340,20 @@ String webPage() {
   html += F("</b><span>Helligkeit</span><b>");
   html += String(BRIGHTNESS_LEVELS[brightnessIndex]) + "% / " +
           (automaticBrightnessEnabled ? "Automatik" : "manuell");
+  struct tm localClock;
+  html += F("</b><span>Lokale Zeit</span><b>");
+  if (readLocalClock(localClock)) {
+    char clockText[20];
+    strftime(clockText, sizeof(clockText), "%d.%m.%Y %H:%M", &localClock);
+    html += clockText;
+  } else {
+    html += "warte auf NTP";
+  }
+  html += F("</b><span>Nachtruhe</span><b>");
+  html += quietHoursEnabled ?
+      (minutesAsTime(quietHoursStartMinutes) + "–" +
+       minutesAsTime(quietHoursEndMinutes) +
+       (quietHoursAreActive() ? " / aktiv" : " / inaktiv")) : "aus";
   html += F("</b><span>Tasks</span><b>Netz Core 0 / Display Core 1</b><span>Stackreserve</span><b>");
   html += networkTaskHandle ? String(uxTaskGetStackHighWaterMark(networkTaskHandle) * sizeof(StackType_t)) : "-";
   html += " / ";
@@ -1305,6 +1384,14 @@ bool validFlightWallHost(const String &host) {
 void applyWebSettings() {
   if (xSemaphoreTake(preferencesMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
     displayEnabled = webServer.hasArg("display");
+    quietHoursEnabled = webServer.hasArg("quietHours");
+    uint16_t requestedQuietTime;
+    if (parseTimeMinutes(webServer.arg("quietStart"), requestedQuietTime)) {
+      quietHoursStartMinutes = requestedQuietTime;
+    }
+    if (parseTimeMinutes(webServer.arg("quietEnd"), requestedQuietTime)) {
+      quietHoursEndMinutes = requestedQuietTime;
+    }
     automaticBrightnessEnabled = webServer.hasArg("autoLight");
     displayRadiusKm = constrain(webServer.arg("radius").toFloat(), 1.0f, 100.0f);
     lowLuxThreshold = constrain(webServer.arg("lowLux").toFloat(), 1.0f, 500.0f);
@@ -1347,6 +1434,9 @@ void applyWebSettings() {
       manualBrightnessIndex = requestedBrightness;
     }
     preferences.putBool("displayOn", displayEnabled);
+    preferences.putBool("quietOn", quietHoursEnabled);
+    preferences.putUShort("quietStart", quietHoursStartMinutes);
+    preferences.putUShort("quietEnd", quietHoursEndMinutes);
     preferences.putBool("autoLight", automaticBrightnessEnabled);
     preferences.putUChar("brightness", manualBrightnessIndex);
     preferences.putFloat("radiusKm", displayRadiusKm);
@@ -1394,6 +1484,8 @@ void handleStatusApi() {
       ",\"rssi\":" + String(WiFi.RSSI()) +
       ",\"lux\":" + (isnan(filteredLux) ? String("null") : String(filteredLux, 1)) +
       ",\"brightness_percent\":" + String(BRIGHTNESS_LEVELS[brightnessIndex]) +
+      ",\"quiet_hours_enabled\":" + String(quietHoursEnabled ? "true" : "false") +
+      ",\"quiet_hours_active\":" + String(quietHoursAreActive() ? "true" : "false") +
       ",\"display_test\":" + String(displayTestActive ? "true" : "false") +
       ",\"reset_reason\":\"" + jsonEscape(resetReasonText()) + "\"}";
   webServer.send(200, "application/json; charset=utf-8", json);
@@ -1639,6 +1731,13 @@ void setup() {
   brightnessIndex = manualBrightnessIndex;
   automaticBrightnessEnabled = preferences.getBool("autoLight", true);
   displayEnabled = preferences.getBool("displayOn", true);
+  quietHoursEnabled = preferences.getBool("quietOn", false);
+  quietHoursStartMinutes = constrain(
+      preferences.getUShort("quietStart", 23 * 60 + 55),
+      static_cast<uint16_t>(0), static_cast<uint16_t>(1439));
+  quietHoursEndMinutes = constrain(
+      preferences.getUShort("quietEnd", 5 * 60 + 55),
+      static_cast<uint16_t>(0), static_cast<uint16_t>(1439));
   displayRadiusKm = preferences.getFloat("radiusKm", DEFAULT_DISPLAY_RADIUS_KM);
   pageIntervalMs = preferences.getUInt("pageMs", DEFAULT_PAGE_INTERVAL_MS);
   lowLuxThreshold = preferences.getFloat("lowLux", 20.0f);
@@ -1655,7 +1754,7 @@ void setup() {
     pageOrder[page] = preferences.getUChar(
         ("order" + String(page)).c_str(), page);
   }
-  if (settingsVersion < 4) preferences.putUChar("settingsVer", 4);
+  if (settingsVersion < 5) preferences.putUChar("settingsVer", 5);
   displayRadiusKm = constrain(displayRadiusKm, 1.0f, 100.0f);
   pageIntervalMs = constrain(pageIntervalMs, 2000UL, 60000UL);
   bool validStoredOrder = true;
