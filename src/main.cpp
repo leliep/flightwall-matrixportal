@@ -1,4 +1,4 @@
-// Version generated: 2026-09-25 22:32:56 CEST (Europe/Berlin)
+// Version generated: 2026-09-26 11:26:05 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -21,7 +21,8 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "2.1.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-09-25 22:32:56 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-09-26 11:26:05 CEST";
+constexpr uint8_t PAGE_COUNT = 4;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
 constexpr uint32_t WIFI_RETRY_MS = 60000;
@@ -78,6 +79,8 @@ struct FlightData {
   String motion;
   String origin;
   String destination;
+  String originName;
+  String destinationName;
   float distanceKm = NAN;
   float altitudeFt = NAN;
   float speedKmh = NAN;
@@ -132,11 +135,11 @@ float highLuxThreshold = 800.0f;
 String flightwallHost = DEFAULT_FLIGHTWALL_HOST;
 uint16_t flightwallPort = DEFAULT_FLIGHTWALL_PORT;
 String flightwallPath = DEFAULT_FLIGHTWALL_PATH;
-bool pageEnabled[] = {true, true, true};
-uint8_t pageOrder[] = {0, 1, 2};
+bool pageEnabled[] = {true, true, true, true};
+uint8_t pageOrder[] = {0, 1, 2, 3};
 uint32_t pageDurationMs[] = {
     DEFAULT_PAGE_INTERVAL_MS, DEFAULT_PAGE_INTERVAL_MS,
-    DEFAULT_PAGE_INTERVAL_MS};
+    DEFAULT_PAGE_INTERVAL_MS, DEFAULT_PAGE_INTERVAL_MS};
 bool smoothTransitions = true;
 uint8_t currentPageSlot = 0;
 uint32_t currentPageStarted = 0;
@@ -513,6 +516,35 @@ void drawCpaPage() {
 }
 
 
+int16_t scrollingTextX(const String &text, uint32_t phaseOffset = 0) {
+  const int16_t textWidth = text.length() * 6;
+  if (textWidth <= MATRIX_WIDTH) return 0;
+  constexpr uint32_t PAUSE_MS = 1500;
+  constexpr uint32_t PIXEL_MS = 80;
+  const uint32_t travelMs = (textWidth - MATRIX_WIDTH) * PIXEL_MS;
+  const uint32_t cycleMs = PAUSE_MS + travelMs + PAUSE_MS;
+  const uint32_t position = (millis() + phaseOffset) % cycleMs;
+  if (position < PAUSE_MS) return 0;
+  if (position < PAUSE_MS + travelMs) {
+    return -static_cast<int16_t>((position - PAUSE_MS) / PIXEL_MS);
+  }
+  return MATRIX_WIDTH - textWidth;
+}
+
+
+void drawAirportNamesPage() {
+  drawLine(0, 0, "Flughaefen", cyan);
+  String originText = "S " + (flight.originName.length() ?
+      flight.originName : (flight.origin.length() ? flight.origin : "unbekannt"));
+  String destinationText = "Z " + (flight.destinationName.length() ?
+      flight.destinationName : (flight.destination.length() ? flight.destination : "unbekannt"));
+  originText = displayAscii(originText);
+  destinationText = displayAscii(destinationText);
+  drawLine(scrollingTextX(originText), 11, originText, white);
+  drawLine(scrollingTextX(destinationText, 700), 22, destinationText, yellow);
+}
+
+
 void drawStatus(const String &line1, const String &line2) {
   matrix.fillScreen(0);
   drawLine(0, 8, clipped(line1, 21), yellow);
@@ -537,10 +569,10 @@ void drawIdleDisplay() {
 
 
 bool selectEnabledPage() {
-  for (uint8_t offset = 0; offset < 3; ++offset) {
-    const uint8_t slot = (currentPageSlot + offset) % 3;
+  for (uint8_t offset = 0; offset < PAGE_COUNT; ++offset) {
+    const uint8_t slot = (currentPageSlot + offset) % PAGE_COUNT;
     const uint8_t page = pageOrder[slot];
-    if (page < 3 && pageEnabled[page]) {
+    if (page < PAGE_COUNT && pageEnabled[page]) {
       currentPageSlot = slot;
       return true;
     }
@@ -550,7 +582,7 @@ bool selectEnabledPage() {
 
 
 void advancePage() {
-  currentPageSlot = (currentPageSlot + 1) % 3;
+  currentPageSlot = (currentPageSlot + 1) % PAGE_COUNT;
   selectEnabledPage();
 }
 
@@ -559,7 +591,8 @@ void drawConfiguredPage(uint8_t page) {
   switch (page) {
     case 0: drawMainPage(); break;
     case 1: drawRoutePage(); break;
-    default: drawCpaPage(); break;
+    case 2: drawCpaPage(); break;
+    default: drawAirportNamesPage(); break;
   }
 }
 
@@ -957,6 +990,8 @@ bool fetchFlightWall() {
   next.motion = jsonString(json, "motion");
   next.origin = jsonString(json, "origin");
   next.destination = jsonString(json, "destination");
+  next.originName = jsonString(json, "origin_name");
+  next.destinationName = jsonString(json, "destination_name");
   next.distanceKm = jsonNumber(json, "distance_km");
   next.altitudeFt = jsonNumber(json, "altitude_ft");
   next.speedKmh = jsonNumber(json, "speed_kmh");
@@ -999,7 +1034,8 @@ String htmlEscape(String value) {
 String pageName(uint8_t page) {
   if (page == 0) return "Flugdaten";
   if (page == 1) return "Airline und Route";
-  return "CPA und Sondertyp";
+  if (page == 2) return "CPA und Sondertyp";
+  return "Flughafennamen";
 }
 
 
@@ -1075,16 +1111,16 @@ String webPage() {
   html += F("<fieldset><legend>Anzeigeseiten</legend><label><input type='checkbox' name='smooth' value='1'");
   html += checked(smoothTransitions);
   html += F("> Sanfte Übergänge</label>");
-  for (uint8_t page = 0; page < 3; ++page) {
+  for (uint8_t page = 0; page < PAGE_COUNT; ++page) {
     html += "<label><input type='checkbox' name='page" + String(page) + "On' value='1'";
     html += checked(pageEnabled[page]);
     html += "> " + pageName(page) + "</label><label>Dauer (Sekunden)<input type='number' name='page";
     html += String(page) + "Sec' min='2' max='60' value='" + String(pageDurationMs[page] / 1000) + "'></label>";
   }
   html += F("<p class='muted'>Reihenfolge:</p>");
-  for (uint8_t slot = 0; slot < 3; ++slot) {
+  for (uint8_t slot = 0; slot < PAGE_COUNT; ++slot) {
     html += "<label>Position " + String(slot + 1) + "<select name='order" + String(slot) + "'>";
-    for (uint8_t page = 0; page < 3; ++page) {
+    for (uint8_t page = 0; page < PAGE_COUNT; ++page) {
       html += "<option value='" + String(page) + "'" +
               selected(pageOrder[slot] == page) + ">" + pageName(page) + "</option>";
     }
@@ -1179,27 +1215,25 @@ void applyWebSettings() {
     }
     smoothTransitions = webServer.hasArg("smooth");
     bool anyPageEnabled = false;
-    for (uint8_t page = 0; page < 3; ++page) {
+    for (uint8_t page = 0; page < PAGE_COUNT; ++page) {
       pageEnabled[page] = webServer.hasArg("page" + String(page) + "On");
       anyPageEnabled |= pageEnabled[page];
       pageDurationMs[page] = constrain(
           webServer.arg("page" + String(page) + "Sec").toInt(), 2L, 60L) * 1000UL;
     }
     if (!anyPageEnabled) pageEnabled[0] = true;
-    bool usedPages[] = {false, false, false};
+    bool usedPages[PAGE_COUNT] = {};
     bool validOrder = true;
-    for (uint8_t slot = 0; slot < 3; ++slot) {
+    for (uint8_t slot = 0; slot < PAGE_COUNT; ++slot) {
       const int page = webServer.arg("order" + String(slot)).toInt();
-      if (page < 0 || page > 2 || usedPages[page]) validOrder = false;
+      if (page < 0 || page >= PAGE_COUNT || usedPages[page]) validOrder = false;
       else {
         pageOrder[slot] = page;
         usedPages[page] = true;
       }
     }
     if (!validOrder) {
-      pageOrder[0] = 0;
-      pageOrder[1] = 1;
-      pageOrder[2] = 2;
+      for (uint8_t page = 0; page < PAGE_COUNT; ++page) pageOrder[page] = page;
     }
     const int requestedBrightness = webServer.arg("brightness").toInt();
     if (requestedBrightness >= 0 && requestedBrightness < BRIGHTNESS_LEVEL_COUNT) {
@@ -1215,7 +1249,7 @@ void applyWebSettings() {
     preferences.putUShort("fwPort", flightwallPort);
     preferences.putString("fwPath", flightwallPath);
     preferences.putBool("smooth", smoothTransitions);
-    for (uint8_t page = 0; page < 3; ++page) {
+    for (uint8_t page = 0; page < PAGE_COUNT; ++page) {
       preferences.putBool(("p" + String(page) + "On").c_str(), pageEnabled[page]);
       preferences.putUInt(("p" + String(page) + "Ms").c_str(), pageDurationMs[page]);
       preferences.putUChar(("order" + String(page)).c_str(), pageOrder[page]);
@@ -1496,7 +1530,7 @@ void setup() {
   flightwallPort = preferences.getUShort("fwPort", DEFAULT_FLIGHTWALL_PORT);
   flightwallPath = preferences.getString("fwPath", DEFAULT_FLIGHTWALL_PATH);
   smoothTransitions = preferences.getBool("smooth", true);
-  for (uint8_t page = 0; page < 3; ++page) {
+  for (uint8_t page = 0; page < PAGE_COUNT; ++page) {
     pageEnabled[page] = preferences.getBool(
         ("p" + String(page) + "On").c_str(), true);
     pageDurationMs[page] = preferences.getUInt(
@@ -1504,20 +1538,27 @@ void setup() {
     pageOrder[page] = preferences.getUChar(
         ("order" + String(page)).c_str(), page);
   }
-  if (settingsVersion < 3) preferences.putUChar("settingsVer", 3);
+  if (settingsVersion < 4) preferences.putUChar("settingsVer", 4);
   displayRadiusKm = constrain(displayRadiusKm, 1.0f, 100.0f);
   pageIntervalMs = constrain(pageIntervalMs, 2000UL, 60000UL);
-  for (uint8_t page = 0; page < 3; ++page) {
+  bool validStoredOrder = true;
+  bool storedOrderUsed[PAGE_COUNT] = {};
+  for (uint8_t page = 0; page < PAGE_COUNT; ++page) {
     pageDurationMs[page] = constrain(pageDurationMs[page], 2000UL, 60000UL);
-    if (pageOrder[page] > 2) pageOrder[page] = page;
+    if (pageOrder[page] >= PAGE_COUNT || storedOrderUsed[pageOrder[page]]) {
+      validStoredOrder = false;
+    } else {
+      storedOrderUsed[pageOrder[page]] = true;
+    }
   }
-  if (pageOrder[0] == pageOrder[1] || pageOrder[0] == pageOrder[2] ||
-      pageOrder[1] == pageOrder[2]) {
-    pageOrder[0] = 0;
-    pageOrder[1] = 1;
-    pageOrder[2] = 2;
+  if (!validStoredOrder) {
+    for (uint8_t page = 0; page < PAGE_COUNT; ++page) pageOrder[page] = page;
   }
-  if (!pageEnabled[0] && !pageEnabled[1] && !pageEnabled[2]) pageEnabled[0] = true;
+  bool anyStoredPageEnabled = false;
+  for (uint8_t page = 0; page < PAGE_COUNT; ++page) {
+    anyStoredPageEnabled |= pageEnabled[page];
+  }
+  if (!anyStoredPageEnabled) pageEnabled[0] = true;
   lowLuxThreshold = constrain(lowLuxThreshold, 1.0f, 500.0f);
   highLuxThreshold = constrain(highLuxThreshold, 50.0f, 50000.0f);
   if (highLuxThreshold <= lowLuxThreshold) highLuxThreshold = lowLuxThreshold + 50.0f;

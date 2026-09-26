@@ -14,6 +14,7 @@
 - erweiterte Diagnose mit Laufzeit, RAM, WLAN, Lux, Task-Stacks und Resetgrund
 - Status-API und bestätigungspflichtiger Neustart über das Webinterface
 - OTA-Fortschritt, Firmwareprüfung, verständliche Fehler und Versionsvergleich
+- abwählbare Flughafennamen-Seite mit horizontalem Lauftext für lange Start- und Zielnamen
 
 ## 2.0.0 – 2026-09-25
 

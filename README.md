@@ -35,11 +35,16 @@ funktioniert, zeigt der serielle Monitor die IP-Adresse an.
 
 Konfigurierbar sind Display ein/aus, automatische oder manuelle Helligkeit,
 Lux-Schwellen und lokaler Anzeigeradius. Host, Port und API-Pfad des
-FlightWall-Servers lassen sich ändern und direkt testen. Die drei
+FlightWall-Servers lassen sich ändern und direkt testen. Die vier
 Anzeigeseiten können einzeln aktiviert, frei sortiert und mit einer eigenen
 Dauer versehen werden. Sanfte Übergänge sind optional. Das Webinterface ist
 für ein vertrauenswürdiges lokales WLAN gedacht und hat derzeit keine eigene
 Anmeldung.
+
+Die Seite **Flughafennamen** zeigt – sofern vom FlightWall-Server geliefert –
+die Langnamen des Start- und Zielflughafens. Namen, die breiter als das Display
+sind, werden horizontal gescrollt. Fehlt ein Langname, wird zunächst der
+Flughafencode und andernfalls `unbekannt` angezeigt.
 
 Special Types erhalten ein kleines farbiges Symbol neben der Flugzeugkennung.
 Vor einem OTA-Flashvorgang erscheint kurz `OTA UPDATE / BITTE WARTEN`; danach
