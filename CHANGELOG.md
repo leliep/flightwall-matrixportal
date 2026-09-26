@@ -16,6 +16,7 @@
 - OTA-Fortschritt, Firmwareprüfung, verständliche Fehler und Versionsvergleich
 - abwählbare Flughafennamen-Seite mit horizontalem Lauftext für lange Start- und Zielnamen
 - Flughafennamen-Seite wird ohne Routendaten übersprungen und bleibt für einen vollständigen Lauftext sichtbar
+- korrekte ASCII-Umschrift von `š` und `Š`, beispielsweise `Priština` als `Pristina`
 
 ## 2.0.0 – 2026-09-25
 

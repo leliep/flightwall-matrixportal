@@ -1,4 +1,4 @@
-// Version generated: 2026-09-26 14:05:13 CEST (Europe/Berlin)
+// Version generated: 2026-09-26 14:25:44 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -21,7 +21,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "2.1.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-09-26 14:05:13 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-09-26 14:25:44 CEST";
 constexpr uint8_t PAGE_COUNT = 4;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -246,6 +246,8 @@ String displayAscii(String text) {
   text.replace("Ù", "U");
   text.replace("ç", "c");
   text.replace("Ç", "C");
+  text.replace("š", "s");
+  text.replace("Š", "S");
 
   String ascii;
   ascii.reserve(text.length());
