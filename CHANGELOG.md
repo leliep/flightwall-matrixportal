@@ -15,6 +15,7 @@
 - Status-API und bestätigungspflichtiger Neustart über das Webinterface
 - OTA-Fortschritt, Firmwareprüfung, verständliche Fehler und Versionsvergleich
 - abwählbare Flughafennamen-Seite mit horizontalem Lauftext für lange Start- und Zielnamen
+- Flughafennamen-Seite wird ohne Routendaten übersprungen und bleibt für einen vollständigen Lauftext sichtbar
 
 ## 2.0.0 – 2026-09-25
 

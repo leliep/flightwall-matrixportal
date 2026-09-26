@@ -1,4 +1,4 @@
-// Version generated: 2026-09-26 11:26:05 CEST (Europe/Berlin)
+// Version generated: 2026-09-26 14:05:13 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -21,7 +21,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "2.1.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-09-26 11:26:05 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-09-26 14:05:13 CEST";
 constexpr uint8_t PAGE_COUNT = 4;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -516,17 +516,26 @@ void drawCpaPage() {
 }
 
 
-int16_t scrollingTextX(const String &text, uint32_t phaseOffset = 0) {
+constexpr uint32_t SCROLL_PAUSE_MS = 1500;
+constexpr uint32_t SCROLL_PIXEL_MS = 80;
+
+
+uint32_t scrollingTextDuration(const String &text) {
   const int16_t textWidth = text.length() * 6;
   if (textWidth <= MATRIX_WIDTH) return 0;
-  constexpr uint32_t PAUSE_MS = 1500;
-  constexpr uint32_t PIXEL_MS = 80;
-  const uint32_t travelMs = (textWidth - MATRIX_WIDTH) * PIXEL_MS;
-  const uint32_t cycleMs = PAUSE_MS + travelMs + PAUSE_MS;
-  const uint32_t position = (millis() + phaseOffset) % cycleMs;
-  if (position < PAUSE_MS) return 0;
-  if (position < PAUSE_MS + travelMs) {
-    return -static_cast<int16_t>((position - PAUSE_MS) / PIXEL_MS);
+  return SCROLL_PAUSE_MS +
+         (textWidth - MATRIX_WIDTH) * SCROLL_PIXEL_MS +
+         SCROLL_PAUSE_MS;
+}
+
+
+int16_t scrollingTextX(const String &text, uint32_t elapsedMs) {
+  const int16_t textWidth = text.length() * 6;
+  if (textWidth <= MATRIX_WIDTH || elapsedMs < SCROLL_PAUSE_MS) return 0;
+  const uint32_t travelMs = (textWidth - MATRIX_WIDTH) * SCROLL_PIXEL_MS;
+  if (elapsedMs < SCROLL_PAUSE_MS + travelMs) {
+    return -static_cast<int16_t>(
+        (elapsedMs - SCROLL_PAUSE_MS) / SCROLL_PIXEL_MS);
   }
   return MATRIX_WIDTH - textWidth;
 }
@@ -540,8 +549,25 @@ void drawAirportNamesPage() {
       flight.destinationName : (flight.destination.length() ? flight.destination : "unbekannt"));
   originText = displayAscii(originText);
   destinationText = displayAscii(destinationText);
-  drawLine(scrollingTextX(originText), 11, originText, white);
-  drawLine(scrollingTextX(destinationText, 700), 22, destinationText, yellow);
+  const uint32_t elapsed = millis() - currentPageStarted;
+  drawLine(scrollingTextX(originText, elapsed), 11, originText, white);
+  drawLine(scrollingTextX(destinationText, elapsed), 22, destinationText, yellow);
+}
+
+
+bool airportNamesPageHasData() {
+  return flight.originName.length() || flight.origin.length() ||
+         flight.destinationName.length() || flight.destination.length();
+}
+
+
+uint32_t airportNamesPageDuration() {
+  String originText = displayAscii("S " + (flight.originName.length() ?
+      flight.originName : flight.origin));
+  String destinationText = displayAscii("Z " + (flight.destinationName.length() ?
+      flight.destinationName : flight.destination));
+  return max(scrollingTextDuration(originText),
+             scrollingTextDuration(destinationText));
 }
 
 
@@ -572,7 +598,8 @@ bool selectEnabledPage() {
   for (uint8_t offset = 0; offset < PAGE_COUNT; ++offset) {
     const uint8_t slot = (currentPageSlot + offset) % PAGE_COUNT;
     const uint8_t page = pageOrder[slot];
-    if (page < PAGE_COUNT && pageEnabled[page]) {
+    const bool pageHasContent = page != 3 || airportNamesPageHasData();
+    if (page < PAGE_COUNT && pageEnabled[page] && pageHasContent) {
       currentPageSlot = slot;
       return true;
     }
@@ -647,7 +674,8 @@ void drawDisplay() {
   const uint32_t now = millis();
   if (currentPageStarted == 0) currentPageStarted = now;
   const uint8_t page = pageOrder[currentPageSlot];
-  const uint32_t duration = pageDurationMs[page];
+  uint32_t duration = pageDurationMs[page];
+  if (page == 3) duration = max(duration, airportNamesPageDuration());
 
   if (transitionPhase == TransitionPhase::Normal &&
       now - currentPageStarted >= duration) {

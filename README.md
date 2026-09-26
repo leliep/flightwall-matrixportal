@@ -43,8 +43,10 @@ Anmeldung.
 
 Die Seite **Flughafennamen** zeigt – sofern vom FlightWall-Server geliefert –
 die Langnamen des Start- und Zielflughafens. Namen, die breiter als das Display
-sind, werden horizontal gescrollt. Fehlt ein Langname, wird zunächst der
-Flughafencode und andernfalls `unbekannt` angezeigt.
+sind, werden vollständig horizontal gescrollt; dafür verlängert die Firmware
+die konfigurierte Seitendauer bei Bedarf automatisch. Fehlt ein Langname, wird
+der Flughafencode angezeigt. Sind Start und Ziel beide unbekannt, wird die
+gesamte Seite automatisch übersprungen.
 
 Special Types erhalten ein kleines farbiges Symbol neben der Flugzeugkennung.
 Vor einem OTA-Flashvorgang erscheint kurz `OTA UPDATE / BITTE WARTEN`; danach
