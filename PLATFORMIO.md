@@ -24,8 +24,10 @@ Nach dem WLAN-Verbindungsaufbau startet der HTTP-Server auf Port 80. Er ist
 über `http://matrixportal.local` oder die im seriellen Monitor genannte
 IP-Adresse erreichbar. Einstellungen werden in NVS gespeichert. Dazu gehören
 auch FlightWall-Host, Port und Pfad sowie Aktivierung, Reihenfolge und Dauer
-der vier Anzeigeseiten. Die zusätzliche Seite **Flughafennamen** zeigt Start-
+der fünf Anzeigeseiten. Die Seite **Flughafennamen** zeigt Start-
 und Zielflughafen ausgeschrieben und scrollt zu lange Namen horizontal.
+Die Seite **Freitext** scrollt einen frei konfigurierbaren Text mit bis zu
+128 Zeichen bei jedem Aufruf genau einmal vollständig über das Display.
 
 ## OTA
 

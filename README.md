@@ -40,7 +40,7 @@ dieser Zeit bleibt die Matrix einschließlich Betriebs-Pixel vollständig dunkel
 Netzwerk, Datenabruf, Webinterface und OTA bleiben aktiv. Die lokale Uhrzeit
 wird per NTP bezogen und automatisch zwischen MEZ und MESZ umgestellt.
 Host, Port und API-Pfad des
-FlightWall-Servers lassen sich ändern und direkt testen. Die vier
+FlightWall-Servers lassen sich ändern und direkt testen. Die fünf
 Anzeigeseiten können einzeln aktiviert, frei sortiert und mit einer eigenen
 Dauer versehen werden. Sanfte Übergänge sind optional. Das Webinterface ist
 für ein vertrauenswürdiges lokales WLAN gedacht und hat derzeit keine eigene
@@ -57,6 +57,12 @@ sind, werden vollständig horizontal gescrollt; dafür verlängert die Firmware
 die konfigurierte Seitendauer bei Bedarf automatisch. Fehlt ein Langname, wird
 der Flughafencode angezeigt. Sind Start und Ziel beide unbekannt, wird die
 gesamte Seite automatisch übersprungen.
+
+Die Seite **Freitext** zeigt einen im Webinterface eingegebenen Text mit bis
+zu 128 darstellbaren Zeichen. Bei jedem Seitenaufruf läuft der Text genau
+einmal vollständig von rechts nach links über die Anzeige. Die Firmware
+verlängert die konfigurierte Seitendauer automatisch, wenn der Durchlauf mehr
+Zeit benötigt. Ein leerer Freitext überspringt die Seite.
 
 Special Types erhalten ein kleines farbiges Symbol neben der Flugzeugkennung.
 Vor einem OTA-Flashvorgang erscheint kurz `OTA UPDATE / BITTE WARTEN`; danach

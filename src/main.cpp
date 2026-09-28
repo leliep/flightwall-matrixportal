@@ -1,4 +1,4 @@
-// Version generated: 2026-09-26 23:23:46 CEST (Europe/Berlin)
+// Version generated: 2026-09-28 14:52:29 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -22,8 +22,8 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "2.1.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-09-26 23:23:46 CEST";
-constexpr uint8_t PAGE_COUNT = 4;
+constexpr char BUILD_TIMESTAMP[] = "2026-09-28 14:52:29 CEST";
+constexpr uint8_t PAGE_COUNT = 5;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
 constexpr uint32_t WIFI_RETRY_MS = 60000;
@@ -145,11 +145,13 @@ float highLuxThreshold = 800.0f;
 String flightwallHost = DEFAULT_FLIGHTWALL_HOST;
 uint16_t flightwallPort = DEFAULT_FLIGHTWALL_PORT;
 String flightwallPath = DEFAULT_FLIGHTWALL_PATH;
-bool pageEnabled[] = {true, true, true, true};
-uint8_t pageOrder[] = {0, 1, 2, 3};
+String customPageText;
+bool pageEnabled[] = {true, true, true, true, true};
+uint8_t pageOrder[] = {0, 1, 2, 3, 4};
 uint32_t pageDurationMs[] = {
     DEFAULT_PAGE_INTERVAL_MS, DEFAULT_PAGE_INTERVAL_MS,
-    DEFAULT_PAGE_INTERVAL_MS, DEFAULT_PAGE_INTERVAL_MS};
+    DEFAULT_PAGE_INTERVAL_MS, DEFAULT_PAGE_INTERVAL_MS,
+    DEFAULT_PAGE_INTERVAL_MS};
 bool smoothTransitions = true;
 uint8_t currentPageSlot = 0;
 uint32_t currentPageStarted = 0;
@@ -589,6 +591,30 @@ uint32_t airportNamesPageDuration() {
 }
 
 
+constexpr uint32_t CUSTOM_SCROLL_PAUSE_MS = 500;
+
+
+uint32_t customPageScrollDuration() {
+  const uint32_t textWidth = customPageText.length() * 6UL;
+  return CUSTOM_SCROLL_PAUSE_MS +
+         (MATRIX_WIDTH + textWidth) * SCROLL_PIXEL_MS +
+         CUSTOM_SCROLL_PAUSE_MS;
+}
+
+
+void drawCustomTextPage() {
+  const uint32_t elapsed = millis() - currentPageStarted;
+  const uint32_t textWidth = customPageText.length() * 6UL;
+  int32_t x = MATRIX_WIDTH;
+  if (elapsed > CUSTOM_SCROLL_PAUSE_MS) {
+    x -= (elapsed - CUSTOM_SCROLL_PAUSE_MS) / SCROLL_PIXEL_MS;
+  }
+  const int32_t finalX = -static_cast<int32_t>(textWidth);
+  if (x < finalX) x = finalX;
+  drawLine(static_cast<int16_t>(x), 13, customPageText, cyan);
+}
+
+
 void drawStatus(const String &line1, const String &line2) {
   matrix.fillScreen(0);
   drawLine(0, 8, clipped(line1, 21), yellow);
@@ -616,7 +642,9 @@ bool selectEnabledPage() {
   for (uint8_t offset = 0; offset < PAGE_COUNT; ++offset) {
     const uint8_t slot = (currentPageSlot + offset) % PAGE_COUNT;
     const uint8_t page = pageOrder[slot];
-    const bool pageHasContent = page != 3 || airportNamesPageHasData();
+    const bool pageHasContent =
+        (page != 3 || airportNamesPageHasData()) &&
+        (page != 4 || customPageText.length());
     if (page < PAGE_COUNT && pageEnabled[page] && pageHasContent) {
       currentPageSlot = slot;
       return true;
@@ -637,7 +665,8 @@ void drawConfiguredPage(uint8_t page) {
     case 0: drawMainPage(); break;
     case 1: drawRoutePage(); break;
     case 2: drawCpaPage(); break;
-    default: drawAirportNamesPage(); break;
+    case 3: drawAirportNamesPage(); break;
+    default: drawCustomTextPage(); break;
   }
 }
 
@@ -789,6 +818,7 @@ void drawDisplay() {
   const uint8_t page = pageOrder[currentPageSlot];
   uint32_t duration = pageDurationMs[page];
   if (page == 3) duration = max(duration, airportNamesPageDuration());
+  if (page == 4) duration = max(duration, customPageScrollDuration());
 
   if (transitionPhase == TransitionPhase::Normal &&
       now - currentPageStarted >= duration) {
@@ -1198,7 +1228,8 @@ String pageName(uint8_t page) {
   if (page == 0) return "Flugdaten";
   if (page == 1) return "Airline und Route";
   if (page == 2) return "CPA und Sondertyp";
-  return "Flughafennamen";
+  if (page == 3) return "Flughafennamen";
+  return "Freitext";
 }
 
 
@@ -1282,7 +1313,9 @@ String webPage() {
   html += F("'></label><button type='submit' formaction='/test-flightwall'>Verbindung testen</button></fieldset>");
   html += F("<fieldset><legend>Anzeigeseiten</legend><label><input type='checkbox' name='smooth' value='1'");
   html += checked(smoothTransitions);
-  html += F("> Sanfte Übergänge</label>");
+  html += F("> Sanfte Übergänge</label><label>Freitext (maximal 128 Zeichen)<textarea name='customText' maxlength='128' rows='3' style='width:100%;box-sizing:border-box;padding:9px'>");
+  html += htmlEscape(customPageText);
+  html += F("</textarea></label><p class='muted'>Ein leerer Freitext überspringt die Seite automatisch.</p>");
   for (uint8_t page = 0; page < PAGE_COUNT; ++page) {
     html += "<label><input type='checkbox' name='page" + String(page) + "On' value='1'";
     html += checked(pageEnabled[page]);
@@ -1397,6 +1430,9 @@ void applyWebSettings() {
     lowLuxThreshold = constrain(webServer.arg("lowLux").toFloat(), 1.0f, 500.0f);
     highLuxThreshold = constrain(webServer.arg("highLux").toFloat(), 50.0f, 50000.0f);
     if (highLuxThreshold <= lowLuxThreshold) highLuxThreshold = lowLuxThreshold + 50.0f;
+    customPageText = displayAscii(webServer.arg("customText"));
+    customPageText.trim();
+    if (customPageText.length() > 128) customPageText.remove(128);
     String requestedHost = webServer.arg("fwHost");
     requestedHost.trim();
     if (validFlightWallHost(requestedHost)) flightwallHost = requestedHost;
@@ -1445,6 +1481,7 @@ void applyWebSettings() {
     preferences.putString("fwHost", flightwallHost);
     preferences.putUShort("fwPort", flightwallPort);
     preferences.putString("fwPath", flightwallPath);
+    preferences.putString("customText", customPageText);
     preferences.putBool("smooth", smoothTransitions);
     for (uint8_t page = 0; page < PAGE_COUNT; ++page) {
       preferences.putBool(("p" + String(page) + "On").c_str(), pageEnabled[page]);
@@ -1745,6 +1782,9 @@ void setup() {
   flightwallHost = preferences.getString("fwHost", DEFAULT_FLIGHTWALL_HOST);
   flightwallPort = preferences.getUShort("fwPort", DEFAULT_FLIGHTWALL_PORT);
   flightwallPath = preferences.getString("fwPath", DEFAULT_FLIGHTWALL_PATH);
+  customPageText = displayAscii(preferences.getString("customText", ""));
+  customPageText.trim();
+  if (customPageText.length() > 128) customPageText.remove(128);
   smoothTransitions = preferences.getBool("smooth", true);
   for (uint8_t page = 0; page < PAGE_COUNT; ++page) {
     pageEnabled[page] = preferences.getBool(
@@ -1754,7 +1794,7 @@ void setup() {
     pageOrder[page] = preferences.getUChar(
         ("order" + String(page)).c_str(), page);
   }
-  if (settingsVersion < 5) preferences.putUChar("settingsVer", 5);
+  if (settingsVersion < 6) preferences.putUChar("settingsVer", 6);
   displayRadiusKm = constrain(displayRadiusKm, 1.0f, 100.0f);
   pageIntervalMs = constrain(pageIntervalMs, 2000UL, 60000UL);
   bool validStoredOrder = true;
