@@ -21,6 +21,7 @@
 - über das Webinterface start- und stoppbarer zwölfsekündiger Displaytest
 - konfigurierbare tägliche Nachtruhe mit NTP-Zeit und automatischer MEZ-/MESZ-Umschaltung
 - frei sortier- und abwählbare Freitextseite mit einmaligem horizontalem Lauftext bis 128 Zeichen
+- vollständiges Löschen beider Matrixpuffer und Rücksetzen der Laufzeit vor jeder Seitenaktivierung
 
 ## 2.0.0 – 2026-09-25
 

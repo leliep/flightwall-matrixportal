@@ -1,4 +1,4 @@
-// Version generated: 2026-09-28 14:52:29 CEST (Europe/Berlin)
+// Version generated: 2026-09-28 16:57:41 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -22,7 +22,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "2.1.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-09-28 14:52:29 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-09-28 16:57:41 CEST";
 constexpr uint8_t PAGE_COUNT = 5;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -155,6 +155,7 @@ uint32_t pageDurationMs[] = {
 bool smoothTransitions = true;
 uint8_t currentPageSlot = 0;
 uint32_t currentPageStarted = 0;
+int8_t activeRenderedPage = -1;
 uint32_t transitionStarted = 0;
 uint8_t transitionPercent = 100;
 enum class TransitionPhase { Normal, FadeOut, FadeIn };
@@ -671,9 +672,28 @@ void drawConfiguredPage(uint8_t page) {
 }
 
 
+void clearMatrixBuffers() {
+  // Protomatter uses two frame buffers. Clear and swap twice so neither one
+  // can expose pixels left by the previously active page.
+  matrix.fillScreen(0);
+  matrix.show();
+  matrix.fillScreen(0);
+  matrix.show();
+}
+
+
+void activatePage(uint8_t page, uint32_t now) {
+  if (activeRenderedPage == static_cast<int8_t>(page)) return;
+  clearMatrixBuffers();
+  activeRenderedPage = page;
+  currentPageStarted = now;
+}
+
+
 void resetPageTransition() {
   transitionPhase = TransitionPhase::Normal;
   currentPageStarted = 0;
+  activeRenderedPage = -1;
   setTransitionPercent(100);
 }
 
@@ -845,14 +865,15 @@ void drawDisplay() {
     if (elapsed >= PAGE_TRANSITION_MS) {
       setTransitionPercent(100);
       transitionPhase = TransitionPhase::Normal;
-      currentPageStarted = now;
     } else {
       setTransitionPercent(elapsed * 100 / PAGE_TRANSITION_MS);
     }
   }
 
+  const uint8_t pageToDraw = pageOrder[currentPageSlot];
+  activatePage(pageToDraw, now);
   matrix.fillScreen(0);
-  drawConfiguredPage(pageOrder[currentPageSlot]);
+  drawConfiguredPage(pageToDraw);
   matrix.show();
 }
 

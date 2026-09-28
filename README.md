@@ -64,6 +64,10 @@ einmal vollständig von rechts nach links über die Anzeige. Die Firmware
 verlängert die konfigurierte Seitendauer automatisch, wenn der Durchlauf mehr
 Zeit benötigt. Ein leerer Freitext überspringt die Seite.
 
+Vor jeder Seitenaktivierung löscht die Firmware beide Matrixpuffer vollständig
+und setzt den Seitenzeitpunkt neu. Dadurch erscheinen weder Bildreste noch alte
+Scrollpositionen der zuvor angezeigten Seite.
+
 Special Types erhalten ein kleines farbiges Symbol neben der Flugzeugkennung.
 Vor einem OTA-Flashvorgang erscheint kurz `OTA UPDATE / BITTE WARTEN`; danach
 bleibt das Display bis zum Neustart schwarz.
