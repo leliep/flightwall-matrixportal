@@ -1,0 +1,72 @@
+// Version generated: 2026-09-28 17:04:02 CEST (Europe/Berlin)
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "FlightWall: Git aktualisieren",
+      "type": "process",
+      "command": "git",
+      "args": [
+        "pull",
+        "--ff-only",
+        "origin",
+        "main"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "hide": true
+    },
+    {
+      "label": "FlightWall: OTA übertragen",
+      "type": "process",
+      "command": "${env:HOME}/.platformio/penv/bin/pio",
+      "args": [
+        "run",
+        "-e",
+        "adafruit_matrixportal_esp32s3_ota",
+        "-t",
+        "upload"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "MATRIXPORTAL_OTA_PASSWORD": "${input:otaPassword}"
+        }
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "hide": true
+    },
+    {
+      "label": "FlightWall: Git-Update + OTA",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "FlightWall: Git aktualisieren",
+        "FlightWall: OTA übertragen"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "otaPassword",
+      "type": "promptString",
+      "description": "OTA-Passwort des MatrixPortal",
+      "password": true
+    }
+  ]
+}

@@ -39,6 +39,14 @@ Umgebungsvariable `MATRIXPORTAL_OTA_PASSWORD` und wird nicht eingecheckt.
 Der Web-Upload besitzt Firmwareprüfung, Bestätigungsdialog, Fortschrittsanzeige
 und einen Versionsvergleich nach dem automatischen Neustart.
 
+Für den kombinierten Ablauf steht in VS Code die Aufgabe
+**FlightWall: Git-Update + OTA** bereit. Sie führt zuerst
+`git pull --ff-only origin main` aus. Nur nach einem erfolgreichen Fast-forward
+wird die OTA-Umgebung gebaut und hochgeladen. Das OTA-Passwort wird bei jedem
+Start verdeckt abgefragt und weder in einer Datei noch in Git gespeichert.
+
+Start über **Terminal → Aufgabe ausführen… → FlightWall: Git-Update + OTA**.
+
 ## Stabilität
 
 Der aktuelle Teststand verwendet 3 Bit Farbtiefe. Damit stehen sieben

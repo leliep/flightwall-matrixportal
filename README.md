@@ -96,6 +96,10 @@ export MATRIXPORTAL_OTA_PASSWORD='ein-langes-eigenes-passwort'
 pio run -e adafruit_matrixportal_esp32s3_ota -t upload
 ```
 
+In VS Code fasst die Aufgabe **FlightWall: Git-Update + OTA** das vorherige
+Fast-forward-Update von `origin/main`, die verdeckte Passwortabfrage und den
+OTA-Upload zusammen. Sie ist über **Terminal → Aufgabe ausführen…** erreichbar.
+
 Das erste Aufspielen einer OTA-fähigen Firmware muss weiterhin per USB
 erfolgen. Ohne gültiges `OTA_PASSWORD` sind beide OTA-Wege deaktiviert.
 
