@@ -1,4 +1,4 @@
-// Version generated: 2026-09-29 20:29:21 CEST (Europe/Berlin)
+// Version generated: 2026-09-29 20:36:49 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -22,7 +22,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "2.1.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-09-29 20:29:21 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-09-29 20:36:49 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -704,13 +704,13 @@ void drawCompactPage() {
 constexpr int16_t AIRPORT_HALF_WIDTH = 60;
 constexpr int16_t AIRPORT_SEPARATOR_X = 61;
 constexpr int16_t AIRPORT_DESTINATION_X = 68;
-constexpr uint32_t AIRPORT_CODES_MS = 5000;
+constexpr uint32_t AIRPORT_NAMES_MINIMUM_MS = 5000;
 constexpr uint32_t AIRPORT_HALF_PAUSE_MS = 800;
 constexpr uint32_t AIRPORT_HALF_PIXEL_MS = 80;
 
 
-String limitedAirportText(const String &name, const String &code) {
-  String text = displayAscii(name.length() ? name : code);
+String limitedAirportText(const String &name) {
+  String text = displayAscii(name);
   text.trim();
   if (text.length() > 128) text.remove(128);
   return text;
@@ -727,18 +727,16 @@ uint32_t airportHalfScrollDuration(const String &text) {
 
 
 uint32_t compactAirportsNamePhaseDuration() {
-  const String origin = limitedAirportText(flight.originName, flight.origin);
-  const String destination = limitedAirportText(
-      flight.destinationName, flight.destination);
+  const String origin = limitedAirportText(flight.originName);
+  const String destination = limitedAirportText(flight.destinationName);
   const uint32_t scrollDuration = max(
       airportHalfScrollDuration(origin), airportHalfScrollDuration(destination));
-  return scrollDuration ? scrollDuration : AIRPORT_CODES_MS;
+  return max(scrollDuration, AIRPORT_NAMES_MINIMUM_MS);
 }
 
 
 uint32_t compactAirportsMinimumDuration() {
-  return AIRPORT_CODES_MS + compactAirportsNamePhaseDuration() +
-         AIRPORT_CODES_MS;
+  return compactAirportsNamePhaseDuration();
 }
 
 
@@ -782,19 +780,10 @@ void drawAirportHalf(const String &text, int16_t regionX,
 void drawCompactAirportsPage() {
   drawCompactTop();
   const uint32_t elapsed = millis() - currentPageStarted;
-  const uint32_t nameDuration = compactAirportsNamePhaseDuration();
-  const bool showNames = elapsed >= AIRPORT_CODES_MS &&
-      elapsed < AIRPORT_CODES_MS + nameDuration;
-  const uint32_t nameElapsed = showNames ? elapsed - AIRPORT_CODES_MS : 0;
-
-  String origin = showNames ? limitedAirportText(flight.originName, flight.origin) :
-      clipped(flight.origin, 4);
-  String destination = showNames ?
-      limitedAirportText(flight.destinationName, flight.destination) :
-      clipped(flight.destination, 4);
-  const int16_t originX = showNames ? airportHalfTextX(origin, nameElapsed) : 0;
-  const int16_t destinationX = showNames ?
-      airportHalfTextX(destination, nameElapsed) : 0;
+  const String origin = limitedAirportText(flight.originName);
+  const String destination = limitedAirportText(flight.destinationName);
+  const int16_t originX = airportHalfTextX(origin, elapsed);
+  const int16_t destinationX = airportHalfTextX(destination, elapsed);
   drawAirportHalf(origin, 0, originX, white);
   if (origin.length() && destination.length()) {
     drawLine(AIRPORT_SEPARATOR_X, 24, ">", cyan);

@@ -77,12 +77,11 @@ Fehlende Routenteile erzeugen kein einzelnes Trennzeichen. Alle Werte werden
 mit den laufenden FlightWall-Abrufen aktualisiert.
 
 Die Seite **Kompakt + Flughäfen** verwendet dieselben drei oberen Zeilen. In
-der unteren Zeile stehen zunächst fünf Sekunden die Flughafencodes. Danach
-erscheinen Start- und Zielflughafen ausgeschrieben in getrennten Displayhälften
-mit einem feststehenden `>` in der Mitte. Zu lange Namen scrollen innerhalb
-ihrer Hälfte vollständig; danach wechseln wieder die Kurzcodes. Kurze Namen
-bleiben fünf Sekunden sichtbar. Die konfigurierte Seitendauer wird bei Bedarf
-automatisch auf mindestens einen vollständigen Wechselzyklus verlängert.
+der unteren Zeile erscheinen Start- und Zielflughafen sofort ausgeschrieben in
+getrennten Displayhälften mit einem feststehenden `>` in der Mitte. Zu lange
+Namen scrollen innerhalb ihrer Hälfte vollständig; kurze Namen bleiben
+mindestens fünf Sekunden sichtbar. Die konfigurierte Seitendauer wird bei
+Bedarf automatisch bis zum Ende des vollständigen Lauftexts verlängert.
 
 Die Matrix berechnet den Zenitwinkel selbst aus horizontaler Entfernung,
 Flugzeughöhe und konfigurierter Standorthöhe. Bis 10° vom Zenit erscheint
