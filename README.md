@@ -72,7 +72,7 @@ Scrollpositionen der zuvor angezeigten Seite.
 
 Die alternative **Kompaktansicht** bündelt Flugnummer, kurzen ICAO-Flugzeugtyp,
 Höhe in Fuß mit farbigem Steig-/Sinkpfeil, Entfernung, Blickrichtung mit
-Richtungspfeil sowie Route und CPA beziehungsweise `GEHT` auf einer Seite.
+Richtungspfeil sowie Route und CPA beziehungsweise `geht` auf einer Seite.
 Fehlende Routenteile erzeugen kein einzelnes Trennzeichen. Alle Werte werden
 mit den laufenden FlightWall-Abrufen aktualisiert.
 

@@ -1,4 +1,4 @@
-// Version generated: 2026-09-29 21:11:03 CEST (Europe/Berlin)
+// Version generated: 2026-09-29 21:16:23 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -22,7 +22,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "2.1.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-09-29 21:11:03 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-09-29 21:16:23 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -644,7 +644,7 @@ void drawCpaPage() {
   cpa += isnan(flight.cpaKm) ? "?" : String(flight.cpaKm, 1) + "km";
   const bool departing = flight.motion == "departing";
   if (departing) {
-    cpa += " GEHT";
+    cpa += " geht";
   } else if (!isnan(flight.cpaMinutes)) {
     cpa += " in " + String(static_cast<int>(round(flight.cpaMinutes))) + "min";
   }
@@ -685,7 +685,7 @@ void drawCompactPage() {
   const bool departing = flight.motion == "departing";
   String cpa;
   if (departing) {
-    cpa = "GEHT";
+    cpa = "geht";
   } else if (!isnan(flight.cpaKm)) {
     cpa = "CPA " + String(flight.cpaKm, 1);
     if (!isnan(flight.cpaMinutes)) {
