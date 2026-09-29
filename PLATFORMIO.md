@@ -24,12 +24,14 @@ Nach dem WLAN-Verbindungsaufbau startet der HTTP-Server auf Port 80. Er ist
 über `http://matrixportal.local` oder die im seriellen Monitor genannte
 IP-Adresse erreichbar. Einstellungen werden in NVS gespeichert. Dazu gehören
 auch FlightWall-Host, Port und Pfad sowie Aktivierung, Reihenfolge und Dauer
-der sechs Anzeigeseiten. Die Seite **Flughafennamen** zeigt Start-
+der sieben Anzeigeseiten. Die Seite **Flughafennamen** zeigt Start-
 und Zielflughafen ausgeschrieben und scrollt zu lange Namen horizontal.
 Die Seite **Freitext** scrollt einen frei konfigurierbaren Text mit bis zu
 128 Zeichen bei jedem Aufruf genau einmal vollständig über das Display.
 Die **Kompaktansicht** fasst Flugnummer, Flugzeugtyp, Höhe, Höhenentwicklung,
 Entfernung, Blickrichtung, Route und CPA auf einer Seite zusammen.
+**Kompakt + Flughäfen** wechselt in der unteren Zeile zwischen den Kurzcodes
+und getrennt scrollenden Langnamen mit festem Trennzeichen.
 Den Zenitwinkel berechnet der ESP aus `altitude_ft`, `distance_km` und der im
 Webinterface hinterlegten Standorthöhe. Die FlightWall-Schnittstelle benötigt
 dafür keine zusätzlichen Felder.

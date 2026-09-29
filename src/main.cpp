@@ -1,4 +1,4 @@
-// Version generated: 2026-09-29 15:14:25 CEST (Europe/Berlin)
+// Version generated: 2026-09-29 20:29:21 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -22,8 +22,8 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "2.1.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-09-29 15:14:25 CEST";
-constexpr uint8_t PAGE_COUNT = 6;
+constexpr char BUILD_TIMESTAMP[] = "2026-09-29 20:29:21 CEST";
+constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
 constexpr uint32_t WIFI_RETRY_MS = 60000;
@@ -76,6 +76,8 @@ constexpr uint8_t oePin = 14;
 Adafruit_Protomatter matrix(
     MATRIX_WIDTH, BIT_DEPTH, 1, rgbPins, 4, addrPins,
     clockPin, latchPin, oePin, true);
+constexpr uint16_t AIRPORT_TEXT_CANVAS_WIDTH = 128 * 6;
+GFXcanvas1 airportTextCanvas(AIRPORT_TEXT_CANVAS_WIDTH, 8);
 
 struct FlightData {
   bool available = false;
@@ -153,12 +155,13 @@ String flightwallHost = DEFAULT_FLIGHTWALL_HOST;
 uint16_t flightwallPort = DEFAULT_FLIGHTWALL_PORT;
 String flightwallPath = DEFAULT_FLIGHTWALL_PATH;
 String customPageText;
-bool pageEnabled[] = {true, true, true, true, true, true};
-uint8_t pageOrder[] = {0, 1, 2, 3, 4, 5};
+bool pageEnabled[] = {true, true, true, true, true, true, true};
+uint8_t pageOrder[] = {0, 1, 2, 3, 4, 5, 6};
 uint32_t pageDurationMs[] = {
     DEFAULT_PAGE_INTERVAL_MS, DEFAULT_PAGE_INTERVAL_MS,
     DEFAULT_PAGE_INTERVAL_MS, DEFAULT_PAGE_INTERVAL_MS,
-    DEFAULT_PAGE_INTERVAL_MS, DEFAULT_PAGE_INTERVAL_MS};
+    DEFAULT_PAGE_INTERVAL_MS, DEFAULT_PAGE_INTERVAL_MS,
+    DEFAULT_PAGE_INTERVAL_MS};
 bool smoothTransitions = true;
 uint8_t currentPageSlot = 0;
 uint32_t currentPageStarted = 0;
@@ -652,7 +655,7 @@ void drawCpaPage() {
 }
 
 
-void drawCompactPage() {
+void drawCompactTop() {
   const String flightNumber = clipped(
       flight.flight.length() ? flight.flight : "Flug ?", 10);
   const String aircraftType = clipped(
@@ -671,6 +674,11 @@ void drawCompactPage() {
 
   drawLine(0, 16, clipped(compactLookDirection(flight.relativeBearing), 19), cyan);
   drawLookArrowAt(flight.relativeBearing, 121, 16, yellow);
+}
+
+
+void drawCompactPage() {
+  drawCompactTop();
 
   String bottom = compactRoute();
   const bool departing = flight.motion == "departing";
@@ -690,6 +698,108 @@ void drawCompactPage() {
     bottom += cpa;
   }
   drawLine(0, 24, clipped(bottom, 21), departing ? orange : green);
+}
+
+
+constexpr int16_t AIRPORT_HALF_WIDTH = 60;
+constexpr int16_t AIRPORT_SEPARATOR_X = 61;
+constexpr int16_t AIRPORT_DESTINATION_X = 68;
+constexpr uint32_t AIRPORT_CODES_MS = 5000;
+constexpr uint32_t AIRPORT_HALF_PAUSE_MS = 800;
+constexpr uint32_t AIRPORT_HALF_PIXEL_MS = 80;
+
+
+String limitedAirportText(const String &name, const String &code) {
+  String text = displayAscii(name.length() ? name : code);
+  text.trim();
+  if (text.length() > 128) text.remove(128);
+  return text;
+}
+
+
+uint32_t airportHalfScrollDuration(const String &text) {
+  const uint32_t textWidth = text.length() * 6UL;
+  if (textWidth <= AIRPORT_HALF_WIDTH) return 0;
+  return AIRPORT_HALF_PAUSE_MS +
+         (textWidth - AIRPORT_HALF_WIDTH) * AIRPORT_HALF_PIXEL_MS +
+         AIRPORT_HALF_PAUSE_MS;
+}
+
+
+uint32_t compactAirportsNamePhaseDuration() {
+  const String origin = limitedAirportText(flight.originName, flight.origin);
+  const String destination = limitedAirportText(
+      flight.destinationName, flight.destination);
+  const uint32_t scrollDuration = max(
+      airportHalfScrollDuration(origin), airportHalfScrollDuration(destination));
+  return scrollDuration ? scrollDuration : AIRPORT_CODES_MS;
+}
+
+
+uint32_t compactAirportsMinimumDuration() {
+  return AIRPORT_CODES_MS + compactAirportsNamePhaseDuration() +
+         AIRPORT_CODES_MS;
+}
+
+
+int16_t airportHalfTextX(const String &text, uint32_t elapsedMs) {
+  const int16_t textWidth = text.length() * 6;
+  if (textWidth <= AIRPORT_HALF_WIDTH || elapsedMs < AIRPORT_HALF_PAUSE_MS) {
+    return 0;
+  }
+  const uint32_t travelMs =
+      (textWidth - AIRPORT_HALF_WIDTH) * AIRPORT_HALF_PIXEL_MS;
+  if (elapsedMs < AIRPORT_HALF_PAUSE_MS + travelMs) {
+    return -static_cast<int16_t>(
+        (elapsedMs - AIRPORT_HALF_PAUSE_MS) / AIRPORT_HALF_PIXEL_MS);
+  }
+  return AIRPORT_HALF_WIDTH - textWidth;
+}
+
+
+void drawAirportHalf(const String &text, int16_t regionX,
+                     int16_t textX, uint16_t color) {
+  if (!text.length() || airportTextCanvas.getBuffer() == nullptr) return;
+  airportTextCanvas.fillScreen(0);
+  airportTextCanvas.setFont(nullptr);
+  airportTextCanvas.setTextSize(1);
+  airportTextCanvas.setTextWrap(false);
+  airportTextCanvas.setTextColor(1);
+  airportTextCanvas.setCursor(0, 0);
+  airportTextCanvas.print(text);
+  for (int16_t x = 0; x < AIRPORT_HALF_WIDTH; ++x) {
+    const int16_t sourceX = x - textX;
+    if (sourceX < 0 || sourceX >= AIRPORT_TEXT_CANVAS_WIDTH) continue;
+    for (int16_t y = 0; y < 8; ++y) {
+      if (airportTextCanvas.getPixel(sourceX, y)) {
+        matrix.drawPixel(regionX + x, 24 + y, color);
+      }
+    }
+  }
+}
+
+
+void drawCompactAirportsPage() {
+  drawCompactTop();
+  const uint32_t elapsed = millis() - currentPageStarted;
+  const uint32_t nameDuration = compactAirportsNamePhaseDuration();
+  const bool showNames = elapsed >= AIRPORT_CODES_MS &&
+      elapsed < AIRPORT_CODES_MS + nameDuration;
+  const uint32_t nameElapsed = showNames ? elapsed - AIRPORT_CODES_MS : 0;
+
+  String origin = showNames ? limitedAirportText(flight.originName, flight.origin) :
+      clipped(flight.origin, 4);
+  String destination = showNames ?
+      limitedAirportText(flight.destinationName, flight.destination) :
+      clipped(flight.destination, 4);
+  const int16_t originX = showNames ? airportHalfTextX(origin, nameElapsed) : 0;
+  const int16_t destinationX = showNames ?
+      airportHalfTextX(destination, nameElapsed) : 0;
+  drawAirportHalf(origin, 0, originX, white);
+  if (origin.length() && destination.length()) {
+    drawLine(AIRPORT_SEPARATOR_X, 24, ">", cyan);
+  }
+  drawAirportHalf(destination, AIRPORT_DESTINATION_X, destinationX, yellow);
 }
 
 
@@ -824,7 +934,8 @@ void drawConfiguredPage(uint8_t page) {
     case 2: drawCpaPage(); break;
     case 3: drawAirportNamesPage(); break;
     case 4: drawCustomTextPage(); break;
-    default: drawCompactPage(); break;
+    case 5: drawCompactPage(); break;
+    default: drawCompactAirportsPage(); break;
   }
 }
 
@@ -996,6 +1107,7 @@ void drawDisplay() {
   uint32_t duration = pageDurationMs[page];
   if (page == 3) duration = max(duration, airportNamesPageDuration());
   if (page == 4) duration = max(duration, customPageScrollDuration());
+  if (page == 6) duration = max(duration, compactAirportsMinimumDuration());
 
   if (transitionPhase == TransitionPhase::Normal &&
       now - currentPageStarted >= duration) {
@@ -1408,7 +1520,8 @@ String pageName(uint8_t page) {
   if (page == 2) return "CPA und Sondertyp";
   if (page == 3) return "Flughafennamen";
   if (page == 4) return "Freitext";
-  return "Kompaktansicht";
+  if (page == 5) return "Kompaktansicht";
+  return "Kompakt + Flughäfen";
 }
 
 
@@ -1992,7 +2105,7 @@ void setup() {
     pageOrder[page] = preferences.getUChar(
         ("order" + String(page)).c_str(), page);
   }
-  if (settingsVersion < 8) preferences.putUChar("settingsVer", 8);
+  if (settingsVersion < 9) preferences.putUChar("settingsVer", 9);
   displayRadiusKm = constrain(displayRadiusKm, 1.0f, 100.0f);
   pageIntervalMs = constrain(pageIntervalMs, 2000UL, 60000UL);
   bool validStoredOrder = true;

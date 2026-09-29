@@ -42,7 +42,7 @@ wird per NTP bezogen und automatisch zwischen MEZ und MESZ umgestellt.
 Für die Blickrichtung werden außerdem die Standorthöhe über NHN und die
 Entfernungsgrenze für `weit` gespeichert.
 Host, Port und API-Pfad des
-FlightWall-Servers lassen sich ändern und direkt testen. Die sechs
+FlightWall-Servers lassen sich ändern und direkt testen. Die sieben
 Anzeigeseiten können einzeln aktiviert, frei sortiert und mit einer eigenen
 Dauer versehen werden. Sanfte Übergänge sind optional. Das Webinterface ist
 für ein vertrauenswürdiges lokales WLAN gedacht und hat derzeit keine eigene
@@ -75,6 +75,14 @@ Höhe in Fuß mit farbigem Steig-/Sinkpfeil, Entfernung, Blickrichtung mit
 Richtungspfeil sowie Route und CPA beziehungsweise `GEHT` auf einer Seite.
 Fehlende Routenteile erzeugen kein einzelnes Trennzeichen. Alle Werte werden
 mit den laufenden FlightWall-Abrufen aktualisiert.
+
+Die Seite **Kompakt + Flughäfen** verwendet dieselben drei oberen Zeilen. In
+der unteren Zeile stehen zunächst fünf Sekunden die Flughafencodes. Danach
+erscheinen Start- und Zielflughafen ausgeschrieben in getrennten Displayhälften
+mit einem feststehenden `>` in der Mitte. Zu lange Namen scrollen innerhalb
+ihrer Hälfte vollständig; danach wechseln wieder die Kurzcodes. Kurze Namen
+bleiben fünf Sekunden sichtbar. Die konfigurierte Seitendauer wird bei Bedarf
+automatisch auf mindestens einen vollständigen Wechselzyklus verlängert.
 
 Die Matrix berechnet den Zenitwinkel selbst aus horizontaler Entfernung,
 Flugzeughöhe und konfigurierter Standorthöhe. Bis 10° vom Zenit erscheint

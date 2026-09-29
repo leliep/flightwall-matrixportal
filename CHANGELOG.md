@@ -25,6 +25,7 @@
 - wählbare Kompaktansicht mit Flugnummer, Typ, Höhe, Entfernung, Blickrichtung, Route und CPA
 - rote Flugnummer in der Kompaktansicht
 - zenit- und entfernungsabhängige Blickrichtungen mit konfigurierbarer Standorthöhe und Hysterese
+- zusätzliche Kompaktseite mit wechselnden Flughafencodes und getrennt scrollenden Langnamen
 
 ## 2.0.0 – 2026-09-25
 
