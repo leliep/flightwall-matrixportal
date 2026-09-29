@@ -1,4 +1,4 @@
-// Version generated: 2026-09-29 10:41:08 CEST (Europe/Berlin)
+// Version generated: 2026-09-29 14:22:30 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -22,7 +22,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "2.1.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-09-29 10:41:08 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-09-29 14:22:30 CEST";
 constexpr uint8_t PAGE_COUNT = 6;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -546,7 +546,7 @@ void drawCompactPage() {
       flight.flight.length() ? flight.flight : "Flug ?", 10);
   const String aircraftType = clipped(
       flight.type.length() ? flight.type : "Typ ?", 8);
-  drawLine(0, 0, flightNumber, cyan);
+  drawLine(0, 0, flightNumber, red);
   const int16_t typeX = min<int16_t>((flightNumber.length() + 1) * 6, 72);
   drawLine(typeX, 0, clipped(aircraftType, (MATRIX_WIDTH - typeX) / 6), white);
 
