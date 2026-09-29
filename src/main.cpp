@@ -1,4 +1,4 @@
-// Version generated: 2026-09-29 20:36:49 CEST (Europe/Berlin)
+// Version generated: 2026-09-29 20:41:07 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -22,7 +22,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "2.1.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-09-29 20:36:49 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-09-29 20:41:07 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -398,33 +398,33 @@ uint16_t aircraftColor() {
 }
 
 
-void drawSpecialIcon() {
+void drawSpecialIcon(int16_t x = 96) {
   if (!flight.specialType.length()) return;
   String category = flight.specialType;
   category.toUpperCase();
   const uint16_t color = aircraftColor();
   if (category.indexOf("HELICOPTER") >= 0 || category.indexOf("HUBSCHRAUBER") >= 0) {
-    matrix.drawFastHLine(96, 1, 7, color);
-    matrix.drawFastVLine(99, 0, 7, color);
-    matrix.drawFastHLine(97, 5, 5, color);
+    matrix.drawFastHLine(x, 1, 7, color);
+    matrix.drawFastVLine(x + 3, 0, 7, color);
+    matrix.drawFastHLine(x + 1, 5, 5, color);
   } else if (category.indexOf("A380") >= 0) {
-    matrix.drawPixel(99, 0, color);
-    matrix.drawFastVLine(99, 1, 6, color);
-    matrix.drawFastHLine(96, 3, 7, color);
-    matrix.drawFastHLine(98, 6, 3, color);
+    matrix.drawPixel(x + 3, 0, color);
+    matrix.drawFastVLine(x + 3, 1, 6, color);
+    matrix.drawFastHLine(x, 3, 7, color);
+    matrix.drawFastHLine(x + 2, 6, 3, color);
   } else if (category.indexOf("MILIT") >= 0) {
-    matrix.drawPixel(99, 0, color);
-    matrix.drawFastHLine(98, 1, 3, color);
-    matrix.drawFastHLine(97, 2, 5, color);
-    matrix.drawFastHLine(98, 3, 3, color);
-    matrix.drawPixel(99, 4, color);
+    matrix.drawPixel(x + 3, 0, color);
+    matrix.drawFastHLine(x + 2, 1, 3, color);
+    matrix.drawFastHLine(x + 1, 2, 5, color);
+    matrix.drawFastHLine(x + 2, 3, 3, color);
+    matrix.drawPixel(x + 3, 4, color);
   } else {
-    matrix.drawFastHLine(97, 0, 5, color);
-    matrix.drawFastVLine(96, 1, 5, color);
-    matrix.drawFastVLine(102, 1, 5, color);
-    matrix.drawFastHLine(97, 6, 5, color);
-    matrix.drawPixel(99, 2, color);
-    matrix.drawPixel(99, 4, color);
+    matrix.drawFastHLine(x + 1, 0, 5, color);
+    matrix.drawFastVLine(x, 1, 5, color);
+    matrix.drawFastVLine(x + 6, 1, 5, color);
+    matrix.drawFastHLine(x + 1, 6, 5, color);
+    matrix.drawPixel(x + 3, 2, color);
+    matrix.drawPixel(x + 3, 4, color);
   }
 }
 
@@ -661,8 +661,9 @@ void drawCompactTop() {
   const String aircraftType = clipped(
       flight.type.length() ? flight.type : "Typ ?", 8);
   drawLine(0, 0, flightNumber, red);
-  const int16_t typeX = min<int16_t>((flightNumber.length() + 1) * 6, 72);
-  drawLine(typeX, 0, clipped(aircraftType, (MATRIX_WIDTH - typeX) / 6), white);
+  const int16_t typeX = MATRIX_WIDTH - aircraftType.length() * 6;
+  if (flight.specialType.length()) drawSpecialIcon(typeX - 8);
+  drawLine(typeX, 0, aircraftType, white);
 
   String altitude = isnan(flight.altitudeFt) ?
       "Hoehe ?" : String(static_cast<int>(round(flight.altitudeFt))) + "ft";

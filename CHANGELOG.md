@@ -26,6 +26,7 @@
 - rote Flugnummer in der Kompaktansicht
 - zenit- und entfernungsabhängige Blickrichtungen mit konfigurierbarer Standorthöhe und Hysterese
 - zusätzliche Kompaktseite mit sofort dargestellten, getrennt scrollenden Flughafen-Langnamen
+- Flugzeugtyp rechtsbündig und Special-Type-Symbol unmittelbar davor auf beiden Kompaktseiten
 
 ## 2.0.0 – 2026-09-25
 
