@@ -1,4 +1,4 @@
-// Version generated: 2026-09-29 14:22:30 CEST (Europe/Berlin)
+// Version generated: 2026-09-29 15:14:25 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -22,7 +22,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "2.1.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-09-29 14:22:30 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-09-29 15:14:25 CEST";
 constexpr uint8_t PAGE_COUNT = 6;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -50,6 +50,11 @@ constexpr uint8_t BH1750_ALTERNATE_ADDRESS = 0x5C;
 // Only aircraft at or inside this distance are shown. Change this value to
 // adjust the local display radius without modifying the FlightWall server.
 constexpr float DEFAULT_DISPLAY_RADIUS_KM = 10.0f;
+// Viewing-direction geometry. The zenith angle is measured from straight up.
+constexpr float DIRECTLY_ABOVE_ZENITH_DEG = 10.0f;
+constexpr float ABOVE_ZENITH_DEG = 30.0f;
+constexpr float ZENITH_HYSTERESIS_DEG = 2.0f;
+constexpr float FAR_DISTANCE_HYSTERESIS_KM = 0.3f;
 
 constexpr char DEFAULT_FLIGHTWALL_HOST[] = "raspi-flw";
 constexpr uint16_t DEFAULT_FLIGHTWALL_PORT = 8088;
@@ -139,6 +144,8 @@ bool quietHoursEnabled = false;
 uint16_t quietHoursStartMinutes = 23 * 60 + 55;
 uint16_t quietHoursEndMinutes = 5 * 60 + 55;
 float displayRadiusKm = DEFAULT_DISPLAY_RADIUS_KM;
+float observerElevationM = 0.0f;
+float farDirectionDistanceKm = 5.0f;
 uint32_t pageIntervalMs = DEFAULT_PAGE_INTERVAL_MS;
 float lowLuxThreshold = 20.0f;
 float highLuxThreshold = 800.0f;
@@ -175,6 +182,16 @@ uint16_t violet;
 uint16_t idlePixel;
 
 enum class VerticalState { Unknown, Climbing, Level, Descending };
+enum class LookRange { Unknown, Above, Near, Far };
+enum class LookDirection {
+  Unknown, Above, AboveFront, AboveRight, AboveBack, AboveLeft,
+  Front, Right, RightShoulder, Back, LeftShoulder, Left,
+  FarFront, FarRight, FarBack, FarLeft
+};
+
+LookRange lastLookRange = LookRange::Unknown;
+bool lastDirectlyAbove = false;
+String lastLookFlight;
 
 constexpr uint8_t ARROW_UP[7] = {
     0b0001000, 0b0011100, 0b0111110, 0b0001000,
@@ -200,6 +217,9 @@ constexpr uint8_t ARROW_LEFT[7] = {
 constexpr uint8_t ARROW_UP_LEFT[7] = {
     0b1111000, 0b1110000, 0b1111000, 0b0011100,
     0b0001110, 0b0000111, 0b0000011};
+constexpr uint8_t ABOVE_MARKER[7] = {
+    0b0011100, 0b0100010, 0b1000001, 0b1001001,
+    0b1000001, 0b0100010, 0b0011100};
 
 
 uint8_t scaledChannel(uint8_t value) {
@@ -460,27 +480,118 @@ void drawAltitudeArrowAt(int16_t x, int16_t y) {
 }
 
 
-String compactLookDirection(float angle) {
-  if (isnan(angle)) return "richtung ?";
+float zenithAngleDegrees() {
+  if (isnan(flight.altitudeFt) || isnan(flight.distanceKm)) return NAN;
+  const float relativeHeightKm =
+      (flight.altitudeFt * 0.3048f - observerElevationM) / 1000.0f;
+  if (relativeHeightKm <= 0.0f) return 90.0f;
+  return atan2f(max(0.0f, flight.distanceKm), relativeHeightKm) *
+         180.0f / PI;
+}
+
+
+LookRange currentLookRange() {
+  if (lastLookFlight != flight.flight) {
+    lastLookFlight = flight.flight;
+    lastLookRange = LookRange::Unknown;
+    lastDirectlyAbove = false;
+  }
+
+  const float zenith = zenithAngleDegrees();
+  if (!isnan(zenith)) {
+    const float aboveLimit = ABOVE_ZENITH_DEG +
+        (lastLookRange == LookRange::Above ? ZENITH_HYSTERESIS_DEG : 0.0f);
+    if (zenith <= aboveLimit) {
+      lastLookRange = LookRange::Above;
+      const float directLimit = DIRECTLY_ABOVE_ZENITH_DEG +
+          (lastDirectlyAbove ? ZENITH_HYSTERESIS_DEG : 0.0f);
+      lastDirectlyAbove = zenith <= directLimit;
+      return lastLookRange;
+    }
+  }
+  lastDirectlyAbove = false;
+
+  if (!isnan(flight.distanceKm)) {
+    const float farLimit = farDirectionDistanceKm -
+        (lastLookRange == LookRange::Far ? FAR_DISTANCE_HYSTERESIS_KM : 0.0f);
+    if (flight.distanceKm >= max(0.0f, farLimit)) {
+      lastLookRange = LookRange::Far;
+      return lastLookRange;
+    }
+  }
+  lastLookRange = LookRange::Near;
+  return lastLookRange;
+}
+
+
+LookDirection lookDirection(float angle) {
+  if (isnan(angle)) return LookDirection::Unknown;
   const float absolute = fabs(angle);
-  if (absolute <= 12) return "vorne";
-  if (absolute <= 50) return angle > 0 ? "re vorn" : "li vorn";
-  if (absolute <= 105) return angle > 0 ? "rechts" : "links";
-  if (absolute <= 145) return angle > 0 ? "re hinten" : "li hinten";
-  if (absolute <= 170) return angle > 0 ? "re Schulter" : "li Schulter";
-  return "hinten";
+  const LookRange range = currentLookRange();
+  if (range == LookRange::Above) {
+    if (lastDirectlyAbove) return LookDirection::Above;
+    if (absolute <= 45) return LookDirection::AboveFront;
+    if (absolute >= 135) return LookDirection::AboveBack;
+    return angle > 0 ? LookDirection::AboveRight : LookDirection::AboveLeft;
+  }
+  if (range == LookRange::Far) {
+    if (absolute <= 45) return LookDirection::FarFront;
+    if (absolute >= 135) return LookDirection::FarBack;
+    return angle > 0 ? LookDirection::FarRight : LookDirection::FarLeft;
+  }
+  if (absolute <= 30) return LookDirection::Front;
+  if (absolute <= 100) return angle > 0 ? LookDirection::Right : LookDirection::Left;
+  if (absolute <= 150) {
+    return angle > 0 ? LookDirection::RightShoulder : LookDirection::LeftShoulder;
+  }
+  return LookDirection::Back;
+}
+
+
+String compactLookDirection(float angle) {
+  switch (lookDirection(angle)) {
+    case LookDirection::Above: return "oben";
+    case LookDirection::AboveFront: return "oben vorne";
+    case LookDirection::AboveRight: return "oben rechts";
+    case LookDirection::AboveBack: return "oben hinten";
+    case LookDirection::AboveLeft: return "oben links";
+    case LookDirection::Front: return "vorne";
+    case LookDirection::Right: return "rechts";
+    case LookDirection::RightShoulder: return "rechte Schulter";
+    case LookDirection::Back: return "hinten";
+    case LookDirection::LeftShoulder: return "linke Schulter";
+    case LookDirection::Left: return "links";
+    case LookDirection::FarFront: return "weit vorne";
+    case LookDirection::FarRight: return "weit rechts";
+    case LookDirection::FarBack: return "weit hinten";
+    case LookDirection::FarLeft: return "weit links";
+    default: return "richtung ?";
+  }
 }
 
 
 void drawLookArrowAt(float angle, int16_t x, int16_t y, uint16_t color) {
-  if (isnan(angle)) return;
-  const float absolute = fabs(angle);
-  const uint8_t *bitmap = ARROW_UP;
-  if (absolute > 170) bitmap = ARROW_DOWN;
-  else if (absolute > 105) bitmap = angle > 0 ? ARROW_DOWN_RIGHT : ARROW_DOWN_LEFT;
-  else if (absolute > 50) bitmap = angle > 0 ? ARROW_RIGHT : ARROW_LEFT;
-  else if (absolute > 12) bitmap = angle > 0 ? ARROW_UP_RIGHT : ARROW_UP_LEFT;
-  drawArrowBitmap(x, y, bitmap, color);
+  const LookDirection direction = lookDirection(angle);
+  const uint8_t *bitmap = nullptr;
+  switch (direction) {
+    case LookDirection::Above: bitmap = ABOVE_MARKER; break;
+    case LookDirection::AboveFront:
+    case LookDirection::Front:
+    case LookDirection::FarFront: bitmap = ARROW_UP; break;
+    case LookDirection::AboveRight:
+    case LookDirection::Right:
+    case LookDirection::FarRight: bitmap = ARROW_RIGHT; break;
+    case LookDirection::RightShoulder: bitmap = ARROW_DOWN_RIGHT; break;
+    case LookDirection::AboveBack:
+    case LookDirection::Back:
+    case LookDirection::FarBack: bitmap = ARROW_DOWN; break;
+    case LookDirection::LeftShoulder: bitmap = ARROW_DOWN_LEFT; break;
+    case LookDirection::AboveLeft:
+    case LookDirection::Left:
+    case LookDirection::FarLeft: bitmap = ARROW_LEFT; break;
+    default: break;
+  }
+  if (bitmap != nullptr) drawArrowBitmap(x, y, bitmap, color);
 }
 
 
@@ -1363,6 +1474,10 @@ String webPage() {
   html += checked(displayEnabled);
   html += F("> Display eingeschaltet</label><label>Anzeigeradius (km)<input type='number' name='radius' min='1' max='100' step='0.5' value='");
   html += String(displayRadiusKm, 1);
+  html += F("'></label><label>Standorthöhe über NHN (m)<input type='number' name='observerElevation' min='-500' max='9000' step='1' value='");
+  html += String(observerElevationM, 0);
+  html += F("'></label><label>Ab dieser Entfernung \"weit\" (km)<input type='number' name='farDistance' min='0.5' max='100' step='0.1' value='");
+  html += String(farDirectionDistanceKm, 1);
   html += F("'></label><label><input type='checkbox' name='quietHours' value='1'");
   html += checked(quietHoursEnabled);
   html += F("> Nachtruhe aktiv</label><label>Display dunkel ab<input type='time' name='quietStart' value='");
@@ -1441,6 +1556,9 @@ String webPage() {
   html += F("</b><span>Helligkeit</span><b>");
   html += String(BRIGHTNESS_LEVELS[brightnessIndex]) + "% / " +
           (automaticBrightnessEnabled ? "Automatik" : "manuell");
+  html += F("</b><span>Blickgeometrie</span><b>");
+  html += String(observerElevationM, 0) + " m NHN / weit ab " +
+          String(farDirectionDistanceKm, 1) + " km";
   struct tm localClock;
   html += F("</b><span>Lokale Zeit</span><b>");
   if (readLocalClock(localClock)) {
@@ -1495,6 +1613,10 @@ void applyWebSettings() {
     }
     automaticBrightnessEnabled = webServer.hasArg("autoLight");
     displayRadiusKm = constrain(webServer.arg("radius").toFloat(), 1.0f, 100.0f);
+    observerElevationM = constrain(
+        webServer.arg("observerElevation").toFloat(), -500.0f, 9000.0f);
+    farDirectionDistanceKm = constrain(
+        webServer.arg("farDistance").toFloat(), 0.5f, 100.0f);
     lowLuxThreshold = constrain(webServer.arg("lowLux").toFloat(), 1.0f, 500.0f);
     highLuxThreshold = constrain(webServer.arg("highLux").toFloat(), 50.0f, 50000.0f);
     if (highLuxThreshold <= lowLuxThreshold) highLuxThreshold = lowLuxThreshold + 50.0f;
@@ -1544,6 +1666,8 @@ void applyWebSettings() {
     preferences.putBool("autoLight", automaticBrightnessEnabled);
     preferences.putUChar("brightness", manualBrightnessIndex);
     preferences.putFloat("radiusKm", displayRadiusKm);
+    preferences.putFloat("observerElevM", observerElevationM);
+    preferences.putFloat("farKm", farDirectionDistanceKm);
     preferences.putFloat("lowLux", lowLuxThreshold);
     preferences.putFloat("highLux", highLuxThreshold);
     preferences.putString("fwHost", flightwallHost);
@@ -1589,6 +1713,8 @@ void handleStatusApi() {
       ",\"rssi\":" + String(WiFi.RSSI()) +
       ",\"lux\":" + (isnan(filteredLux) ? String("null") : String(filteredLux, 1)) +
       ",\"brightness_percent\":" + String(BRIGHTNESS_LEVELS[brightnessIndex]) +
+      ",\"observer_elevation_m\":" + String(observerElevationM, 0) +
+      ",\"far_direction_km\":" + String(farDirectionDistanceKm, 1) +
       ",\"quiet_hours_enabled\":" + String(quietHoursEnabled ? "true" : "false") +
       ",\"quiet_hours_active\":" + String(quietHoursAreActive() ? "true" : "false") +
       ",\"display_test\":" + String(displayTestActive ? "true" : "false") +
@@ -1844,6 +1970,10 @@ void setup() {
       preferences.getUShort("quietEnd", 5 * 60 + 55),
       static_cast<uint16_t>(0), static_cast<uint16_t>(1439));
   displayRadiusKm = preferences.getFloat("radiusKm", DEFAULT_DISPLAY_RADIUS_KM);
+  observerElevationM = constrain(
+      preferences.getFloat("observerElevM", 0.0f), -500.0f, 9000.0f);
+  farDirectionDistanceKm = constrain(
+      preferences.getFloat("farKm", 5.0f), 0.5f, 100.0f);
   pageIntervalMs = preferences.getUInt("pageMs", DEFAULT_PAGE_INTERVAL_MS);
   lowLuxThreshold = preferences.getFloat("lowLux", 20.0f);
   highLuxThreshold = preferences.getFloat("highLux", 800.0f);
@@ -1862,7 +1992,7 @@ void setup() {
     pageOrder[page] = preferences.getUChar(
         ("order" + String(page)).c_str(), page);
   }
-  if (settingsVersion < 7) preferences.putUChar("settingsVer", 7);
+  if (settingsVersion < 8) preferences.putUChar("settingsVer", 8);
   displayRadiusKm = constrain(displayRadiusKm, 1.0f, 100.0f);
   pageIntervalMs = constrain(pageIntervalMs, 2000UL, 60000UL);
   bool validStoredOrder = true;

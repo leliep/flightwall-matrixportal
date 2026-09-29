@@ -39,6 +39,8 @@ darf über Mitternacht reichen, beispielsweise von 23:55 bis 05:55. Während
 dieser Zeit bleibt die Matrix einschließlich Betriebs-Pixel vollständig dunkel;
 Netzwerk, Datenabruf, Webinterface und OTA bleiben aktiv. Die lokale Uhrzeit
 wird per NTP bezogen und automatisch zwischen MEZ und MESZ umgestellt.
+Für die Blickrichtung werden außerdem die Standorthöhe über NHN und die
+Entfernungsgrenze für `weit` gespeichert.
 Host, Port und API-Pfad des
 FlightWall-Servers lassen sich ändern und direkt testen. Die sechs
 Anzeigeseiten können einzeln aktiviert, frei sortiert und mit einer eigenen
@@ -73,6 +75,14 @@ Höhe in Fuß mit farbigem Steig-/Sinkpfeil, Entfernung, Blickrichtung mit
 Richtungspfeil sowie Route und CPA beziehungsweise `GEHT` auf einer Seite.
 Fehlende Routenteile erzeugen kein einzelnes Trennzeichen. Alle Werte werden
 mit den laufenden FlightWall-Abrufen aktualisiert.
+
+Die Matrix berechnet den Zenitwinkel selbst aus horizontaler Entfernung,
+Flugzeughöhe und konfigurierter Standorthöhe. Bis 10° vom Zenit erscheint
+`oben`, bis 30° `oben vorne/rechts/hinten/links`. Unterhalb dieses Bereichs
+gelten `vorne`, `links`, `rechts`, `hinten` und die beiden Schulterangaben;
+ab der konfigurierten Entfernung werden die vier groben Richtungen mit `weit`
+gekennzeichnet. Eine Winkel- und Entfernungshysterese verhindert springende
+Texte an den Grenzen. Die FlightWall-API bleibt unverändert.
 
 Special Types erhalten ein kleines farbiges Symbol neben der Flugzeugkennung.
 Vor einem OTA-Flashvorgang erscheint kurz `OTA UPDATE / BITTE WARTEN`; danach
