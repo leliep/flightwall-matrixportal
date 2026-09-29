@@ -40,7 +40,7 @@ dieser Zeit bleibt die Matrix einschließlich Betriebs-Pixel vollständig dunkel
 Netzwerk, Datenabruf, Webinterface und OTA bleiben aktiv. Die lokale Uhrzeit
 wird per NTP bezogen und automatisch zwischen MEZ und MESZ umgestellt.
 Host, Port und API-Pfad des
-FlightWall-Servers lassen sich ändern und direkt testen. Die fünf
+FlightWall-Servers lassen sich ändern und direkt testen. Die sechs
 Anzeigeseiten können einzeln aktiviert, frei sortiert und mit einer eigenen
 Dauer versehen werden. Sanfte Übergänge sind optional. Das Webinterface ist
 für ein vertrauenswürdiges lokales WLAN gedacht und hat derzeit keine eigene
@@ -67,6 +67,12 @@ Zeit benötigt. Ein leerer Freitext überspringt die Seite.
 Vor jeder Seitenaktivierung löscht die Firmware beide Matrixpuffer vollständig
 und setzt den Seitenzeitpunkt neu. Dadurch erscheinen weder Bildreste noch alte
 Scrollpositionen der zuvor angezeigten Seite.
+
+Die alternative **Kompaktansicht** bündelt Flugnummer, kurzen ICAO-Flugzeugtyp,
+Höhe in Fuß mit farbigem Steig-/Sinkpfeil, Entfernung, Blickrichtung mit
+Richtungspfeil sowie Route und CPA beziehungsweise `GEHT` auf einer Seite.
+Fehlende Routenteile erzeugen kein einzelnes Trennzeichen. Alle Werte werden
+mit den laufenden FlightWall-Abrufen aktualisiert.
 
 Special Types erhalten ein kleines farbiges Symbol neben der Flugzeugkennung.
 Vor einem OTA-Flashvorgang erscheint kurz `OTA UPDATE / BITTE WARTEN`; danach

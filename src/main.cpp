@@ -1,4 +1,4 @@
-// Version generated: 2026-09-28 16:57:41 CEST (Europe/Berlin)
+// Version generated: 2026-09-29 10:41:08 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -22,8 +22,8 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "2.1.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-09-28 16:57:41 CEST";
-constexpr uint8_t PAGE_COUNT = 5;
+constexpr char BUILD_TIMESTAMP[] = "2026-09-29 10:41:08 CEST";
+constexpr uint8_t PAGE_COUNT = 6;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
 constexpr uint32_t WIFI_RETRY_MS = 60000;
@@ -146,12 +146,12 @@ String flightwallHost = DEFAULT_FLIGHTWALL_HOST;
 uint16_t flightwallPort = DEFAULT_FLIGHTWALL_PORT;
 String flightwallPath = DEFAULT_FLIGHTWALL_PATH;
 String customPageText;
-bool pageEnabled[] = {true, true, true, true, true};
-uint8_t pageOrder[] = {0, 1, 2, 3, 4};
+bool pageEnabled[] = {true, true, true, true, true, true};
+uint8_t pageOrder[] = {0, 1, 2, 3, 4, 5};
 uint32_t pageDurationMs[] = {
     DEFAULT_PAGE_INTERVAL_MS, DEFAULT_PAGE_INTERVAL_MS,
     DEFAULT_PAGE_INTERVAL_MS, DEFAULT_PAGE_INTERVAL_MS,
-    DEFAULT_PAGE_INTERVAL_MS};
+    DEFAULT_PAGE_INTERVAL_MS, DEFAULT_PAGE_INTERVAL_MS};
 bool smoothTransitions = true;
 uint8_t currentPageSlot = 0;
 uint32_t currentPageStarted = 0;
@@ -443,16 +443,16 @@ VerticalState verticalState() {
 }
 
 
-void drawAltitudeArrow() {
+void drawAltitudeArrowAt(int16_t x, int16_t y) {
   switch (verticalState()) {
     case VerticalState::Climbing:
-      drawArrowBitmap(121, 16, ARROW_UP_RIGHT, green);
+      drawArrowBitmap(x, y, ARROW_UP_RIGHT, green);
       break;
     case VerticalState::Descending:
-      drawArrowBitmap(121, 16, ARROW_DOWN_RIGHT, orange);
+      drawArrowBitmap(x, y, ARROW_DOWN_RIGHT, orange);
       break;
     case VerticalState::Level:
-      drawArrowBitmap(121, 16, ARROW_RIGHT, white);
+      drawArrowBitmap(x, y, ARROW_RIGHT, white);
       break;
     default:
       break;
@@ -472,7 +472,7 @@ String compactLookDirection(float angle) {
 }
 
 
-void drawLookArrow(float angle, uint16_t color) {
+void drawLookArrowAt(float angle, int16_t x, int16_t y, uint16_t color) {
   if (isnan(angle)) return;
   const float absolute = fabs(angle);
   const uint8_t *bitmap = ARROW_UP;
@@ -480,7 +480,7 @@ void drawLookArrow(float angle, uint16_t color) {
   else if (absolute > 105) bitmap = angle > 0 ? ARROW_DOWN_RIGHT : ARROW_DOWN_LEFT;
   else if (absolute > 50) bitmap = angle > 0 ? ARROW_RIGHT : ARROW_LEFT;
   else if (absolute > 12) bitmap = angle > 0 ? ARROW_UP_RIGHT : ARROW_UP_LEFT;
-  drawArrowBitmap(0, 24, bitmap, color);
+  drawArrowBitmap(x, y, bitmap, color);
 }
 
 
@@ -495,10 +495,19 @@ void drawMainPage() {
   }
   const String shownMetrics = clipped(metrics, 19);
   drawLine(0, 16, shownMetrics, white);
-  drawAltitudeArrow();
+  drawAltitudeArrowAt(121, 16);
 
-  drawLookArrow(flight.relativeBearing, yellow);
+  drawLookArrowAt(flight.relativeBearing, 0, 24, yellow);
   drawLine(10, 24, compactLookDirection(flight.relativeBearing), yellow);
+}
+
+
+String compactRoute() {
+  const String origin = clipped(flight.origin, 4);
+  const String destination = clipped(flight.destination, 4);
+  if (origin.length() && destination.length()) return origin + ">" + destination;
+  if (origin.length()) return origin;
+  return destination;
 }
 
 
@@ -506,12 +515,7 @@ void drawRoutePage() {
   drawHeader();
   drawLine(0, 16, clipped(flight.airline, 21), blue);
 
-  const String origin = clipped(flight.origin, 4);
-  const String destination = clipped(flight.destination, 4);
-  String route;
-  if (origin.length() && destination.length()) route = origin + ">" + destination;
-  else if (origin.length()) route = origin;
-  else if (destination.length()) route = destination;
+  String route = compactRoute();
   if (!isnan(flight.speedKmh)) {
     if (route.length()) route += " ";
     route += String(static_cast<int>(round(flight.speedKmh))) + "km/h";
@@ -534,6 +538,47 @@ void drawCpaPage() {
 
   String details = flight.specialType;
   drawLine(0, 24, clipped(details, 21), aircraftColor());
+}
+
+
+void drawCompactPage() {
+  const String flightNumber = clipped(
+      flight.flight.length() ? flight.flight : "Flug ?", 10);
+  const String aircraftType = clipped(
+      flight.type.length() ? flight.type : "Typ ?", 8);
+  drawLine(0, 0, flightNumber, cyan);
+  const int16_t typeX = min<int16_t>((flightNumber.length() + 1) * 6, 72);
+  drawLine(typeX, 0, clipped(aircraftType, (MATRIX_WIDTH - typeX) / 6), white);
+
+  String altitude = isnan(flight.altitudeFt) ?
+      "Hoehe ?" : String(static_cast<int>(round(flight.altitudeFt))) + "ft";
+  String distance = isnan(flight.distanceKm) ?
+      "?km" : String(flight.distanceKm, 1) + "km";
+  String metrics = altitude + " " + distance;
+  drawLine(0, 8, clipped(metrics, 19), yellow);
+  drawAltitudeArrowAt(121, 8);
+
+  drawLine(0, 16, clipped(compactLookDirection(flight.relativeBearing), 19), cyan);
+  drawLookArrowAt(flight.relativeBearing, 121, 16, yellow);
+
+  String bottom = compactRoute();
+  const bool departing = flight.motion == "departing";
+  String cpa;
+  if (departing) {
+    cpa = "GEHT";
+  } else if (!isnan(flight.cpaKm)) {
+    cpa = "CPA" + String(flight.cpaKm, 1);
+    if (!isnan(flight.cpaMinutes)) {
+      const String withMinutes = cpa + "/" +
+          String(static_cast<int>(round(flight.cpaMinutes))) + "m";
+      if (bottom.length() + 1 + withMinutes.length() <= 21) cpa = withMinutes;
+    }
+  }
+  if (cpa.length()) {
+    if (bottom.length()) bottom += " ";
+    bottom += cpa;
+  }
+  drawLine(0, 24, clipped(bottom, 21), departing ? orange : green);
 }
 
 
@@ -667,7 +712,8 @@ void drawConfiguredPage(uint8_t page) {
     case 1: drawRoutePage(); break;
     case 2: drawCpaPage(); break;
     case 3: drawAirportNamesPage(); break;
-    default: drawCustomTextPage(); break;
+    case 4: drawCustomTextPage(); break;
+    default: drawCompactPage(); break;
   }
 }
 
@@ -1250,7 +1296,8 @@ String pageName(uint8_t page) {
   if (page == 1) return "Airline und Route";
   if (page == 2) return "CPA und Sondertyp";
   if (page == 3) return "Flughafennamen";
-  return "Freitext";
+  if (page == 4) return "Freitext";
+  return "Kompaktansicht";
 }
 
 
@@ -1815,7 +1862,7 @@ void setup() {
     pageOrder[page] = preferences.getUChar(
         ("order" + String(page)).c_str(), page);
   }
-  if (settingsVersion < 6) preferences.putUChar("settingsVer", 6);
+  if (settingsVersion < 7) preferences.putUChar("settingsVer", 7);
   displayRadiusKm = constrain(displayRadiusKm, 1.0f, 100.0f);
   pageIntervalMs = constrain(pageIntervalMs, 2000UL, 60000UL);
   bool validStoredOrder = true;
