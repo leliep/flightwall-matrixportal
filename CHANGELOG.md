@@ -32,6 +32,7 @@
 - dynamisches Flughafennamen-Layout mit außenbündigen Kurznamen und bedarfsgerechtem Lauftext
 - aussagekräftige 14×7-Symbole auf beiden Kompaktseiten, einschließlich Luftschiff (`SHIP`)
 - alle Typensymbole mit Bedeutung als zusätzliche Stufen im Displaytest
+- rote, bei Bedarf scrollende Fluggesellschaft statt Flugnummer auf der Kompaktseite mit Flughäfen
 
 ## 2.0.0 – 2026-09-25
 

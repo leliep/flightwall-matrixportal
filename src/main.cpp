@@ -1,4 +1,4 @@
-// Version generated: 2026-09-30 21:58:33 CEST (Europe/Berlin)
+// Version generated: 2026-09-30 22:30:03 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -22,7 +22,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "2.1.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-09-30 21:58:33 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-09-30 22:30:03 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -760,19 +760,30 @@ void drawCpaPage() {
 }
 
 
-void drawCompactTop() {
-  const String flightNumber = clipped(
-      flight.flight.length() ? flight.flight : "Flug ?", 10);
+String compactAircraftType() {
+  return clipped(flight.type.length() ? flight.type : "Typ ?", 8);
+}
+
+
+int16_t compactHeaderLeftRegionWidth() {
+  const int16_t typeX = MATRIX_WIDTH - compactAircraftType().length() * 6;
+  return typeX - (flight.specialType.length() ? 18 : 2);
+}
+
+
+void drawCompactTypeHeader() {
   const String aircraftType = clipped(
       flight.type.length() ? flight.type : "Typ ?", 8);
-  drawLine(0, 0, flightNumber, red);
   const int16_t typeX = MATRIX_WIDTH - aircraftType.length() * 6;
   if (flight.specialType.length()) {
     const CompactIconKind kind = compactIconKind(flight.specialType);
     drawCompactSpecialIcon(kind, typeX - 16, 0, compactIconColor(kind));
   }
   drawLine(typeX, 0, aircraftType, white);
+}
 
+
+void drawCompactDetails() {
   String altitude = isnan(flight.altitudeFt) ?
       "Hoehe ?" : String(static_cast<int>(round(flight.altitudeFt))) + "ft";
   String distance = isnan(flight.distanceKm) ?
@@ -783,6 +794,16 @@ void drawCompactTop() {
 
   drawLine(0, 16, clipped(compactLookDirection(flight.relativeBearing), 19), cyan);
   drawLookArrowAt(flight.relativeBearing, 121, 16, yellow);
+}
+
+
+void drawCompactTop() {
+  const String flightNumber = clipped(
+      flight.flight.length() ? flight.flight : "Flug ?", 10);
+  drawLine(0, 0, flightNumber, red);
+  drawCompactTypeHeader();
+
+  drawCompactDetails();
 }
 
 
@@ -820,6 +841,15 @@ constexpr uint32_t AIRPORT_HALF_PIXEL_MS = 80;
 
 String limitedAirportText(const String &name) {
   String text = displayAscii(name);
+  text.trim();
+  if (text.length() > 128) text.remove(128);
+  return text;
+}
+
+
+String limitedAirlineText() {
+  String text = displayAscii(
+      flight.airline.length() ? flight.airline : "Airline ?");
   text.trim();
   if (text.length() > 128) text.remove(128);
   return text;
@@ -864,7 +894,9 @@ uint32_t compactAirportsNamePhaseDuration() {
 
 
 uint32_t compactAirportsMinimumDuration() {
-  return compactAirportsNamePhaseDuration();
+  const uint32_t airlineDuration = airportScrollDuration(
+      limitedAirlineText(), compactHeaderLeftRegionWidth());
+  return max(compactAirportsNamePhaseDuration(), airlineDuration);
 }
 
 
@@ -885,7 +917,8 @@ int16_t airportTextX(const String &text, int16_t regionWidth,
 
 
 void drawAirportRegion(const String &text, int16_t regionX,
-                       int16_t regionWidth, int16_t textX, uint16_t color) {
+                       int16_t regionY, int16_t regionWidth,
+                       int16_t textX, uint16_t color) {
   if (!text.length() || airportTextCanvas.getBuffer() == nullptr) return;
   airportTextCanvas.fillScreen(0);
   airportTextCanvas.setFont(nullptr);
@@ -899,7 +932,7 @@ void drawAirportRegion(const String &text, int16_t regionX,
     if (sourceX < 0 || sourceX >= AIRPORT_TEXT_CANVAS_WIDTH) continue;
     for (int16_t y = 0; y < 8; ++y) {
       if (airportTextCanvas.getPixel(sourceX, y)) {
-        matrix.drawPixel(regionX + x, 24 + y, color);
+        matrix.drawPixel(regionX + x, regionY + y, color);
       }
     }
   }
@@ -907,8 +940,14 @@ void drawAirportRegion(const String &text, int16_t regionX,
 
 
 void drawCompactAirportsPage() {
-  drawCompactTop();
   const uint32_t elapsed = millis() - currentPageStarted;
+  const String airline = limitedAirlineText();
+  const int16_t airlineRegionWidth = compactHeaderLeftRegionWidth();
+  drawAirportRegion(airline, 0, 0, airlineRegionWidth,
+                    airportTextX(airline, airlineRegionWidth, elapsed), red);
+  drawCompactTypeHeader();
+  drawCompactDetails();
+
   const String origin = limitedAirportText(flight.originName);
   const String destination = limitedAirportText(flight.destinationName);
   const int16_t originWidth = origin.length() * 6;
@@ -918,11 +957,11 @@ void drawCompactAirportsPage() {
     const int16_t x = destinationWidth <= MATRIX_WIDTH ?
         MATRIX_WIDTH - destinationWidth :
         airportTextX(destination, MATRIX_WIDTH, elapsed);
-    drawAirportRegion(destination, 0, MATRIX_WIDTH, x, yellow);
+    drawAirportRegion(destination, 0, 24, MATRIX_WIDTH, x, yellow);
     return;
   }
   if (!destination.length()) {
-    drawAirportRegion(origin, 0, MATRIX_WIDTH,
+    drawAirportRegion(origin, 0, 24, MATRIX_WIDTH,
                       airportTextX(origin, MATRIX_WIDTH, elapsed), white);
     return;
   }
@@ -931,30 +970,30 @@ void drawCompactAirportsPage() {
     const int16_t destinationX = MATRIX_WIDTH - destinationWidth;
     const int16_t separatorX = originWidth +
         (destinationX - originWidth - 6) / 2;
-    drawAirportRegion(origin, 0, originWidth, 0, white);
+    drawAirportRegion(origin, 0, 24, originWidth, 0, white);
     drawLine(separatorX, 24, ">", cyan);
-    drawAirportRegion(destination, destinationX, destinationWidth, 0, yellow);
+    drawAirportRegion(destination, destinationX, 24, destinationWidth, 0, yellow);
   } else if (originWidth < MATRIX_WIDTH / 2) {
     const int16_t separatorX = originWidth;
     const int16_t destinationX = separatorX + 6;
     const int16_t destinationRegionWidth = MATRIX_WIDTH - destinationX;
-    drawAirportRegion(origin, 0, originWidth, 0, white);
+    drawAirportRegion(origin, 0, 24, originWidth, 0, white);
     drawLine(separatorX, 24, ">", cyan);
-    drawAirportRegion(destination, destinationX, destinationRegionWidth,
+    drawAirportRegion(destination, destinationX, 24, destinationRegionWidth,
                       airportTextX(destination, destinationRegionWidth, elapsed),
                       yellow);
   } else if (destinationWidth < MATRIX_WIDTH / 2) {
     const int16_t destinationX = MATRIX_WIDTH - destinationWidth;
     const int16_t separatorX = destinationX - 6;
-    drawAirportRegion(origin, 0, separatorX,
+    drawAirportRegion(origin, 0, 24, separatorX,
                       airportTextX(origin, separatorX, elapsed), white);
     drawLine(separatorX, 24, ">", cyan);
-    drawAirportRegion(destination, destinationX, destinationWidth, 0, yellow);
+    drawAirportRegion(destination, destinationX, 24, destinationWidth, 0, yellow);
   } else {
-    drawAirportRegion(origin, 0, AIRPORT_HALF_WIDTH,
+    drawAirportRegion(origin, 0, 24, AIRPORT_HALF_WIDTH,
                       airportTextX(origin, AIRPORT_HALF_WIDTH, elapsed), white);
     drawLine(AIRPORT_SEPARATOR_X, 24, ">", cyan);
-    drawAirportRegion(destination, AIRPORT_DESTINATION_X, AIRPORT_HALF_WIDTH,
+    drawAirportRegion(destination, AIRPORT_DESTINATION_X, 24, AIRPORT_HALF_WIDTH,
                       airportTextX(destination, AIRPORT_HALF_WIDTH, elapsed),
                       yellow);
   }

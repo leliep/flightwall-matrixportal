@@ -35,7 +35,9 @@ Polizei, Regierung, Luftschiff (`SHIP`) und sonstige Special Types.
 **Kompakt + Flughäfen** zeigt in der unteren Zeile sofort die getrennt
 angeordneten Langnamen und keine Kurzcodes. Je nach Länge werden beide Namen
 gemeinsam außenbündig dargestellt, nur der lange Name gescrollt oder beide
-Namen in getrennten Hälften gescrollt.
+Namen in getrennten Hälften gescrollt. In der ersten Zeile ersetzt die rote,
+bei Bedarf scrollende Fluggesellschaft die Flugnummer; Typ und Symbol bleiben
+rechts fest stehen.
 Den Zenitwinkel berechnet der ESP aus `altitude_ft`, `distance_km` und der im
 Webinterface hinterlegten Standorthöhe. Die FlightWall-Schnittstelle benötigt
 dafür keine zusätzlichen Felder.

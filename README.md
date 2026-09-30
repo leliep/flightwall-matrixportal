@@ -79,8 +79,11 @@ mit den laufenden FlightWall-Abrufen aktualisiert. Für Hubschrauber, A380,
 Militär, Polizei, Regierung und Luftschiff (`SHIP`) verwendet sie eigene
 14×7-Symbole; unbekannte Special Types erhalten ein allgemeines Symbol.
 
-Die Seite **Kompakt + Flughäfen** verwendet dieselben drei oberen Zeilen. In
-der unteren Zeile erscheinen Start- und Zielflughafen sofort ausgeschrieben in
+Die Seite **Kompakt + Flughäfen** zeigt in der ersten Zeile statt der Flugnummer
+die Fluggesellschaft in Rot. Ist der verfügbare Platz vor dem unverändert
+rechts stehenden Typensymbol und Flugzeugtyp zu kurz, scrollt ihr vollständiger
+Name innerhalb dieses Bereichs. In der unteren Zeile erscheinen Start- und
+Zielflughafen sofort ausgeschrieben in
 einem dynamischen Layout. Passen beide Namen gemeinsam in die Zeile, stehen sie
 links- und rechtsbündig und das `>` mittig im freien Raum. Passt nur ein Name
 in weniger als eine halbe Zeile, bleibt er außen bündig stehen und das `>`
