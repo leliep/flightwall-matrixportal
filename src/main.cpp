@@ -1,4 +1,4 @@
-// Version generated: 2026-09-29 21:16:23 CEST (Europe/Berlin)
+// Version generated: 2026-09-30 20:12:45 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -22,7 +22,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "2.1.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-09-29 21:16:23 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-09-30 20:12:45 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -718,11 +718,11 @@ String limitedAirportText(const String &name) {
 }
 
 
-uint32_t airportHalfScrollDuration(const String &text) {
+uint32_t airportScrollDuration(const String &text, int16_t regionWidth) {
   const uint32_t textWidth = text.length() * 6UL;
-  if (textWidth <= AIRPORT_HALF_WIDTH) return 0;
+  if (textWidth <= regionWidth) return 0;
   return AIRPORT_HALF_PAUSE_MS +
-         (textWidth - AIRPORT_HALF_WIDTH) * AIRPORT_HALF_PIXEL_MS +
+         (textWidth - regionWidth) * AIRPORT_HALF_PIXEL_MS +
          AIRPORT_HALF_PAUSE_MS;
 }
 
@@ -730,8 +730,27 @@ uint32_t airportHalfScrollDuration(const String &text) {
 uint32_t compactAirportsNamePhaseDuration() {
   const String origin = limitedAirportText(flight.originName);
   const String destination = limitedAirportText(flight.destinationName);
-  const uint32_t scrollDuration = max(
-      airportHalfScrollDuration(origin), airportHalfScrollDuration(destination));
+  const int16_t originWidth = origin.length() * 6;
+  const int16_t destinationWidth = destination.length() * 6;
+  uint32_t scrollDuration = 0;
+
+  if (!origin.length()) {
+    scrollDuration = airportScrollDuration(destination, MATRIX_WIDTH);
+  } else if (!destination.length()) {
+    scrollDuration = airportScrollDuration(origin, MATRIX_WIDTH);
+  } else if (originWidth + 6 + destinationWidth <= MATRIX_WIDTH) {
+    scrollDuration = 0;
+  } else if (originWidth < MATRIX_WIDTH / 2) {
+    scrollDuration = airportScrollDuration(
+        destination, MATRIX_WIDTH - originWidth - 6);
+  } else if (destinationWidth < MATRIX_WIDTH / 2) {
+    scrollDuration = airportScrollDuration(
+        origin, MATRIX_WIDTH - destinationWidth - 6);
+  } else {
+    scrollDuration = max(
+        airportScrollDuration(origin, AIRPORT_HALF_WIDTH),
+        airportScrollDuration(destination, AIRPORT_HALF_WIDTH));
+  }
   return max(scrollDuration, AIRPORT_NAMES_MINIMUM_MS);
 }
 
@@ -741,23 +760,24 @@ uint32_t compactAirportsMinimumDuration() {
 }
 
 
-int16_t airportHalfTextX(const String &text, uint32_t elapsedMs) {
+int16_t airportTextX(const String &text, int16_t regionWidth,
+                     uint32_t elapsedMs) {
   const int16_t textWidth = text.length() * 6;
-  if (textWidth <= AIRPORT_HALF_WIDTH || elapsedMs < AIRPORT_HALF_PAUSE_MS) {
+  if (textWidth <= regionWidth || elapsedMs < AIRPORT_HALF_PAUSE_MS) {
     return 0;
   }
   const uint32_t travelMs =
-      (textWidth - AIRPORT_HALF_WIDTH) * AIRPORT_HALF_PIXEL_MS;
+      (textWidth - regionWidth) * AIRPORT_HALF_PIXEL_MS;
   if (elapsedMs < AIRPORT_HALF_PAUSE_MS + travelMs) {
     return -static_cast<int16_t>(
         (elapsedMs - AIRPORT_HALF_PAUSE_MS) / AIRPORT_HALF_PIXEL_MS);
   }
-  return AIRPORT_HALF_WIDTH - textWidth;
+  return regionWidth - textWidth;
 }
 
 
-void drawAirportHalf(const String &text, int16_t regionX,
-                     int16_t textX, uint16_t color) {
+void drawAirportRegion(const String &text, int16_t regionX,
+                       int16_t regionWidth, int16_t textX, uint16_t color) {
   if (!text.length() || airportTextCanvas.getBuffer() == nullptr) return;
   airportTextCanvas.fillScreen(0);
   airportTextCanvas.setFont(nullptr);
@@ -766,7 +786,7 @@ void drawAirportHalf(const String &text, int16_t regionX,
   airportTextCanvas.setTextColor(1);
   airportTextCanvas.setCursor(0, 0);
   airportTextCanvas.print(text);
-  for (int16_t x = 0; x < AIRPORT_HALF_WIDTH; ++x) {
+  for (int16_t x = 0; x < regionWidth; ++x) {
     const int16_t sourceX = x - textX;
     if (sourceX < 0 || sourceX >= AIRPORT_TEXT_CANVAS_WIDTH) continue;
     for (int16_t y = 0; y < 8; ++y) {
@@ -783,13 +803,53 @@ void drawCompactAirportsPage() {
   const uint32_t elapsed = millis() - currentPageStarted;
   const String origin = limitedAirportText(flight.originName);
   const String destination = limitedAirportText(flight.destinationName);
-  const int16_t originX = airportHalfTextX(origin, elapsed);
-  const int16_t destinationX = airportHalfTextX(destination, elapsed);
-  drawAirportHalf(origin, 0, originX, white);
-  if (origin.length() && destination.length()) {
-    drawLine(AIRPORT_SEPARATOR_X, 24, ">", cyan);
+  const int16_t originWidth = origin.length() * 6;
+  const int16_t destinationWidth = destination.length() * 6;
+
+  if (!origin.length()) {
+    const int16_t x = destinationWidth <= MATRIX_WIDTH ?
+        MATRIX_WIDTH - destinationWidth :
+        airportTextX(destination, MATRIX_WIDTH, elapsed);
+    drawAirportRegion(destination, 0, MATRIX_WIDTH, x, yellow);
+    return;
   }
-  drawAirportHalf(destination, AIRPORT_DESTINATION_X, destinationX, yellow);
+  if (!destination.length()) {
+    drawAirportRegion(origin, 0, MATRIX_WIDTH,
+                      airportTextX(origin, MATRIX_WIDTH, elapsed), white);
+    return;
+  }
+
+  if (originWidth + 6 + destinationWidth <= MATRIX_WIDTH) {
+    const int16_t destinationX = MATRIX_WIDTH - destinationWidth;
+    const int16_t separatorX = originWidth +
+        (destinationX - originWidth - 6) / 2;
+    drawAirportRegion(origin, 0, originWidth, 0, white);
+    drawLine(separatorX, 24, ">", cyan);
+    drawAirportRegion(destination, destinationX, destinationWidth, 0, yellow);
+  } else if (originWidth < MATRIX_WIDTH / 2) {
+    const int16_t separatorX = originWidth;
+    const int16_t destinationX = separatorX + 6;
+    const int16_t destinationRegionWidth = MATRIX_WIDTH - destinationX;
+    drawAirportRegion(origin, 0, originWidth, 0, white);
+    drawLine(separatorX, 24, ">", cyan);
+    drawAirportRegion(destination, destinationX, destinationRegionWidth,
+                      airportTextX(destination, destinationRegionWidth, elapsed),
+                      yellow);
+  } else if (destinationWidth < MATRIX_WIDTH / 2) {
+    const int16_t destinationX = MATRIX_WIDTH - destinationWidth;
+    const int16_t separatorX = destinationX - 6;
+    drawAirportRegion(origin, 0, separatorX,
+                      airportTextX(origin, separatorX, elapsed), white);
+    drawLine(separatorX, 24, ">", cyan);
+    drawAirportRegion(destination, destinationX, destinationWidth, 0, yellow);
+  } else {
+    drawAirportRegion(origin, 0, AIRPORT_HALF_WIDTH,
+                      airportTextX(origin, AIRPORT_HALF_WIDTH, elapsed), white);
+    drawLine(AIRPORT_SEPARATOR_X, 24, ">", cyan);
+    drawAirportRegion(destination, AIRPORT_DESTINATION_X, AIRPORT_HALF_WIDTH,
+                      airportTextX(destination, AIRPORT_HALF_WIDTH, elapsed),
+                      yellow);
+  }
 }
 
 

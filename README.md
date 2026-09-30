@@ -78,10 +78,13 @@ mit den laufenden FlightWall-Abrufen aktualisiert.
 
 Die Seite **Kompakt + Flughäfen** verwendet dieselben drei oberen Zeilen. In
 der unteren Zeile erscheinen Start- und Zielflughafen sofort ausgeschrieben in
-getrennten Displayhälften mit einem feststehenden `>` in der Mitte. Zu lange
-Namen scrollen innerhalb ihrer Hälfte vollständig; kurze Namen bleiben
-mindestens fünf Sekunden sichtbar. Die konfigurierte Seitendauer wird bei
-Bedarf automatisch bis zum Ende des vollständigen Lauftexts verlängert.
+einem dynamischen Layout. Passen beide Namen gemeinsam in die Zeile, stehen sie
+links- und rechtsbündig und das `>` mittig im freien Raum. Passt nur ein Name
+in weniger als eine halbe Zeile, bleibt er außen bündig stehen und das `>`
+rückt an ihn heran, während der lange Name im übrigen Bereich scrollt. Sind
+beide Namen länger, scrollen beide in getrennten Hälften mit festem `>` in der
+Mitte. Kurze Namen bleiben mindestens fünf Sekunden sichtbar; die konfigurierte
+Seitendauer wird bei Bedarf bis zum Ende aller Lauftexte verlängert.
 
 Die Matrix berechnet den Zenitwinkel selbst aus horizontaler Entfernung,
 Flugzeughöhe und konfigurierter Standorthöhe. Bis 10° vom Zenit erscheint

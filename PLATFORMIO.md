@@ -31,7 +31,9 @@ Die Seite **Freitext** scrollt einen frei konfigurierbaren Text mit bis zu
 Die **Kompaktansicht** fasst Flugnummer, Flugzeugtyp, Höhe, Höhenentwicklung,
 Entfernung, Blickrichtung, Route und CPA auf einer Seite zusammen.
 **Kompakt + Flughäfen** zeigt in der unteren Zeile sofort die getrennt
-scrollenden Langnamen mit festem Trennzeichen und keine Kurzcodes.
+angeordneten Langnamen und keine Kurzcodes. Je nach Länge werden beide Namen
+gemeinsam außenbündig dargestellt, nur der lange Name gescrollt oder beide
+Namen in getrennten Hälften gescrollt.
 Den Zenitwinkel berechnet der ESP aus `altitude_ft`, `distance_km` und der im
 Webinterface hinterlegten Standorthöhe. Die FlightWall-Schnittstelle benötigt
 dafür keine zusätzlichen Felder.

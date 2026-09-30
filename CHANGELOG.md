@@ -29,6 +29,7 @@
 - Flugzeugtyp rechtsbündig und Special-Type-Symbol unmittelbar davor auf beiden Kompaktseiten
 - Leerzeichen zwischen `CPA` und Entfernungswert auf der Kompaktseite
 - Abfluganzeige `geht` einheitlich in Kleinschreibung
+- dynamisches Flughafennamen-Layout mit außenbündigen Kurznamen und bedarfsgerechtem Lauftext
 
 ## 2.0.0 – 2026-09-25
 
