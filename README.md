@@ -50,8 +50,9 @@ Anmeldung.
 
 Der Displaytest im Webinterface prüft die gesamte Matrix für jeweils kurze
 Zeit mit Rot, Grün, Blau, Weiß, einem Pixelraster, geometrischen Linien, Text
-und Farbbalken. Nach zwölf Sekunden endet er automatisch; über denselben
-Schalter kann er vorher beendet werden.
+und Farbbalken. Anschließend zeigt er alle sieben 14×7-Typensymbole jeweils
+zusammen mit ihrer Bedeutung. Nach etwa 23 Sekunden endet er automatisch;
+über denselben Schalter kann er vorher beendet werden.
 
 Die Seite **Flughafennamen** zeigt – sofern vom FlightWall-Server geliefert –
 die Langnamen des Start- und Zielflughafens. Namen, die breiter als das Display
@@ -74,7 +75,9 @@ Die alternative **Kompaktansicht** bündelt Flugnummer, kurzen ICAO-Flugzeugtyp,
 Höhe in Fuß mit farbigem Steig-/Sinkpfeil, Entfernung, Blickrichtung mit
 Richtungspfeil sowie Route und CPA beziehungsweise `geht` auf einer Seite.
 Fehlende Routenteile erzeugen kein einzelnes Trennzeichen. Alle Werte werden
-mit den laufenden FlightWall-Abrufen aktualisiert.
+mit den laufenden FlightWall-Abrufen aktualisiert. Für Hubschrauber, A380,
+Militär, Polizei, Regierung und Luftschiff (`SHIP`) verwendet sie eigene
+14×7-Symbole; unbekannte Special Types erhalten ein allgemeines Symbol.
 
 Die Seite **Kompakt + Flughäfen** verwendet dieselben drei oberen Zeilen. In
 der unteren Zeile erscheinen Start- und Zielflughafen sofort ausgeschrieben in

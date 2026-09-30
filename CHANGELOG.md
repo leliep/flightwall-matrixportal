@@ -18,7 +18,7 @@
 - Flughafennamen-Seite wird ohne Routendaten übersprungen und bleibt für einen vollständigen Lauftext sichtbar
 - korrekte ASCII-Umschrift von `š` und `Š`, beispielsweise `Priština` als `Pristina`
 - ASCII-Umschrift von `â`, `ā` und `ă`, beispielsweise `Coandă` als `Coanda`
-- über das Webinterface start- und stoppbarer zwölfsekündiger Displaytest
+- über das Webinterface start- und stoppbarer Displaytest
 - konfigurierbare tägliche Nachtruhe mit NTP-Zeit und automatischer MEZ-/MESZ-Umschaltung
 - frei sortier- und abwählbare Freitextseite mit einmaligem horizontalem Lauftext bis 128 Zeichen
 - vollständiges Löschen beider Matrixpuffer und Rücksetzen der Laufzeit vor jeder Seitenaktivierung
@@ -30,6 +30,8 @@
 - Leerzeichen zwischen `CPA` und Entfernungswert auf der Kompaktseite
 - Abfluganzeige `geht` einheitlich in Kleinschreibung
 - dynamisches Flughafennamen-Layout mit außenbündigen Kurznamen und bedarfsgerechtem Lauftext
+- aussagekräftige 14×7-Symbole auf beiden Kompaktseiten, einschließlich Luftschiff (`SHIP`)
+- alle Typensymbole mit Bedeutung als zusätzliche Stufen im Displaytest
 
 ## 2.0.0 – 2026-09-25
 

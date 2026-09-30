@@ -1,4 +1,4 @@
-// Version generated: 2026-09-30 20:12:45 CEST (Europe/Berlin)
+// Version generated: 2026-09-30 21:58:33 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -22,7 +22,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "2.1.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-09-30 20:12:45 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-09-30 21:58:33 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -398,6 +398,111 @@ uint16_t aircraftColor() {
 }
 
 
+enum class CompactIconKind : uint8_t {
+  Helicopter,
+  A380,
+  Military,
+  Police,
+  Government,
+  Ship,
+  Generic
+};
+
+
+CompactIconKind compactIconKind(const String &specialType) {
+  String category = specialType;
+  category.toUpperCase();
+  if (category.indexOf("HELICOPTER") >= 0 ||
+      category.indexOf("HUBSCHRAUBER") >= 0) {
+    return CompactIconKind::Helicopter;
+  }
+  if (category.indexOf("A380") >= 0) return CompactIconKind::A380;
+  if (category.indexOf("MILIT") >= 0) return CompactIconKind::Military;
+  if (category.indexOf("POLICE") >= 0 ||
+      category.indexOf("POLIZEI") >= 0) {
+    return CompactIconKind::Police;
+  }
+  if (category.indexOf("GOVERNMENT") >= 0 ||
+      category.indexOf("REGIERUNG") >= 0) {
+    return CompactIconKind::Government;
+  }
+  if (category.indexOf("SHIP") >= 0 ||
+      category.indexOf("LUFTSCHIFF") >= 0) {
+    return CompactIconKind::Ship;
+  }
+  return CompactIconKind::Generic;
+}
+
+
+constexpr uint16_t COMPACT_ICON_HELICOPTER[7] = {
+    0b00000011000000, 0b00111111111100, 0b00000011000000,
+    0b00001111110000, 0b00011111111000, 0b00000111100000,
+    0b00001000010000};
+constexpr uint16_t COMPACT_ICON_A380[7] = {
+    0b00000011000000, 0b00000111100000, 0b11000111100011,
+    0b01111111111110, 0b00001111110000, 0b00000111100000,
+    0b00000011000000};
+constexpr uint16_t COMPACT_ICON_MILITARY[7] = {
+    0b00000011000000, 0b00000111100000, 0b00011111111000,
+    0b11111111111111, 0b00001111110000, 0b00000111100000,
+    0b00001000010000};
+constexpr uint16_t COMPACT_ICON_POLICE[7] = {
+    0b00011111111000, 0b00110000001100, 0b01100011000110,
+    0b01100111100110, 0b01100011000110, 0b00110000001100,
+    0b00011111111000};
+constexpr uint16_t COMPACT_ICON_GOVERNMENT[7] = {
+    0b00000111100000, 0b00001111110000, 0b00011111111000,
+    0b00111111111100, 0b00011011011000, 0b00011011011000,
+    0b00111111111100};
+constexpr uint16_t COMPACT_ICON_SHIP[7] = {
+    0b00011111111000, 0b01111111111110, 0b11111111111111,
+    0b01111111111110, 0b00011111111000, 0b00000111100000,
+    0b00001111110000};
+constexpr uint16_t COMPACT_ICON_GENERIC[7] = {
+    0b00000011000000, 0b00000111100000, 0b00110011001100,
+    0b00011111111000, 0b00001111110000, 0b00000111100000,
+    0b00000011000000};
+
+
+const uint16_t *compactIconBitmap(CompactIconKind kind) {
+  switch (kind) {
+    case CompactIconKind::Helicopter: return COMPACT_ICON_HELICOPTER;
+    case CompactIconKind::A380: return COMPACT_ICON_A380;
+    case CompactIconKind::Military: return COMPACT_ICON_MILITARY;
+    case CompactIconKind::Police: return COMPACT_ICON_POLICE;
+    case CompactIconKind::Government: return COMPACT_ICON_GOVERNMENT;
+    case CompactIconKind::Ship: return COMPACT_ICON_SHIP;
+    default: return COMPACT_ICON_GENERIC;
+  }
+}
+
+
+uint16_t compactIconColor(CompactIconKind kind) {
+  switch (kind) {
+    case CompactIconKind::Helicopter: return yellow;
+    case CompactIconKind::A380: return violet;
+    case CompactIconKind::Military: return red;
+    case CompactIconKind::Police: return cyan;
+    case CompactIconKind::Government: return blue;
+    case CompactIconKind::Ship: return red;
+    default: return red;
+  }
+}
+
+
+void drawCompactSpecialIcon(CompactIconKind kind, int16_t x, int16_t y,
+                            uint16_t color) {
+  const uint16_t *bitmap = compactIconBitmap(kind);
+  for (uint8_t row = 0; row < 7; ++row) {
+    for (uint8_t column = 0; column < 14; ++column) {
+      if (bitmap[row] & (1U << (13 - column))) {
+        matrix.drawPixel(x + column, y + row, color);
+      }
+    }
+  }
+}
+
+
 void drawSpecialIcon(int16_t x = 96) {
   if (!flight.specialType.length()) return;
   String category = flight.specialType;
@@ -662,7 +767,10 @@ void drawCompactTop() {
       flight.type.length() ? flight.type : "Typ ?", 8);
   drawLine(0, 0, flightNumber, red);
   const int16_t typeX = MATRIX_WIDTH - aircraftType.length() * 6;
-  if (flight.specialType.length()) drawSpecialIcon(typeX - 8);
+  if (flight.specialType.length()) {
+    const CompactIconKind kind = compactIconKind(flight.specialType);
+    drawCompactSpecialIcon(kind, typeX - 16, 0, compactIconColor(kind));
+  }
   drawLine(typeX, 0, aircraftType, white);
 
   String altitude = isnan(flight.altitudeFt) ?
@@ -1030,7 +1138,7 @@ bool serviceDisplayTest() {
   if (!displayTestActive) return false;
 
   constexpr uint32_t STAGE_MS = 1500;
-  constexpr uint8_t STAGE_COUNT = 8;
+  constexpr uint8_t STAGE_COUNT = 15;
   const uint32_t elapsed = millis() - displayTestStarted;
   if (elapsed >= STAGE_MS * STAGE_COUNT) {
     displayTestActive = false;
@@ -1067,13 +1175,27 @@ bool serviceDisplayTest() {
     drawLine(0, 0, "DISPLAYTEST", testWhite);
     drawLine(0, 11, "0123456789", testGreen);
     drawLine(0, 22, "RGB 128x32", testBlue);
-  } else {
+  } else if (stage == 7) {
     const int16_t bandWidth = MATRIX_WIDTH / 4;
     matrix.fillRect(0, 0, bandWidth, 32, testRed);
     matrix.fillRect(bandWidth, 0, bandWidth, 32, testGreen);
     matrix.fillRect(bandWidth * 2, 0, bandWidth, 32, testBlue);
     matrix.fillRect(bandWidth * 3, 0,
                     MATRIX_WIDTH - bandWidth * 3, 32, testWhite);
+  } else {
+    constexpr CompactIconKind TEST_ICONS[7] = {
+        CompactIconKind::Helicopter, CompactIconKind::A380,
+        CompactIconKind::Military, CompactIconKind::Police,
+        CompactIconKind::Government, CompactIconKind::Ship,
+        CompactIconKind::Generic};
+    constexpr const char *TEST_LABELS[7] = {
+        "Hubschrauber", "A380", "Militaer", "Polizei",
+        "Regierung", "Luftschiff", "Sonstiger Typ"};
+    const uint8_t iconIndex = stage - 8;
+    const CompactIconKind kind = TEST_ICONS[iconIndex];
+    drawLine(0, 1, "TYPEN-SYMBOL", testWhite);
+    drawCompactSpecialIcon(kind, 0, 17, compactIconColor(kind));
+    drawLine(20, 17, TEST_LABELS[iconIndex], compactIconColor(kind));
   }
   matrix.show();
   return true;
@@ -1650,7 +1772,7 @@ String webPage() {
   html += F("'></label><p class='muted'>Die Nachtruhe darf über Mitternacht reichen. Gleiche Zeiten deaktivieren die Abdunklung.</p><button type='submit' formaction='/display-test'>");
   html += (displayTestActive || displayTestCommand == 1) ?
       "Displaytest beenden" : "Displaytest starten";
-  html += F("</button><p class='muted'>12 Sekunden: Rot, Grün, Blau, Weiß, Pixelraster, Geometrie, Text und Farbbalken.</p></fieldset><fieldset><legend>FlightWall-Verbindung</legend><label>Host<input name='fwHost' maxlength='63' value='");
+  html += F("</button><p class='muted'>Etwa 23 Sekunden: Matrix-Prüfbilder und alle Typensymbole mit Bedeutung.</p></fieldset><fieldset><legend>FlightWall-Verbindung</legend><label>Host<input name='fwHost' maxlength='63' value='");
   html += htmlEscape(flightwallHost);
   html += F("'></label><label>Port<input type='number' name='fwPort' min='1' max='65535' value='");
   html += String(flightwallPort);

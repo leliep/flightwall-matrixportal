@@ -30,6 +30,8 @@ Die Seite **Freitext** scrollt einen frei konfigurierbaren Text mit bis zu
 128 Zeichen bei jedem Aufruf genau einmal vollständig über das Display.
 Die **Kompaktansicht** fasst Flugnummer, Flugzeugtyp, Höhe, Höhenentwicklung,
 Entfernung, Blickrichtung, Route und CPA auf einer Seite zusammen.
+Beide Kompaktseiten zeigen 14×7-Symbole für Hubschrauber, A380, Militär,
+Polizei, Regierung, Luftschiff (`SHIP`) und sonstige Special Types.
 **Kompakt + Flughäfen** zeigt in der unteren Zeile sofort die getrennt
 angeordneten Langnamen und keine Kurzcodes. Je nach Länge werden beide Namen
 gemeinsam außenbündig dargestellt, nur der lange Name gescrollt oder beide
@@ -58,7 +60,9 @@ Start über **Terminal → Aufgabe ausführen… → FlightWall: Git-Update + OT
 
 ## Stabilität
 
-Der aktuelle Teststand verwendet 3 Bit Farbtiefe. Damit stehen sieben
+Der Displaytest zeigt nach den Matrix-Prüfbildern alle Typensymbole mit ihrer
+Bedeutung und dauert insgesamt etwa 23 Sekunden. Der aktuelle Teststand
+verwendet 3 Bit Farbtiefe. Damit stehen sieben
 Helligkeitsstufen von 15 % bis 100 % zur Verfügung. Die automatische Regelung
 verteilt diese logarithmisch zwischen den eingestellten Lux-Schwellen. Falls
 auf der 128×32-Matrix Bildstörungen auftreten, kann `BIT_DEPTH` in
