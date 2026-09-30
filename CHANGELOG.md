@@ -11,6 +11,7 @@
 - optionale sanfte Seitenübergänge und Symbole für Special Types
 - sichtbare OTA-Vorankündigung vor dem Abdunkeln
 - bei jeder Helligkeitsstufe sichtbarer Betriebs-Pixel im Ruhezustand
+- roter statt weißer Betriebs-Pixel bei fehlender FlightWall-Serververbindung
 - erweiterte Diagnose mit Laufzeit, RAM, WLAN, Lux, Task-Stacks und Resetgrund
 - Status-API und bestätigungspflichtiger Neustart über das Webinterface
 - OTA-Fortschritt, Firmwareprüfung, verständliche Fehler und Versionsvergleich

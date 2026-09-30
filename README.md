@@ -39,6 +39,9 @@ darf über Mitternacht reichen, beispielsweise von 23:55 bis 05:55. Während
 dieser Zeit bleibt die Matrix einschließlich Betriebs-Pixel vollständig dunkel;
 Netzwerk, Datenabruf, Webinterface und OTA bleiben aktiv. Die lokale Uhrzeit
 wird per NTP bezogen und automatisch zwischen MEZ und MESZ umgestellt.
+Wenn kein Flugzeug angezeigt wird, blinkt der Betriebs-Pixel unten links bei
+erfolgreicher FlightWall-Verbindung weiß. Nach einem fehlgeschlagenen
+Serverabruf blinkt er rot, bis wieder gültige Daten empfangen wurden.
 Für die Blickrichtung werden außerdem die Standorthöhe über NHN und die
 Entfernungsgrenze für `weit` gespeichert.
 Host, Port und API-Pfad des

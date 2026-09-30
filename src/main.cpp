@@ -1,4 +1,4 @@
-// Version generated: 2026-09-30 22:30:03 CEST (Europe/Berlin)
+// Version generated: 2026-09-30 22:57:04 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -22,7 +22,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "2.1.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-09-30 22:30:03 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-09-30 22:57:04 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -183,6 +183,7 @@ uint16_t orange;
 uint16_t cyan;
 uint16_t violet;
 uint16_t idlePixel;
+uint16_t idleErrorPixel;
 
 enum class VerticalState { Unknown, Climbing, Level, Descending };
 enum class LookRange { Unknown, Above, Near, Far };
@@ -243,6 +244,7 @@ void updateColors() {
   violet = matrix.color565(scaledChannel(180), 0, scaledChannel(255));
   // Fixed first non-zero 3-bit level, independent of automatic brightness.
   idlePixel = matrix.color565(48, 48, 48);
+  idleErrorPixel = matrix.color565(48, 0, 0);
 }
 
 
@@ -1096,7 +1098,7 @@ bool aircraftIsInsideDisplayRadius() {
 void drawIdleDisplay() {
   matrix.fillScreen(0);
   if ((millis() / IDLE_BLINK_HALF_PERIOD_MS) % 2 == 0) {
-    matrix.drawPixel(0, 31, idlePixel);
+    matrix.drawPixel(0, 31, lastError.length() ? idleErrorPixel : idlePixel);
   }
   matrix.show();
 }
