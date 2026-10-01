@@ -84,7 +84,9 @@ die Kurzform `geht`.
 Bei gleichbleibender Höhe wird kein Dreieck angezeigt. Alle Blickrichtungspfeile
 verwenden auf sämtlichen Seiten dieselbe gleichmäßig kräftige 7×7-Gestaltung.
 Die Geschwindigkeit erscheint bei ausreichendem Platz als beispielsweise
-`900kmh`, bei weniger Platz als `900k` und wird andernfalls weggelassen.
+`900kmh`, bei weniger Platz als `900k` und wird andernfalls weggelassen. Fehlt
+das Steig-/Sinkdreieck, trennt nach Möglichkeit ein Leerzeichen Höhe und
+Geschwindigkeit; nur bei Platzmangel wird der Abstand verkleinert.
 Fehlende Routenteile erzeugen kein einzelnes Trennzeichen. Alle Werte werden
 mit den laufenden FlightWall-Abrufen aktualisiert. Für Hubschrauber, A380,
 Militär, Polizei, Regierung und Luftschiff (`SHIP`) verwendet sie eigene

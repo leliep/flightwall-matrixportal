@@ -41,6 +41,7 @@
 - vollständige und rotationssymmetrische Pfeilspitzen für alle diagonalen Blickrichtungen
 - platzabhängige Geschwindigkeitsanzeige `kmh`/`k` in der zweiten Zeile beider Kompaktseiten
 - diagonale Pfeilspitzen mit exakt vier Pixeln langen, gleich großen Schenkeln
+- Leerzeichen zwischen Höhe und Geschwindigkeit bei fehlendem Steig-/Sinkindikator, sofern Platz vorhanden
 
 ## 2.0.0 – 2026-09-25
 

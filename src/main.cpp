@@ -1,4 +1,4 @@
-// Version generated: 2026-10-01 12:05:31 CEST (Europe/Berlin)
+// Version generated: 2026-10-01 16:50:39 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -22,7 +22,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "2.1.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-01 12:05:31 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-01 16:50:39 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -847,10 +847,11 @@ void drawCompactDetails() {
   const VerticalState state = verticalState();
   const bool hasIndicator = state == VerticalState::Climbing ||
       state == VerticalState::Descending;
-  int16_t speedX = metrics.length() * 6 + 1;
+  const int16_t tightSpeedX = metrics.length() * 6 + 1;
+  int16_t preferredSpeedX = metrics.length() * 6 + 6;
   if (hasIndicator && indicatorX + 7 <= MATRIX_WIDTH) {
     drawCompactAltitudeIndicatorAt(indicatorX, 8);
-    speedX = indicatorX + 8;
+    preferredSpeedX = indicatorX + 8;
   }
 
   if (!isnan(flight.speedKmh)) {
@@ -859,10 +860,14 @@ void drawCompactDetails() {
     const String shortSpeed = speedValue + "k";
     const int16_t fullWidth = fullSpeed.length() * 6 - 1;
     const int16_t shortWidth = shortSpeed.length() * 6 - 1;
-    if (speedX + fullWidth <= MATRIX_WIDTH) {
-      drawLine(speedX, 8, fullSpeed, yellow);
-    } else if (speedX + shortWidth <= MATRIX_WIDTH) {
-      drawLine(speedX, 8, shortSpeed, yellow);
+    if (preferredSpeedX + fullWidth <= MATRIX_WIDTH) {
+      drawLine(preferredSpeedX, 8, fullSpeed, yellow);
+    } else if (preferredSpeedX + shortWidth <= MATRIX_WIDTH) {
+      drawLine(preferredSpeedX, 8, shortSpeed, yellow);
+    } else if (!hasIndicator && tightSpeedX + fullWidth <= MATRIX_WIDTH) {
+      drawLine(tightSpeedX, 8, fullSpeed, yellow);
+    } else if (!hasIndicator && tightSpeedX + shortWidth <= MATRIX_WIDTH) {
+      drawLine(tightSpeedX, 8, shortSpeed, yellow);
     }
   }
 
