@@ -34,6 +34,8 @@
 - aussagekräftige 14×7-Symbole auf beiden Kompaktseiten, einschließlich Luftschiff (`SHIP`)
 - alle Typensymbole mit Bedeutung als zusätzliche Stufen im Displaytest
 - rote, bei Bedarf scrollende Fluggesellschaft statt Flugnummer auf der Kompaktseite mit Flughäfen
+- Kompaktseiten mit Entfernung vor Höhe und direkt folgendem Steig-/Sinkdreieck
+- einheitlich kräftige 7×7-Blickrichtungspfeile auf allen Seiten
 
 ## 2.0.0 – 2026-09-25
 

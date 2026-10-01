@@ -75,8 +75,11 @@ und setzt den Seitenzeitpunkt neu. Dadurch erscheinen weder Bildreste noch alte
 Scrollpositionen der zuvor angezeigten Seite.
 
 Die alternative **Kompaktansicht** bündelt Flugnummer, kurzen ICAO-Flugzeugtyp,
-Höhe in Fuß mit farbigem Steig-/Sinkpfeil, Entfernung, Blickrichtung mit
+Entfernung, Höhe in Fuß mit direkt folgendem farbigem Steig-/Sinkdreieck,
+Blickrichtung mit
 Richtungspfeil sowie Route und CPA beziehungsweise `geht` auf einer Seite.
+Bei gleichbleibender Höhe wird kein Dreieck angezeigt. Alle Blickrichtungspfeile
+verwenden auf sämtlichen Seiten dieselbe gleichmäßig kräftige 7×7-Gestaltung.
 Fehlende Routenteile erzeugen kein einzelnes Trennzeichen. Alle Werte werden
 mit den laufenden FlightWall-Abrufen aktualisiert. Für Hubschrauber, A380,
 Militär, Polizei, Regierung und Luftschiff (`SHIP`) verwendet sie eigene

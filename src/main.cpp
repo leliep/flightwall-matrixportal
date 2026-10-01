@@ -1,4 +1,4 @@
-// Version generated: 2026-09-30 22:57:04 CEST (Europe/Berlin)
+// Version generated: 2026-10-01 10:52:46 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -22,7 +22,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "2.1.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-09-30 22:57:04 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-01 10:52:46 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -224,6 +224,37 @@ constexpr uint8_t ARROW_UP_LEFT[7] = {
 constexpr uint8_t ABOVE_MARKER[7] = {
     0b0011100, 0b0100010, 0b1000001, 0b1001001,
     0b1000001, 0b0100010, 0b0011100};
+// Uniform, equally weighted arrows used exclusively for viewing directions.
+constexpr uint8_t LOOK_ARROW_UP[7] = {
+    0b0001000, 0b0011100, 0b0111110, 0b1111111,
+    0b0011100, 0b0011100, 0b0011100};
+constexpr uint8_t LOOK_ARROW_UP_RIGHT[7] = {
+    0b0001111, 0b0001111, 0b0000111, 0b0001111,
+    0b0011110, 0b0111100, 0b1110000};
+constexpr uint8_t LOOK_ARROW_RIGHT[7] = {
+    0b0001000, 0b0001100, 0b1111110, 0b1111111,
+    0b1111110, 0b0001100, 0b0001000};
+constexpr uint8_t LOOK_ARROW_DOWN_RIGHT[7] = {
+    0b1000000, 0b1100000, 0b1110000, 0b0111011,
+    0b0111111, 0b0011111, 0b0001111};
+constexpr uint8_t LOOK_ARROW_DOWN[7] = {
+    0b0011100, 0b0011100, 0b0011100, 0b1111111,
+    0b0111110, 0b0011100, 0b0001000};
+constexpr uint8_t LOOK_ARROW_DOWN_LEFT[7] = {
+    0b0000111, 0b0011110, 0b0111100, 0b1111000,
+    0b1110000, 0b1111000, 0b1111000};
+constexpr uint8_t LOOK_ARROW_LEFT[7] = {
+    0b0001000, 0b0011000, 0b0111111, 0b1111111,
+    0b0111111, 0b0011000, 0b0001000};
+constexpr uint8_t LOOK_ARROW_UP_LEFT[7] = {
+    0b1111000, 0b1111100, 0b1111110, 0b1101110,
+    0b0000111, 0b0000011, 0b0000001};
+constexpr uint8_t ALTITUDE_TRIANGLE_UP[7] = {
+    0b0001000, 0b0011100, 0b0011100, 0b0111110,
+    0b0111110, 0b1111111, 0b1111111};
+constexpr uint8_t ALTITUDE_TRIANGLE_DOWN[7] = {
+    0b1111111, 0b1111111, 0b0111110, 0b0111110,
+    0b0011100, 0b0011100, 0b0001000};
 
 
 uint8_t scaledChannel(uint8_t value) {
@@ -590,6 +621,20 @@ void drawAltitudeArrowAt(int16_t x, int16_t y) {
 }
 
 
+void drawCompactAltitudeIndicatorAt(int16_t x, int16_t y) {
+  switch (verticalState()) {
+    case VerticalState::Climbing:
+      drawArrowBitmap(x, y, ALTITUDE_TRIANGLE_UP, green);
+      break;
+    case VerticalState::Descending:
+      drawArrowBitmap(x, y, ALTITUDE_TRIANGLE_DOWN, orange);
+      break;
+    default:
+      break;
+  }
+}
+
+
 float zenithAngleDegrees() {
   if (isnan(flight.altitudeFt) || isnan(flight.distanceKm)) return NAN;
   const float relativeHeightKm =
@@ -687,18 +732,18 @@ void drawLookArrowAt(float angle, int16_t x, int16_t y, uint16_t color) {
     case LookDirection::Above: bitmap = ABOVE_MARKER; break;
     case LookDirection::AboveFront:
     case LookDirection::Front:
-    case LookDirection::FarFront: bitmap = ARROW_UP; break;
-    case LookDirection::AboveRight:
+    case LookDirection::FarFront: bitmap = LOOK_ARROW_UP; break;
+    case LookDirection::AboveRight: bitmap = LOOK_ARROW_UP_RIGHT; break;
     case LookDirection::Right:
-    case LookDirection::FarRight: bitmap = ARROW_RIGHT; break;
-    case LookDirection::RightShoulder: bitmap = ARROW_DOWN_RIGHT; break;
+    case LookDirection::FarRight: bitmap = LOOK_ARROW_RIGHT; break;
+    case LookDirection::RightShoulder: bitmap = LOOK_ARROW_DOWN_RIGHT; break;
     case LookDirection::AboveBack:
     case LookDirection::Back:
-    case LookDirection::FarBack: bitmap = ARROW_DOWN; break;
-    case LookDirection::LeftShoulder: bitmap = ARROW_DOWN_LEFT; break;
-    case LookDirection::AboveLeft:
+    case LookDirection::FarBack: bitmap = LOOK_ARROW_DOWN; break;
+    case LookDirection::LeftShoulder: bitmap = LOOK_ARROW_DOWN_LEFT; break;
+    case LookDirection::AboveLeft: bitmap = LOOK_ARROW_UP_LEFT; break;
     case LookDirection::Left:
-    case LookDirection::FarLeft: bitmap = ARROW_LEFT; break;
+    case LookDirection::FarLeft: bitmap = LOOK_ARROW_LEFT; break;
     default: break;
   }
   if (bitmap != nullptr) drawArrowBitmap(x, y, bitmap, color);
@@ -786,13 +831,16 @@ void drawCompactTypeHeader() {
 
 
 void drawCompactDetails() {
-  String altitude = isnan(flight.altitudeFt) ?
-      "Hoehe ?" : String(static_cast<int>(round(flight.altitudeFt))) + "ft";
-  String distance = isnan(flight.distanceKm) ?
+  const String distance = isnan(flight.distanceKm) ?
       "?km" : String(flight.distanceKm, 1) + "km";
-  String metrics = altitude + " " + distance;
-  drawLine(0, 8, clipped(metrics, 19), yellow);
-  drawAltitudeArrowAt(121, 8);
+  const String altitude = isnan(flight.altitudeFt) ?
+      "?ft" : String(static_cast<int>(round(flight.altitudeFt))) + "ft";
+  const String metrics = distance + " " + altitude;
+  drawLine(0, 8, metrics, yellow);
+  const int16_t indicatorX = metrics.length() * 6 + 1;
+  if (indicatorX + 7 <= MATRIX_WIDTH) {
+    drawCompactAltitudeIndicatorAt(indicatorX, 8);
+  }
 
   drawLine(0, 16, clipped(compactLookDirection(flight.relativeBearing), 19), cyan);
   drawLookArrowAt(flight.relativeBearing, 121, 16, yellow);
