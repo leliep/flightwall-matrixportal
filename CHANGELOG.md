@@ -37,6 +37,7 @@
 - Kompaktseiten mit Entfernung vor Höhe und direkt folgendem Steig-/Sinkdreieck
 - einheitlich kräftige 7×7-Blickrichtungspfeile auf allen Seiten
 - Abfluganzeige `entfernt sich`, wenn die Zeile genügend Platz bietet, sonst `geht`
+- Lauftexte der Kompaktseite mit Flughäfen scrollen nach Endpause schnell zurück und pausieren vor dem Seitenwechsel
 
 ## 2.0.0 – 2026-09-25
 

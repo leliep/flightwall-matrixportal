@@ -41,7 +41,8 @@ angeordneten Langnamen und keine Kurzcodes. Je nach Länge werden beide Namen
 gemeinsam außenbündig dargestellt, nur der lange Name gescrollt oder beide
 Namen in getrennten Hälften gescrollt. In der ersten Zeile ersetzt die rote,
 bei Bedarf scrollende Fluggesellschaft die Flugnummer; Typ und Symbol bleiben
-rechts fest stehen.
+rechts fest stehen. Die Lauftexte pausieren am Ende, scrollen viermal schneller
+zum Anfang zurück und pausieren dort vor dem Seitenwechsel erneut.
 Den Zenitwinkel berechnet der ESP aus `altitude_ft`, `distance_km` und der im
 Webinterface hinterlegten Standorthöhe. Die FlightWall-Schnittstelle benötigt
 dafür keine zusätzlichen Felder.

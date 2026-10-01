@@ -98,7 +98,10 @@ in weniger als eine halbe Zeile, bleibt er außen bündig stehen und das `>`
 rückt an ihn heran, während der lange Name im übrigen Bereich scrollt. Sind
 beide Namen länger, scrollen beide in getrennten Hälften mit festem `>` in der
 Mitte. Kurze Namen bleiben mindestens fünf Sekunden sichtbar; die konfigurierte
-Seitendauer wird bei Bedarf bis zum Ende aller Lauftexte verlängert.
+Seitendauer wird bei Bedarf bis zum Ende aller Lauftexte verlängert. Jeder
+Lauftext pausiert kurz am vollständig gescrollten Ende, läuft anschließend mit
+vierfacher Geschwindigkeit zum Anfang zurück und pausiert dort nochmals kurz,
+bevor ein Seitenwechsel erfolgen kann.
 
 Die Matrix berechnet den Zenitwinkel selbst aus horizontaler Entfernung,
 Flugzeughöhe und konfigurierter Standorthöhe. Bis 10° vom Zenit erscheint

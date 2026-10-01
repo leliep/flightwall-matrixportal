@@ -1,4 +1,4 @@
-// Version generated: 2026-10-01 10:55:58 CEST (Europe/Berlin)
+// Version generated: 2026-10-01 11:01:49 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -22,7 +22,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "2.1.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-01 10:55:58 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-01 11:01:49 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -895,6 +895,7 @@ constexpr int16_t AIRPORT_DESTINATION_X = 68;
 constexpr uint32_t AIRPORT_NAMES_MINIMUM_MS = 5000;
 constexpr uint32_t AIRPORT_HALF_PAUSE_MS = 800;
 constexpr uint32_t AIRPORT_HALF_PIXEL_MS = 80;
+constexpr uint32_t AIRPORT_RETURN_PIXEL_MS = 20;
 
 
 String limitedAirportText(const String &name) {
@@ -917,8 +918,11 @@ String limitedAirlineText() {
 uint32_t airportScrollDuration(const String &text, int16_t regionWidth) {
   const uint32_t textWidth = text.length() * 6UL;
   if (textWidth <= regionWidth) return 0;
+  const uint32_t travelPixels = textWidth - regionWidth;
   return AIRPORT_HALF_PAUSE_MS +
-         (textWidth - regionWidth) * AIRPORT_HALF_PIXEL_MS +
+         travelPixels * AIRPORT_HALF_PIXEL_MS +
+         AIRPORT_HALF_PAUSE_MS +
+         travelPixels * AIRPORT_RETURN_PIXEL_MS +
          AIRPORT_HALF_PAUSE_MS;
 }
 
@@ -961,16 +965,26 @@ uint32_t compactAirportsMinimumDuration() {
 int16_t airportTextX(const String &text, int16_t regionWidth,
                      uint32_t elapsedMs) {
   const int16_t textWidth = text.length() * 6;
-  if (textWidth <= regionWidth || elapsedMs < AIRPORT_HALF_PAUSE_MS) {
-    return 0;
+  if (textWidth <= regionWidth) return 0;
+
+  const int16_t travelPixels = textWidth - regionWidth;
+  const int16_t finalX = -travelPixels;
+  if (elapsedMs < AIRPORT_HALF_PAUSE_MS) return 0;
+  elapsedMs -= AIRPORT_HALF_PAUSE_MS;
+
+  const uint32_t forwardMs = travelPixels * AIRPORT_HALF_PIXEL_MS;
+  if (elapsedMs < forwardMs) {
+    return -static_cast<int16_t>(elapsedMs / AIRPORT_HALF_PIXEL_MS);
   }
-  const uint32_t travelMs =
-      (textWidth - regionWidth) * AIRPORT_HALF_PIXEL_MS;
-  if (elapsedMs < AIRPORT_HALF_PAUSE_MS + travelMs) {
-    return -static_cast<int16_t>(
-        (elapsedMs - AIRPORT_HALF_PAUSE_MS) / AIRPORT_HALF_PIXEL_MS);
+  elapsedMs -= forwardMs;
+  if (elapsedMs < AIRPORT_HALF_PAUSE_MS) return finalX;
+  elapsedMs -= AIRPORT_HALF_PAUSE_MS;
+
+  const uint32_t returnMs = travelPixels * AIRPORT_RETURN_PIXEL_MS;
+  if (elapsedMs < returnMs) {
+    return finalX + static_cast<int16_t>(elapsedMs / AIRPORT_RETURN_PIXEL_MS);
   }
-  return regionWidth - textWidth;
+  return 0;
 }
 
 
