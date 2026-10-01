@@ -32,7 +32,9 @@ Die **Kompaktansicht** fasst Flugnummer, Flugzeugtyp, Höhe, Höhenentwicklung,
 Entfernung, Blickrichtung, Route und CPA auf einer Seite zusammen.
 Ihre zweite Zeile zeigt zuerst die Entfernung, danach die Höhe und unmittelbar
 anschließend ein gefülltes grünes Steig- oder oranges Sinkdreieck. Bei
-gleichbleibender Höhe entfällt der Indikator. Die Blickrichtungspfeile sind auf
+gleichbleibender Höhe entfällt der Indikator. Danach folgt die Geschwindigkeit
+platzabhängig als `900kmh` oder verkürzt als `900k`; passt sie nicht vollständig,
+wird sie weggelassen. Die Blickrichtungspfeile sind auf
 allen Seiten als einheitlich kräftige 7×7-Symbole ausgeführt.
 Beide Kompaktseiten zeigen 14×7-Symbole für Hubschrauber, A380, Militär,
 Polizei, Regierung, Luftschiff (`SHIP`) und sonstige Special Types.

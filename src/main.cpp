@@ -1,4 +1,4 @@
-// Version generated: 2026-10-01 11:34:25 CEST (Europe/Berlin)
+// Version generated: 2026-10-01 11:59:51 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -22,7 +22,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "2.1.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-01 11:34:25 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-01 11:59:51 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -844,8 +844,26 @@ void drawCompactDetails() {
   const String metrics = distance + " " + altitude;
   drawLine(0, 8, metrics, yellow);
   const int16_t indicatorX = metrics.length() * 6 + 1;
-  if (indicatorX + 7 <= MATRIX_WIDTH) {
+  const VerticalState state = verticalState();
+  const bool hasIndicator = state == VerticalState::Climbing ||
+      state == VerticalState::Descending;
+  int16_t speedX = metrics.length() * 6 + 1;
+  if (hasIndicator && indicatorX + 7 <= MATRIX_WIDTH) {
     drawCompactAltitudeIndicatorAt(indicatorX, 8);
+    speedX = indicatorX + 8;
+  }
+
+  if (!isnan(flight.speedKmh)) {
+    const String speedValue = String(static_cast<int>(round(flight.speedKmh)));
+    const String fullSpeed = speedValue + "kmh";
+    const String shortSpeed = speedValue + "k";
+    const int16_t fullWidth = fullSpeed.length() * 6 - 1;
+    const int16_t shortWidth = shortSpeed.length() * 6 - 1;
+    if (speedX + fullWidth <= MATRIX_WIDTH) {
+      drawLine(speedX, 8, fullSpeed, yellow);
+    } else if (speedX + shortWidth <= MATRIX_WIDTH) {
+      drawLine(speedX, 8, shortSpeed, yellow);
+    }
   }
 
   drawLine(0, 16, clipped(compactLookDirection(flight.relativeBearing), 19), cyan);

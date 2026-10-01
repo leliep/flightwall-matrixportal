@@ -39,6 +39,7 @@
 - Abfluganzeige `entfernt sich`, wenn die Zeile genügend Platz bietet, sonst `geht`
 - Lauftexte der Kompaktseite mit Flughäfen scrollen nach Endpause schnell zurück und pausieren vor dem Seitenwechsel
 - vollständige und rotationssymmetrische Pfeilspitzen für alle diagonalen Blickrichtungen
+- platzabhängige Geschwindigkeitsanzeige `kmh`/`k` in der zweiten Zeile beider Kompaktseiten
 
 ## 2.0.0 – 2026-09-25
 
