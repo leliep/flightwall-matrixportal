@@ -40,6 +40,7 @@
 - Lauftexte der Kompaktseite mit Flughäfen scrollen nach Endpause schnell zurück und pausieren vor dem Seitenwechsel
 - vollständige und rotationssymmetrische Pfeilspitzen für alle diagonalen Blickrichtungen
 - platzabhängige Geschwindigkeitsanzeige `kmh`/`k` in der zweiten Zeile beider Kompaktseiten
+- diagonale Pfeilspitzen mit exakt vier Pixeln langen, gleich großen Schenkeln
 
 ## 2.0.0 – 2026-09-25
 
