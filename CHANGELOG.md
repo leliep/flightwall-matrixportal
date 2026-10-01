@@ -36,6 +36,7 @@
 - rote, bei Bedarf scrollende Fluggesellschaft statt Flugnummer auf der Kompaktseite mit Flughäfen
 - Kompaktseiten mit Entfernung vor Höhe und direkt folgendem Steig-/Sinkdreieck
 - einheitlich kräftige 7×7-Blickrichtungspfeile auf allen Seiten
+- Abfluganzeige `entfernt sich`, wenn die Zeile genügend Platz bietet, sonst `geht`
 
 ## 2.0.0 – 2026-09-25
 

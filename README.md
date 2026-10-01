@@ -77,7 +77,9 @@ Scrollpositionen der zuvor angezeigten Seite.
 Die alternative **Kompaktansicht** bündelt Flugnummer, kurzen ICAO-Flugzeugtyp,
 Entfernung, Höhe in Fuß mit direkt folgendem farbigem Steig-/Sinkdreieck,
 Blickrichtung mit
-Richtungspfeil sowie Route und CPA beziehungsweise `geht` auf einer Seite.
+Richtungspfeil sowie Route und CPA auf einer Seite. Entfernt sich das Flugzeug
+nach dem CPA, erscheint bei ausreichendem Platz `entfernt sich`, andernfalls
+die Kurzform `geht`.
 Bei gleichbleibender Höhe wird kein Dreieck angezeigt. Alle Blickrichtungspfeile
 verwenden auf sämtlichen Seiten dieselbe gleichmäßig kräftige 7×7-Gestaltung.
 Fehlende Routenteile erzeugen kein einzelnes Trennzeichen. Alle Werte werden

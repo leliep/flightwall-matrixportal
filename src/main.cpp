@@ -1,4 +1,4 @@
-// Version generated: 2026-10-01 10:52:46 CEST (Europe/Berlin)
+// Version generated: 2026-10-01 10:55:58 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -22,7 +22,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "2.1.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-01 10:52:46 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-01 10:55:58 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -37,6 +37,8 @@ constexpr uint32_t IDLE_BLINK_HALF_PERIOD_MS = 3000;
 constexpr uint32_t LIGHT_SENSOR_INTERVAL_MS = 2000;
 constexpr uint32_t LIGHT_SENSOR_RETRY_MS = 10000;
 constexpr uint8_t LIGHT_SENSOR_FAILURE_LIMIT = 3;
+constexpr char DEPARTING_LONG_TEXT[] = "entfernt sich";
+constexpr uint8_t DEPARTING_LONG_TEXT_LENGTH = sizeof(DEPARTING_LONG_TEXT) - 1;
 
 // BH1750 soldered connection: A1/GPIO 3 = SDA, A2/GPIO 9 = SCL.
 // STEMMA QT remains an alternative with SDA 16 and SCL 17.
@@ -796,7 +798,11 @@ void drawCpaPage() {
   cpa += isnan(flight.cpaKm) ? "?" : String(flight.cpaKm, 1) + "km";
   const bool departing = flight.motion == "departing";
   if (departing) {
-    cpa += " geht";
+    if (cpa.length() + 1 + DEPARTING_LONG_TEXT_LENGTH <= 21) {
+      cpa += " entfernt sich";
+    } else {
+      cpa += " geht";
+    }
   } else if (!isnan(flight.cpaMinutes)) {
     cpa += " in " + String(static_cast<int>(round(flight.cpaMinutes))) + "min";
   }
@@ -864,7 +870,9 @@ void drawCompactPage() {
   const bool departing = flight.motion == "departing";
   String cpa;
   if (departing) {
-    cpa = "geht";
+    const uint8_t separatorLength = bottom.length() ? 1 : 0;
+    cpa = bottom.length() + separatorLength + DEPARTING_LONG_TEXT_LENGTH <= 21 ?
+        DEPARTING_LONG_TEXT : "geht";
   } else if (!isnan(flight.cpaKm)) {
     cpa = "CPA " + String(flight.cpaKm, 1);
     if (!isnan(flight.cpaMinutes)) {
