@@ -1,4 +1,4 @@
-// Version generated: 2026-10-01 16:50:39 CEST (Europe/Berlin)
+// Version generated: 2026-10-03 12:17:49 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
@@ -22,7 +22,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "2.1.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-01 16:50:39 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-03 12:17:49 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -779,9 +779,18 @@ String compactRoute() {
 }
 
 
+String displayedAirline() {
+  String airline = flight.airline;
+  airline.trim();
+  String comparison = airline;
+  comparison.toUpperCase();
+  return comparison == "UNKNOWN" ? "Airline N/A" : airline;
+}
+
+
 void drawRoutePage() {
   drawHeader();
-  drawLine(0, 16, clipped(flight.airline, 21), blue);
+  drawLine(0, 16, clipped(displayedAirline(), 21), blue);
 
   String route = compactRoute();
   if (!isnan(flight.speedKmh)) {
@@ -930,8 +939,8 @@ String limitedAirportText(const String &name) {
 
 
 String limitedAirlineText() {
-  String text = displayAscii(
-      flight.airline.length() ? flight.airline : "Airline ?");
+  String airline = displayedAirline();
+  String text = displayAscii(airline.length() ? airline : "Airline ?");
   text.trim();
   if (text.length() > 128) text.remove(128);
   return text;

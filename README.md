@@ -95,7 +95,8 @@ Militär, Polizei, Regierung und Luftschiff (`SHIP`) verwendet sie eigene
 Die Seite **Kompakt + Flughäfen** zeigt in der ersten Zeile statt der Flugnummer
 die Fluggesellschaft in Rot. Ist der verfügbare Platz vor dem unverändert
 rechts stehenden Typensymbol und Flugzeugtyp zu kurz, scrollt ihr vollständiger
-Name innerhalb dieses Bereichs. In der unteren Zeile erscheinen Start- und
+Name innerhalb dieses Bereichs. Der Serverwert `UNKNOWN` wird als `Airline N/A`
+angezeigt. In der unteren Zeile erscheinen Start- und
 Zielflughafen sofort ausgeschrieben in
 einem dynamischen Layout. Passen beide Namen gemeinsam in die Zeile, stehen sie
 links- und rechtsbündig und das `>` mittig im freien Raum. Passt nur ein Name

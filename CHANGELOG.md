@@ -42,6 +42,7 @@
 - platzabhängige Geschwindigkeitsanzeige `kmh`/`k` in der zweiten Zeile beider Kompaktseiten
 - diagonale Pfeilspitzen mit exakt vier Pixeln langen, gleich großen Schenkeln
 - Leerzeichen zwischen Höhe und Geschwindigkeit bei fehlendem Steig-/Sinkindikator, sofern Platz vorhanden
+- Airline-Serverwert `UNKNOWN` wird als `Airline N/A` angezeigt
 
 ## 2.0.0 – 2026-09-25
 
