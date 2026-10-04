@@ -13,6 +13,8 @@
   Flugzeugdaten, CPA sowie normalen und effektiven Special-Type-Radius
 - direkter Routendienst-Test ohne Cache mit frei eingebbarem Callsign
 - Callsigns mit Präfix `GAF` werden als `German Airforce` erkannt
+- responsives Web-Display unter `/display` mit Live-Daten, sieben Matrixseiten,
+  konfigurierter Reihenfolge und individuellen Seitenzeiten
 - passwortgeschütztes Firmware-Update über das Webinterface
 - passwortgeschützter OTA-Upload aus PlatformIO
 - 3 Bit Farbtiefe mit sieben Helligkeitsstufen und logarithmischer Lux-Regelung

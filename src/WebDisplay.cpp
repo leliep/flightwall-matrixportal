@@ -1,0 +1,42 @@
+#include "WebDisplay.hpp"
+
+namespace {
+const char page[] PROGMEM = R"HTML(<!doctype html>
+<html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#030507"><title>FlightWall Display</title>
+<style>
+:root{color-scheme:dark;--red:#ff3030;--yellow:#ffd21f;--cyan:#2de2e6;--blue:#4196ff;--green:#54ef77;--orange:#ff8b28;--white:#f7fbff;--muted:#7d8994}
+*{box-sizing:border-box}body{margin:0;min-height:100svh;background:radial-gradient(circle at 50% 20%,#15212b 0,#080c10 45%,#020304 100%);color:var(--white);font-family:system-ui,sans-serif;display:grid;place-items:center;padding:max(18px,env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) max(18px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left))}
+main{width:min(1100px,100%)}header{display:flex;align-items:end;justify-content:space-between;gap:14px;margin:0 2px 12px}h1{font-size:clamp(17px,3vw,26px);margin:0;letter-spacing:.04em}.meta{color:#9aabb9;font-size:13px;text-align:right}.matrix{position:relative;width:100%;aspect-ratio:4/1;min-height:180px;overflow:hidden;background:#000;border:clamp(5px,1vw,10px) solid #222b31;border-radius:12px;box-shadow:0 24px 65px #000,0 0 0 1px #4a555d,inset 0 0 30px #000;padding:clamp(12px,3vw,34px)}
+.matrix:after{content:"";position:absolute;inset:0;pointer-events:none;background-image:radial-gradient(circle,#ffffff18 0 1px,transparent 1.4px);background-size:8px 8px;mix-blend-mode:screen}.screen{height:100%;display:grid;grid-template-rows:repeat(4,1fr);align-items:center;font-family:"Courier New",monospace;font-weight:900;text-transform:none;letter-spacing:.045em;text-shadow:0 0 5px currentColor,0 0 12px currentColor;font-size:clamp(17px,4.2vw,54px);line-height:1;position:relative;z-index:1}.row{display:flex;align-items:center;justify-content:space-between;gap:.35em;min-width:0;white-space:nowrap}.left,.right,.grow{overflow:hidden;text-overflow:ellipsis}.right{margin-left:auto;text-align:right}.center{justify-content:center;text-align:center}.tiny{font-size:.72em}.red{color:var(--red)}.yellow{color:var(--yellow)}.cyan{color:var(--cyan)}.blue{color:var(--blue)}.green{color:var(--green)}.orange{color:var(--orange)}.white{color:var(--white)}.muted{color:var(--muted)}.arrow{font-size:1.35em;line-height:.7}.badge{font-size:.55em;border:2px solid currentColor;border-radius:999px;padding:.2em .5em;text-shadow:none}.status{display:flex;justify-content:space-between;gap:12px;margin:12px 3px 0;color:#9aabb9;font-size:13px}.dots{display:flex;gap:7px;align-items:center}.dot{width:8px;height:8px;border-radius:50%;background:#45515b}.dot.on{background:var(--cyan);box-shadow:0 0 8px var(--cyan)}a{color:#83dcff}@media(max-width:620px){header{align-items:start;flex-direction:column}.meta{text-align:left}.matrix{min-height:0;border-radius:9px;padding:10px}.screen{font-size:clamp(13px,4.1vw,28px)}.status{font-size:11px}.badge{border-width:1px}}
+</style></head><body><main><header><h1>FlightWall MatrixPortal</h1><div class="meta" id="meta">verbinde…</div></header><section class="matrix"><div class="screen" id="screen"><div class="row center yellow">WARTE AUF DATEN</div></div></section><div class="status"><div class="dots" id="dots"></div><div><span id="pageName">–</span> · <a href="/">Konfiguration</a></div></div></main>
+<script>
+const $=id=>document.getElementById(id), esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let state=null,slot=0,nextAt=0,lastKey='';
+const colors={airline:'blue'}, names=['Flugdaten','Airline und Route','CPA und Sondertyp','Flughafennamen','Freitext','Kompaktansicht','Kompakt + Flughäfen'];
+function n(v,d=1,s=''){return Number.isFinite(v)?Number(v).toFixed(d).replace('.',',')+s:'?'+s}
+function route(f){return [f.origin,f.destination].filter(Boolean).join('>')}
+function longRoute(f){return [f.origin_name||f.origin,f.destination_name||f.destination].filter(Boolean).join('  ›  ')}
+function arrow(a){if(!Number.isFinite(a))return '·';const x=((a+180)%360+360)%360-180;if(Math.abs(x)<=22)return '↑';if(x>22&&x<=67)return '↗';if(x>67&&x<=112)return '→';if(x>112&&x<=157)return '↘';if(Math.abs(x)>157)return '↓';if(x<-112)return '↙';if(x<-67)return '←';return '↖'}
+function look(a){if(!Number.isFinite(a))return 'Richtung ?';const x=Math.abs(a);if(x<=30)return 'vorne';if(x<=100)return a>0?'rechts':'links';if(x<=150)return a>0?'rechte Schulter':'linke Schulter';return 'hinten'}
+function vert(f){return f.vertical_motion==='steigt'?'<span class="green">▲</span>':f.vertical_motion==='sinkt'?'<span class="orange">▼</span>':''}
+function head(f,left,color='red'){return `<div class="row"><span class="left ${color}">${esc(left||f.flight||'Flug ?')}</span>${f.special_type?`<span class="badge yellow">${esc(f.special_type)}</span>`:''}<span class="right white">${esc(f.aircraft_type||'Typ ?')}</span></div>`}
+function rows(page,f){const dist=n(f.distance_km,1,'km'),alt=n(f.altitude_ft,0,'ft'),speed=n(f.speed_kmh,0,'kmh'),r=route(f),lr=longRoute(f),arr=arrow(f.relative_bearing),depart=f.motion==='departing';
+ if(page===0)return head(f,f.flight)+`<div class="row white"><span>${dist} ${esc(f.direction||'')} ${alt}</span><span>${vert(f)}</span></div><div class="row yellow"><span class="arrow">${arr}</span><span class="grow">${esc(look(f.relative_bearing))}</span></div><div></div>`;
+ if(page===1)return head(f,f.flight)+`<div class="row blue"><span class="grow">${esc(f.airline||'Airline N/A')}</span></div><div class="row white"><span>${esc(r||'Route ?')}</span><span>${speed}</span></div><div></div>`;
+ if(page===2)return head(f,f.flight)+`<div class="row ${depart?'orange':'green'}"><span>CPA ${n(f.cpa_km,1,'km')}</span><span>${depart?'entfernt sich':Number.isFinite(f.cpa_minutes)?'in '+n(f.cpa_minutes,0,'min'):''}</span></div><div class="row yellow"><span>${esc(f.special_type||'kein Sondertyp')}</span></div><div></div>`;
+ if(page===3)return `<div class="row cyan"><span>Flughäfen</span></div><div class="row white"><span class="grow">S ${esc(f.origin_name||f.origin||'unbekannt')}</span></div><div class="row yellow"><span class="grow">Z ${esc(f.destination_name||f.destination||'unbekannt')}</span></div><div></div>`;
+ if(page===4)return `<div></div><div class="row center cyan"><span class="grow">${esc(state.custom_text||'')}</span></div><div></div><div></div>`;
+ if(page===5)return head(f,f.flight)+`<div class="row yellow"><span>${dist} ${alt} ${vert(f)} ${speed}</span></div><div class="row cyan"><span>${esc(look(f.relative_bearing))}</span><span class="arrow yellow">${arr}</span></div><div class="row ${depart?'orange':'green'}"><span>${esc(r)}</span><span>${depart?'entfernt sich':'CPA '+n(f.cpa_km,1)}</span></div>`;
+ return head(f,f.airline||'Airline N/A','red')+`<div class="row yellow"><span>${dist} ${alt} ${vert(f)} ${speed}</span></div><div class="row cyan"><span>${esc(look(f.relative_bearing))}</span><span class="arrow yellow">${arr}</span></div><div class="row"><span class="grow white">${esc(lr||r||'Route ?')}</span></div>`}
+function activePages(){if(!state)return[];return state.page_order.filter(p=>state.page_enabled[p]&&(p!==3||state.flight.origin||state.flight.destination)&&(p!==4||state.custom_text))}
+function render(){if(!state)return;const pages=activePages();if(!state.flight.available||!pages.length){$('screen').innerHTML='<div class="row center muted">KEIN FLUGZEUG</div>';$('pageName').textContent='Ruhezustand';return}slot%=pages.length;const p=pages[slot],f=state.flight;$('screen').innerHTML=rows(p,f);$('pageName').textContent=names[p];$('dots').innerHTML=pages.map((_,i)=>`<i class="dot ${i===slot?'on':''}"></i>`).join('');if(!nextAt)nextAt=Date.now()+(state.page_duration_ms[p]||5000)}
+async function update(){try{const r=await fetch('/api/display',{cache:'no-store'});if(!r.ok)throw 0;const s=await r.json(),key=JSON.stringify([s.page_order,s.page_enabled,s.custom_text,s.flight.flight]);state=s;if(key!==lastKey){slot=0;nextAt=0;lastKey=key}$('meta').textContent=(s.flight.available?s.flight.flight+' · ':'')+(s.age_seconds??0)+' s · '+(s.error||'ADS-B OK');render()}catch(e){$('meta').textContent='Verbindung unterbrochen'}}
+setInterval(()=>{if(state&&nextAt&&Date.now()>=nextAt){slot++;nextAt=0;render()}},250);setInterval(update,1000);update();
+</script></body></html>)HTML";
+}  // namespace
+
+const __FlashStringHelper* webDisplayPage() {
+  return FPSTR(page);
+}

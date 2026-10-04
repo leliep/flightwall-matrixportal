@@ -49,6 +49,11 @@ Nach erfolgreicher WLAN-Verbindung ist die Konfiguration normalerweise unter
 `http://matrixportal.local` erreichbar. Falls mDNS im lokalen Netz nicht
 funktioniert, zeigt der serielle Monitor die IP-Adresse an.
 
+Unter `http://matrixportal.local/display` steht zusätzlich ein responsives
+Web-Display für iPhone, Tablet und Desktop bereit. Es verwendet dieselben
+Flugdaten, Farben, aktivierten Seiten, Reihenfolge und Seitenzeiten wie die
+LED-Matrix und aktualisiert sich automatisch.
+
 Konfigurierbar sind Display ein/aus, automatische oder manuelle Helligkeit,
 Lux-Schwellen, lokaler Anzeigeradius, Standort, Blickrichtung, ADS-B-Quelle,
 Routendienst, Kleinflugzeug- und Höhenfilter sowie eine tägliche Nachtruhe. Der Zeitraum

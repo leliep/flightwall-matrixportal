@@ -19,6 +19,7 @@
 #include "Geo.hpp"
 #include "RouteClient.hpp"
 #include "UnknownCodes.hpp"
+#include "WebDisplay.hpp"
 #include "secrets.h"
 
 #ifndef OTA_PASSWORD
@@ -28,7 +29,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "3.0.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-04 19:34:49 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-04 19:45:44 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -2167,6 +2168,7 @@ String webPage() {
   html += F(" Bytes</b><span>Letzter Reset</span><b>");
   html += resetReasonText();
   html += F("</b></div><form method='post' action='/restart' onsubmit=\"return confirm('ESP wirklich neu starten?')\"><p><button type='submit'>ESP neu starten</button></p></form></fieldset>");
+  html += F("<p><a href='/display'>Web-Display öffnen</a></p>");
   if (strlen(OTA_PASSWORD) >= 8) {
     html += F("<p><a href='/update'>Firmware drahtlos aktualisieren</a></p>");
   }
@@ -2346,6 +2348,70 @@ void handleRouteTest() {
       "<h1>Routendienst-Test</h1><p>Direkte Abfrage ohne Cache für <b>" +
       htmlEscape(callsign) + "</b>.</p><p>" + detail +
       "</p><p><a href='/'>Zurück</a></p></body></html>");
+}
+
+
+void handleWebDisplay() {
+  webServer.sendHeader("Cache-Control", "no-store");
+  webServer.send(200, "text/html; charset=utf-8", webDisplayPage());
+}
+
+
+void handleDisplayApi() {
+  FlightData shown;
+  String error;
+  uint32_t updated = 0;
+  if (xSemaphoreTake(flightMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+    shown = networkFlight;
+    error = networkLastError;
+    updated = networkLastSuccessfulPoll;
+    xSemaphoreGive(flightMutex);
+  }
+  String json;
+  json.reserve(1800);
+  json = "{\"age_seconds\":" +
+         (updated ? String((millis() - updated) / 1000) : "null") +
+         ",\"error\":\"" + jsonEscape(error) + "\"" +
+         ",\"custom_text\":\"" + jsonEscape(customPageText) + "\"" +
+         ",\"page_enabled\":[";
+  for (uint8_t page = 0; page < PAGE_COUNT; ++page) {
+    if (page) json += ',';
+    json += pageEnabled[page] ? "true" : "false";
+  }
+  json += "],\"page_order\":[";
+  for (uint8_t slot = 0; slot < PAGE_COUNT; ++slot) {
+    if (slot) json += ',';
+    json += String(pageOrder[slot]);
+  }
+  json += "],\"page_duration_ms\":[";
+  for (uint8_t page = 0; page < PAGE_COUNT; ++page) {
+    if (page) json += ',';
+    json += String(pageDurationMs[page]);
+  }
+  json += "],\"flight\":{";
+  json += "\"available\":" + String(shown.available ? "true" : "false") +
+          ",\"flight\":\"" + jsonEscape(shown.flight) + "\"" +
+          ",\"airline\":\"" + jsonEscape(shown.airline) + "\"" +
+          ",\"aircraft_type\":\"" + jsonEscape(shown.type) + "\"" +
+          ",\"special_type\":\"" + jsonEscape(shown.specialType) + "\"" +
+          ",\"direction\":\"" + jsonEscape(shown.direction) + "\"" +
+          ",\"vertical_motion\":\"" + jsonEscape(shown.verticalMotion) + "\"" +
+          ",\"motion\":\"" + jsonEscape(shown.motion) + "\"" +
+          ",\"origin\":\"" + jsonEscape(shown.origin) + "\"" +
+          ",\"destination\":\"" + jsonEscape(shown.destination) + "\"" +
+          ",\"origin_name\":\"" + jsonEscape(shown.originName) + "\"" +
+          ",\"destination_name\":\"" + jsonEscape(shown.destinationName) + "\"" +
+          ",\"distance_km\":" + jsonNumberOrNull(shown.distanceKm) +
+          ",\"altitude_ft\":" + jsonNumberOrNull(shown.altitudeFt, 0) +
+          ",\"speed_kmh\":" + jsonNumberOrNull(shown.speedKmh, 0) +
+          ",\"cpa_km\":" + jsonNumberOrNull(shown.cpaKm) +
+          ",\"cpa_minutes\":" + jsonNumberOrNull(shown.cpaMinutes, 0) +
+          ",\"vertical_rate_fpm\":" +
+              jsonNumberOrNull(shown.verticalRateFpm, 0) +
+          ",\"relative_bearing\":" +
+              jsonNumberOrNull(shown.relativeBearing) + "}}";
+  webServer.sendHeader("Cache-Control", "no-store");
+  webServer.send(200, "application/json; charset=utf-8", json);
 }
 
 
@@ -2582,6 +2648,8 @@ void startArduinoOta() {
 void startWebServer() {
   if (webServerStarted) return;
   webServer.on("/", HTTP_GET, []() { webServer.send(200, "text/html; charset=utf-8", webPage()); });
+  webServer.on("/display", HTTP_GET, handleWebDisplay);
+  webServer.on("/api/display", HTTP_GET, handleDisplayApi);
   webServer.on("/api/status", HTTP_GET, handleStatusApi);
   webServer.on("/save", HTTP_POST, handleWebSave);
   webServer.on("/test-adsb", HTTP_POST, handleAdsbTest);
