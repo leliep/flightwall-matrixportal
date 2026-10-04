@@ -20,6 +20,7 @@ class RouteClient {
   void configure(bool enabled, const String& url);
   RouteResult lookup(const String& callsign, double latitude, double longitude,
                      uint32_t now);
+  RouteResult test(const String& callsign, double latitude, double longitude);
   const String& lastError() const { return lastError_; }
 
  private:
@@ -32,4 +33,3 @@ class RouteClient {
   String url_;
   String lastError_;
 };
-

@@ -74,7 +74,7 @@ const AirlineName names[] = {
   {"FIN", "Finnair"},
   {"FPO", "ASL Airlines France"},
   {"FR", "Ryanair"},
-  {"GAF", "German Air Force"},
+  {"GAF", "German Airforce"},
   {"GPX", "GP Aviation"},
   {"GTI", "Atlas Air"},
   {"HLF", "Central Airlines"},

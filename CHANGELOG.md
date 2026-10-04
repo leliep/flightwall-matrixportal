@@ -11,6 +11,8 @@
 - definierter Git-Wiederherstellungspunkt `pre-flightmatrix-integration-2026-10-04`
 - ausführliche Web- und JSON-Diagnose für ADS-B-Abrufe, Routenfehler,
   Flugzeugdaten, CPA sowie normalen und effektiven Special-Type-Radius
+- direkter Routendienst-Test ohne Cache mit frei eingebbarem Callsign
+- Callsigns mit Präfix `GAF` werden als `German Airforce` erkannt
 - passwortgeschütztes Firmware-Update über das Webinterface
 - passwortgeschützter OTA-Upload aus PlatformIO
 - 3 Bit Farbtiefe mit sieben Helligkeitsstufen und logarithmischer Lux-Regelung

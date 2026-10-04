@@ -28,7 +28,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "3.0.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-04 19:03:30 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-04 19:34:49 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -1731,6 +1731,7 @@ String httpFailureText(int status) {
 
 
 String airlineCode(const String &callsign) {
+  if (callsign.startsWith("GAF")) return "GAF";
   if (callsign.length() < 4) return "";
   for (size_t index = 3; index < callsign.length(); ++index) {
     if (isDigit(callsign[index])) return callsign.substring(0, 3);
@@ -2029,7 +2030,9 @@ String webPage() {
   html += checked(routesEnabled);
   html += F("> Routen über adsb.im ergänzen</label><label>Routen-Dienst<input type='url' name='routeUrl' maxlength='180' value='");
   html += htmlEscape(routeUrl);
-  html += F("'></label><button type='submit' formaction='/test-adsb'>ADS-B-Verbindung testen</button></fieldset>");
+  html += F("'></label><label>Test-Callsign<input type='text' name='routeTestCallsign' maxlength='10' value='DLH123'></label>"
+            "<button type='submit' formaction='/test-route'>Routendienst testen</button> "
+            "<button type='submit' formaction='/test-adsb'>ADS-B-Verbindung testen</button></fieldset>");
   html += F("<fieldset><legend>Anzeigeseiten</legend><label><input type='checkbox' name='smooth' value='1'");
   html += checked(smoothTransitions);
   html += F("> Sanfte Übergänge</label><label>Freitext (maximal 128 Zeichen)<textarea name='customText' maxlength='128' rows='3' style='width:100%;box-sizing:border-box;padding:9px'>");
@@ -2301,6 +2304,51 @@ void handleAdsbTest() {
 }
 
 
+void handleRouteTest() {
+  String callsign = webServer.arg("routeTestCallsign");
+  callsign.trim();
+  callsign.toUpperCase();
+  bool valid = callsign.length() >= 3 && callsign.length() <= 10;
+  for (size_t index = 0; valid && index < callsign.length(); ++index) {
+    valid = isAlphaNumeric(callsign[index]);
+  }
+  if (!valid) callsign = "DLH123";
+
+  String testUrl = webServer.arg("routeUrl");
+  testUrl.trim();
+  if (!testUrl.startsWith("http://") && !testUrl.startsWith("https://"))
+    testUrl = routeUrl;
+  routeClient.configure(true, testUrl);
+  const RouteResult result = routeClient.test(
+      callsign, siteLatitude, siteLongitude);
+  routeClient.configure(routesEnabled, routeUrl);
+  lastRouteError = result.error;
+  const bool reachable = result.error.isEmpty();
+  String detail;
+  if (!reachable) {
+    detail = "Fehler: " + htmlEscape(result.error);
+  } else if (result.found()) {
+    detail = "Route: <b>" + htmlEscape(result.origin) + " → " +
+             htmlEscape(result.destination) + "</b>";
+    if (result.originName.length() || result.destinationName.length()) {
+      detail += " (" + htmlEscape(result.originName) + " → " +
+                htmlEscape(result.destinationName) + ")";
+    }
+    if (result.airlineCode.length())
+      detail += "<br>Airline-Code: <b>" +
+                htmlEscape(result.airlineCode) + "</b>";
+  } else {
+    detail = "Dienst erreichbar, aber keine Route für dieses Callsign gefunden.";
+  }
+  webServer.send(reachable ? 200 : 502, "text/html; charset=utf-8",
+      "<!doctype html><html lang='de'><meta name='viewport' content='width=device-width'>"
+      "<body style='font:18px system-ui;max-width:600px;margin:40px auto;padding:16px'>"
+      "<h1>Routendienst-Test</h1><p>Direkte Abfrage ohne Cache für <b>" +
+      htmlEscape(callsign) + "</b>.</p><p>" + detail +
+      "</p><p><a href='/'>Zurück</a></p></body></html>");
+}
+
+
 void handleStatusApi() {
   FlightData statusFlight;
   String statusError;
@@ -2537,6 +2585,7 @@ void startWebServer() {
   webServer.on("/api/status", HTTP_GET, handleStatusApi);
   webServer.on("/save", HTTP_POST, handleWebSave);
   webServer.on("/test-adsb", HTTP_POST, handleAdsbTest);
+  webServer.on("/test-route", HTTP_POST, handleRouteTest);
   webServer.on("/display-test", HTTP_POST, handleDisplayTest);
   webServer.on("/restart", HTTP_POST, handleRestart);
   webServer.on("/update", HTTP_GET, handleOtaPage);

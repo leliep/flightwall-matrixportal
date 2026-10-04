@@ -194,3 +194,16 @@ RouteResult RouteClient::lookup(const String& callsign, double latitude,
   if (result.error.isEmpty()) writeCache(callsign, result, now);
   return result;
 }
+
+RouteResult RouteClient::test(const String& callsign, double latitude,
+                              double longitude) {
+  if (callsign.isEmpty()) {
+    lastError_ = "Test-Callsign fehlt";
+    RouteResult result;
+    result.error = lastError_;
+    return result;
+  }
+  RouteResult result = fetch(callsign, latitude, longitude);
+  lastError_ = result.error;
+  return result;
+}
