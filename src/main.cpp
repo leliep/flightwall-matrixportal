@@ -28,7 +28,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "3.0.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-04 18:26:21 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-04 19:03:30 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -119,8 +119,13 @@ uint32_t lastWiFiAttempt = 0;
 uint32_t lastPoll = 0;
 uint32_t lastSuccessfulPoll = 0;
 uint32_t networkLastSuccessfulPoll = 0;
+uint32_t lastAdsbAttempt = 0;
+uint32_t lastAdsbSuccess = 0;
+uint32_t lastFeedTimestamp = 0;
 String lastError = "WARTE AUF DATEN";
 String networkLastError = "WARTE AUF DATEN";
+String lastAdsbError = "WARTE AUF DATEN";
+String lastRouteError;
 Preferences preferences;
 WebServer webServer(80);
 SemaphoreHandle_t flightMutex;
@@ -1743,7 +1748,9 @@ String verticalMotion(const Aircraft &aircraft) {
 
 
 bool fetchLocalFlight() {
+  lastAdsbAttempt = millis();
   if (WiFi.status() != WL_CONNECTED) {
+    lastAdsbError = "WLAN GETRENNT";
     setNetworkError("WLAN GETRENNT");
     Serial.println("ADS-B: Wi-Fi is disconnected");
     return false;
@@ -1762,7 +1769,9 @@ bool fetchLocalFlight() {
   const AdsbResult result = adsbClient.fetch(config);
   lastReceivedAircraft = result.receivedAircraft;
   lastCandidateAircraft = result.candidates.size();
+  lastFeedTimestamp = result.feedTimestamp;
   if (!result.ok) {
+    lastAdsbError = result.error.length() ? result.error : "ADS-B FEHLER";
     setNetworkError(result.error.length() ? result.error : "ADS-B FEHLER");
     Serial.printf("ADS-B error: %s\n", result.error.c_str());
     return false;
@@ -1779,6 +1788,7 @@ bool fetchLocalFlight() {
       currentRoute = routeClient.lookup(selected.flight, selected.latitude,
                                         selected.longitude,
                                         result.feedTimestamp);
+      lastRouteError = routeClient.lastError();
     }
 
     next.available = true;
@@ -1822,6 +1832,8 @@ bool fetchLocalFlight() {
     networkLastError = "";
     xSemaphoreGive(flightMutex);
   }
+  lastAdsbSuccess = millis();
+  lastAdsbError = "";
   Serial.printf("ADS-B: %u aircraft, %u candidates, selection %s\n",
                 static_cast<unsigned>(lastReceivedAircraft),
                 static_cast<unsigned>(lastCandidateAircraft),
@@ -1939,6 +1951,27 @@ String unknownCodesJson(bool airports) {
 }
 
 
+String ageText(uint32_t timestamp) {
+  return timestamp ? String((millis() - timestamp) / 1000) + " s zuvor" : "nie";
+}
+
+
+String numberOrDash(float value, uint8_t decimals = 1) {
+  if (isnan(value)) return "-";
+  String text(value, static_cast<unsigned int>(decimals));
+  text.trim();
+  return text;
+}
+
+
+String jsonNumberOrNull(float value, uint8_t decimals = 1) {
+  if (isnan(value)) return "null";
+  String text(value, static_cast<unsigned int>(decimals));
+  text.trim();
+  return text;
+}
+
+
 String webPage() {
   FlightData statusFlight;
   String statusError;
@@ -2041,8 +2074,41 @@ String webPage() {
   html += isnan(filteredLux) ? "-" : String(filteredLux, 1);
   html += F("</b><span>Flug</span><b>");
   html += statusFlight.available ? displayAscii(statusFlight.flight) : "keiner";
+  html += F("</b><span>Airline / Typ</span><b>");
+  html += statusFlight.available
+              ? htmlEscape(displayAscii(statusFlight.airline) + " / " +
+                           displayAscii(statusFlight.type))
+              : "-";
+  html += F("</b><span>Route</span><b>");
+  html += statusFlight.available &&
+                  (statusFlight.origin.length() || statusFlight.destination.length())
+              ? htmlEscape(statusFlight.origin + " → " + statusFlight.destination)
+              : "-";
+  html += F("</b><span>Entfernung / Höhe</span><b>");
+  html += statusFlight.available
+              ? numberOrDash(statusFlight.distanceKm) + " km / " +
+                    numberOrDash(statusFlight.altitudeFt, 0) + " ft"
+              : "-";
+  html += F("</b><span>CPA</span><b>");
+  html += statusFlight.available
+              ? numberOrDash(statusFlight.cpaKm) + " km / " +
+                    numberOrDash(statusFlight.cpaMinutes, 0) + " min"
+              : "-";
+  html += F("</b><span>Special Type</span><b>");
+  html += statusFlight.specialType.length()
+              ? htmlEscape(statusFlight.specialType) : "nein";
+  html += F("</b><span>Radius normal / aktuell</span><b>");
+  html += String(displayRadiusKm, 1) + " / " +
+          String(statusFlight.specialType.length()
+                     ? displayRadiusKm * 2.0f : displayRadiusKm, 1) + " km";
   html += F("</b><span>ADS-B</span><b>");
   html += statusError.length() ? displayAscii(statusError) : "OK";
+  html += F("</b><span>ADS-B-Fehler</span><b>");
+  html += lastAdsbError.length() ? htmlEscape(lastAdsbError) : "keiner";
+  html += F("</b><span>Routenfehler</span><b>");
+  html += lastRouteError.length() ? htmlEscape(lastRouteError) : "keiner";
+  html += F("</b><span>Routenstatus</span><b>");
+  html += htmlEscape(currentRoute.status);
   html += F("</b><span>Quelle</span><b>");
   html += htmlEscape(adsbUrl);
   html += F("</b><span>Empfangen / Kandidaten</span><b>");
@@ -2054,8 +2120,14 @@ String webPage() {
   html += unknownCodesText(true);
   html += F("</b><span>Unbekannte Airlines</span><b>");
   html += unknownCodesText(false);
-  html += F("</b><span>Letzter Abruf</span><b>");
-  html += statusUpdated ? String((millis() - statusUpdated) / 1000) + " s" : "-";
+  html += F("</b><span>Letzter Versuch</span><b>");
+  html += ageText(lastAdsbAttempt);
+  html += F("</b><span>Letzter Erfolg</span><b>");
+  html += ageText(lastAdsbSuccess);
+  html += F("</b><span>Anzeige aktualisiert</span><b>");
+  html += ageText(statusUpdated);
+  html += F("</b><span>ADS-B-Zeitstempel</span><b>");
+  html += lastFeedTimestamp ? String(lastFeedTimestamp) : "-";
   html += F("</b><span>Firmware</span><b>");
   html += APP_VERSION;
   html += F("</b><span>Erstellt</span><b>");
@@ -2230,6 +2302,18 @@ void handleAdsbTest() {
 
 
 void handleStatusApi() {
+  FlightData statusFlight;
+  String statusError;
+  uint32_t statusUpdated = 0;
+  if (xSemaphoreTake(flightMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+    statusFlight = networkFlight;
+    statusError = networkLastError;
+    statusUpdated = networkLastSuccessfulPoll;
+    xSemaphoreGive(flightMutex);
+  }
+  const float effectiveRadiusKm = statusFlight.specialType.length()
+                                      ? displayRadiusKm * 2.0f
+                                      : displayRadiusKm;
   String json = "{\"version\":\"" + jsonEscape(APP_VERSION) +
       "\",\"build\":\"" + jsonEscape(BUILD_TIMESTAMP) +
       "\",\"uptime_seconds\":" + String(millis() / 1000) +
@@ -2243,12 +2327,45 @@ void handleStatusApi() {
       ",\"site_latitude\":" + String(siteLatitude, 6) +
       ",\"site_longitude\":" + String(siteLongitude, 6) +
       ",\"view_heading\":" + String(viewHeading, 0) +
+      ",\"display_radius_km\":" + String(displayRadiusKm, 1) +
+      ",\"effective_radius_km\":" + String(effectiveRadiusKm, 1) +
       ",\"routes_enabled\":" + String(routesEnabled ? "true" : "false") +
       ",\"hide_sport_aircraft\":" + String(hideSportAircraft ? "true" : "false") +
       ",\"altitude_filter_enabled\":" + String(altitudeFilterEnabled ? "true" : "false") +
       ",\"maximum_altitude_ft\":" + String(maximumAltitudeFt) +
       ",\"received_aircraft\":" + String(lastReceivedAircraft) +
       ",\"candidate_aircraft\":" + String(lastCandidateAircraft) +
+      ",\"last_adsb_attempt_age_seconds\":" +
+          (lastAdsbAttempt ? String((millis() - lastAdsbAttempt) / 1000) : "null") +
+      ",\"last_adsb_success_age_seconds\":" +
+          (lastAdsbSuccess ? String((millis() - lastAdsbSuccess) / 1000) : "null") +
+      ",\"display_update_age_seconds\":" +
+          (statusUpdated ? String((millis() - statusUpdated) / 1000) : "null") +
+      ",\"feed_timestamp\":" +
+          (lastFeedTimestamp ? String(lastFeedTimestamp) : "null") +
+      ",\"adsb_error\":\"" + jsonEscape(lastAdsbError) + "\"" +
+      ",\"display_error\":\"" + jsonEscape(statusError) + "\"" +
+      ",\"route_error\":\"" + jsonEscape(lastRouteError) + "\"" +
+      ",\"route_status\":\"" + jsonEscape(currentRoute.status) + "\"" +
+      ",\"flight_available\":" + String(statusFlight.available ? "true" : "false") +
+      ",\"flight\":\"" + jsonEscape(statusFlight.flight) + "\"" +
+      ",\"airline\":\"" + jsonEscape(statusFlight.airline) + "\"" +
+      ",\"aircraft_type\":\"" + jsonEscape(statusFlight.type) + "\"" +
+      ",\"special_type\":\"" + jsonEscape(statusFlight.specialType) + "\"" +
+      ",\"origin\":\"" + jsonEscape(statusFlight.origin) + "\"" +
+      ",\"destination\":\"" + jsonEscape(statusFlight.destination) + "\"" +
+      ",\"distance_km\":" + jsonNumberOrNull(statusFlight.distanceKm) +
+      ",\"altitude_ft\":" + jsonNumberOrNull(statusFlight.altitudeFt, 0) +
+      ",\"speed_kmh\":" + jsonNumberOrNull(statusFlight.speedKmh, 0) +
+      ",\"cpa_km\":" + jsonNumberOrNull(statusFlight.cpaKm) +
+      ",\"cpa_minutes\":" + jsonNumberOrNull(statusFlight.cpaMinutes, 0) +
+      ",\"vertical_rate_fpm\":" +
+          jsonNumberOrNull(statusFlight.verticalRateFpm, 0) +
+      ",\"vertical_motion\":\"" +
+          jsonEscape(statusFlight.verticalMotion) + "\"" +
+      ",\"motion\":\"" + jsonEscape(statusFlight.motion) + "\"" +
+      ",\"relative_bearing\":" +
+          jsonNumberOrNull(statusFlight.relativeBearing) +
       ",\"unknown_airports\":" + unknownCodesJson(true) +
       ",\"unknown_airlines\":" + unknownCodesJson(false) +
       ",\"quiet_hours_enabled\":" + String(quietHoursEnabled ? "true" : "false") +

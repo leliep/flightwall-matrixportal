@@ -9,6 +9,8 @@
 - Flughafen- und Airline-Übersetzungstabellen mit Sammlung unbekannter Codes
 - konfigurierbarer Standort und Standard-Blickrichtung 322°
 - definierter Git-Wiederherstellungspunkt `pre-flightmatrix-integration-2026-10-04`
+- ausführliche Web- und JSON-Diagnose für ADS-B-Abrufe, Routenfehler,
+  Flugzeugdaten, CPA sowie normalen und effektiven Special-Type-Radius
 - passwortgeschütztes Firmware-Update über das Webinterface
 - passwortgeschützter OTA-Upload aus PlatformIO
 - 3 Bit Farbtiefe mit sieben Helligkeitsstufen und logarithmischer Lux-Regelung
