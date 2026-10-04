@@ -1,0 +1,196 @@
+#include "RouteClient.hpp"
+
+#include <ArduinoJson.h>
+#include <HTTPClient.h>
+#include <Preferences.h>
+#include <WiFiClientSecure.h>
+
+#include "AirportNames.hpp"
+#include "UnknownCodes.hpp"
+
+namespace {
+constexpr size_t cacheSlots = 32;
+constexpr uint32_t positiveTtl = 30U * 24U * 60U * 60U;
+constexpr uint32_t negativeTtl = 6U * 60U * 60U;
+
+String cacheKey(size_t slot) {
+  char key[5];
+  snprintf(key, sizeof(key), "r%02u", static_cast<unsigned>(slot));
+  return key;
+}
+
+std::vector<String> split(const String& input, char delimiter) {
+  std::vector<String> values;
+  int start = 0;
+  while (start <= static_cast<int>(input.length())) {
+    int end = input.indexOf(delimiter, start);
+    if (end < 0) end = input.length();
+    values.push_back(input.substring(start, end));
+    start = end + 1;
+  }
+  return values;
+}
+
+String upperTrimmed(String value) {
+  value.trim();
+  value.toUpperCase();
+  return value;
+}
+
+void fillNames(RouteResult& route) {
+  route.originName = airportDisplayName(route.origin);
+  route.destinationName = airportDisplayName(route.destination);
+  if (!route.origin.isEmpty() && route.originName.isEmpty())
+    rememberUnknownAirport(route.origin);
+  if (!route.destination.isEmpty() && route.destinationName.isEmpty())
+    rememberUnknownAirport(route.destination);
+}
+
+void extractCodes(JsonObjectConst row, RouteResult& route) {
+  const char* keys[] = {"_airport_codes_iata", "airport_codes_iata",
+                        "_airport_codes_icao", "airport_codes_icao",
+                        "airport_codes"};
+  for (const char* key : keys) {
+    if (!row[key].is<const char*>()) continue;
+    String codes = row[key].as<String>();
+    codes.replace("->", "-");
+    const int separator = codes.indexOf('-');
+    if (separator > 0) {
+      route.origin = upperTrimmed(codes.substring(0, separator));
+      route.destination = upperTrimmed(codes.substring(separator + 1));
+      return;
+    }
+  }
+
+  JsonVariantConst origin = row["origin"];
+  if (origin.isNull()) origin = row["from"];
+  JsonVariantConst destination = row["destination"];
+  if (destination.isNull()) destination = row["to"];
+  if (origin.is<const char*>()) route.origin = upperTrimmed(origin.as<String>());
+  if (destination.is<const char*>())
+    route.destination = upperTrimmed(destination.as<String>());
+  if (origin.is<JsonObjectConst>())
+    route.origin = upperTrimmed(origin["iata"] | origin["icao"] | "");
+  if (destination.is<JsonObjectConst>())
+    route.destination =
+        upperTrimmed(destination["iata"] | destination["icao"] | "");
+}
+}  // namespace
+
+void RouteClient::configure(bool enabled, const String& url) {
+  enabled_ = enabled;
+  url_ = url;
+}
+
+RouteResult RouteClient::readCache(const String& callsign, uint32_t now) {
+  Preferences preferences;
+  preferences.begin("routecache", true);
+  for (size_t slot = 0; slot < cacheSlots; ++slot) {
+    const String raw = preferences.getString(cacheKey(slot).c_str(), "");
+    if (raw.isEmpty()) continue;
+    const std::vector<String> fields = split(raw, '|');
+    if (fields.size() < 6 || fields[0] != callsign) continue;
+    const uint32_t updated = static_cast<uint32_t>(strtoul(fields[1].c_str(), nullptr, 10));
+    const bool found = fields[2] == "1";
+    const uint32_t ttl = found ? positiveTtl : negativeTtl;
+    if (!now || !updated || now - updated >= ttl) break;
+    RouteResult result;
+    result.origin = fields[3];
+    result.destination = fields[4];
+    result.airlineCode = fields[5];
+    result.status = found ? "cached" : "not_found";
+    fillNames(result);
+    preferences.end();
+    return result;
+  }
+  preferences.end();
+  return {};
+}
+
+void RouteClient::writeCache(const String& callsign, const RouteResult& route,
+                             uint32_t now) {
+  Preferences preferences;
+  if (!preferences.begin("routecache", false)) return;
+  const uint8_t slot = preferences.getUChar("next", 0) % cacheSlots;
+  const String value = callsign + "|" + String(now) + "|" +
+                       (route.found() ? "1" : "0") + "|" + route.origin +
+                       "|" + route.destination + "|" + route.airlineCode;
+  preferences.putString(cacheKey(slot).c_str(), value);
+  preferences.putUChar("next", (slot + 1) % cacheSlots);
+  preferences.end();
+}
+
+RouteResult RouteClient::fetch(const String& callsign, double latitude,
+                               double longitude) {
+  RouteResult result;
+  WiFiClientSecure client;
+  // The ESP32 has no trusted wall clock before ADS-B data arrives. HTTPS still
+  // encrypts transport, but certificate verification is therefore disabled.
+  client.setInsecure();
+  HTTPClient http;
+  http.setConnectTimeout(5000);
+  http.setTimeout(8000);
+  if (!http.begin(client, url_)) {
+    result.error = "Ungültige Routen-Adresse";
+    return result;
+  }
+
+  JsonDocument request;
+  JsonObject plane = request["planes"].add<JsonObject>();
+  plane["callsign"] = callsign;
+  plane["lat"] = latitude;
+  plane["lng"] = longitude;
+  String body;
+  serializeJson(request, body);
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("Accept", "application/json");
+  const int status = http.POST(body);
+  if (status != HTTP_CODE_OK) {
+    result.error = "Routen-HTTP " + String(status);
+    http.end();
+    return result;
+  }
+
+  JsonDocument document;
+  const DeserializationError error = deserializeJson(document, http.getStream());
+  http.end();
+  if (error) {
+    result.error = "Routen-JSON: " + String(error.c_str());
+    return result;
+  }
+
+  JsonArrayConst rows;
+  if (document.is<JsonArrayConst>()) rows = document.as<JsonArrayConst>();
+  else if (document["routes"].is<JsonArrayConst>())
+    rows = document["routes"].as<JsonArrayConst>();
+  else if (document["planes"].is<JsonArrayConst>())
+    rows = document["planes"].as<JsonArrayConst>();
+  for (JsonObjectConst row : rows) {
+    const String returned = upperTrimmed(row["callsign"] | "");
+    if (!returned.isEmpty() && returned != callsign) continue;
+    extractCodes(row, result);
+    result.airlineCode = upperTrimmed(row["airline_code"] | "");
+    break;
+  }
+  fillNames(result);
+  result.status = result.found() ? "current" : "not_found";
+  return result;
+}
+
+RouteResult RouteClient::lookup(const String& callsign, double latitude,
+                                double longitude, uint32_t now) {
+  if (!enabled_ || callsign.isEmpty()) {
+    lastError_ = "";
+    return {};
+  }
+  RouteResult cached = readCache(callsign, now);
+  if (cached.status != "unavailable") {
+    lastError_ = "";
+    return cached;
+  }
+
+  RouteResult result = fetch(callsign, latitude, longitude);
+  lastError_ = result.error;
+  if (result.error.isEmpty()) writeCache(callsign, result, now);
+  return result;
+}

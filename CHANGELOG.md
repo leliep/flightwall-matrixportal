@@ -2,11 +2,18 @@
 
 ## Unreleased
 
+- FlightMatrixServer-Funktionen direkt in den MatrixPortal ESP32-S3 integriert
+- direkter ADS-B-Abruf und lokale Auswahl des anzuzeigenden Flugzeugs
+- lokale CPA-, Richtungs-, Special-Type-, Kleinflugzeug- und Höhenauswertung
+- Routenabfrage über adsb.im mit NVS-Cache
+- Flughafen- und Airline-Übersetzungstabellen mit Sammlung unbekannter Codes
+- konfigurierbarer Standort und Standard-Blickrichtung 322°
+- definierter Git-Wiederherstellungspunkt `pre-flightmatrix-integration-2026-10-04`
 - passwortgeschütztes Firmware-Update über das Webinterface
 - passwortgeschützter OTA-Upload aus PlatformIO
 - 3 Bit Farbtiefe mit sieben Helligkeitsstufen und logarithmischer Lux-Regelung
 - schwarzes Display während OTA-Flashzugriffen zur Unterdrückung sichtbarer Störungen
-- konfigurierbarer FlightWall-Host, Port und API-Pfad mit Verbindungstest
+- konfigurierbare ADS-B- und Routen-Adressen mit Verbindungstest
 - einzeln aktivierbare und frei sortierbare Seiten mit eigener Anzeigedauer
 - optionale sanfte Seitenübergänge und Symbole für Special Types
 - sichtbare OTA-Vorankündigung vor dem Abdunkeln

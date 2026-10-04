@@ -1,12 +1,17 @@
 # FlightWall MatrixPortal
 
 ESP32-S3-Firmware für zwei horizontal verkettete 64×32-HUB75-Panels. Das
-Adafruit MatrixPortal S3 zeigt das vom FlightWall-Server ausgewählte Flugzeug
-auf einer 128×32-Pixel-Anzeige an.
+Adafruit MatrixPortal S3 liest ADS-B-Daten direkt ein, wählt das relevante
+Flugzeug aus, ergänzt Route und Namen und steuert die 128×32-Pixel-Anzeige.
+Ein separater FlightMatrixServer ist nicht mehr erforderlich.
 
-## Version 2.0
+## Version 3.0
 
-- FlightWall-Daten von `http://raspi-flw:8088/api/state`
+- direkte readsb-/dump1090-Datenquelle (`aircraft.json`)
+- lokale Flugzeugauswahl mit CPA, Kleinflugzeug- und Höhenfilter
+- doppelter Erfassungsradius für Special Types
+- Routenabfrage über adsb.im mit lokalem Cache
+- integrierte Flughafen- und Airline-Übersetzungstabellen
 - HUB75-Ausgabe mit 3 Bit Farbtiefe und sieben Helligkeitsstufen
 - Dual-Core-Betrieb: Netzwerk und Webserver auf Core 0, Display und Sensorik
   auf Core 1
@@ -27,6 +32,17 @@ auf einer 128×32-Pixel-Anzeige an.
 
 `include/secrets.h` wird durch `.gitignore` vom Repository ausgeschlossen.
 
+## Wiederherstellungspunkt
+
+Der letzte bekannte Stand vor der Server-Integration ist in GitHub mit dem
+Tag `pre-flightmatrix-integration-2026-10-04` gesichert. Er kann jederzeit in
+einen eigenen Wiederherstellungszweig ausgecheckt werden:
+
+```bash
+git fetch --tags
+git switch -c restore-pre-integration pre-flightmatrix-integration-2026-10-04
+```
+
 ## Webinterface
 
 Nach erfolgreicher WLAN-Verbindung ist die Konfiguration normalerweise unter
@@ -34,18 +50,19 @@ Nach erfolgreicher WLAN-Verbindung ist die Konfiguration normalerweise unter
 funktioniert, zeigt der serielle Monitor die IP-Adresse an.
 
 Konfigurierbar sind Display ein/aus, automatische oder manuelle Helligkeit,
-Lux-Schwellen, lokaler Anzeigeradius und eine tägliche Nachtruhe. Der Zeitraum
+Lux-Schwellen, lokaler Anzeigeradius, Standort, Blickrichtung, ADS-B-Quelle,
+Routendienst, Kleinflugzeug- und Höhenfilter sowie eine tägliche Nachtruhe. Der Zeitraum
 darf über Mitternacht reichen, beispielsweise von 23:55 bis 05:55. Während
 dieser Zeit bleibt die Matrix einschließlich Betriebs-Pixel vollständig dunkel;
 Netzwerk, Datenabruf, Webinterface und OTA bleiben aktiv. Die lokale Uhrzeit
 wird per NTP bezogen und automatisch zwischen MEZ und MESZ umgestellt.
 Wenn kein Flugzeug angezeigt wird, blinkt der Betriebs-Pixel unten links bei
-erfolgreicher FlightWall-Verbindung weiß. Nach einem fehlgeschlagenen
-Serverabruf blinkt er rot, bis wieder gültige Daten empfangen wurden.
+erfolgreichem ADS-B-Abruf weiß. Nach einem fehlgeschlagenen
+Datenabruf blinkt er rot, bis wieder gültige Daten empfangen wurden.
 Für die Blickrichtung werden außerdem die Standorthöhe über NHN und die
 Entfernungsgrenze für `weit` gespeichert.
-Host, Port und API-Pfad des
-FlightWall-Servers lassen sich ändern und direkt testen. Die sieben
+Die vollständige ADS-B-URL und der Routendienst lassen sich ändern und direkt
+testen. Die sieben
 Anzeigeseiten können einzeln aktiviert, frei sortiert und mit einer eigenen
 Dauer versehen werden. Sanfte Übergänge sind optional. Das Webinterface ist
 für ein vertrauenswürdiges lokales WLAN gedacht und hat derzeit keine eigene
@@ -57,7 +74,7 @@ und Farbbalken. Anschließend zeigt er alle sieben 14×7-Typensymbole jeweils
 zusammen mit ihrer Bedeutung. Nach etwa 23 Sekunden endet er automatisch;
 über denselben Schalter kann er vorher beendet werden.
 
-Die Seite **Flughafennamen** zeigt – sofern vom FlightWall-Server geliefert –
+Die Seite **Flughafennamen** zeigt – sofern eine Route ermittelt wurde –
 die Langnamen des Start- und Zielflughafens. Namen, die breiter als das Display
 sind, werden vollständig horizontal gescrollt; dafür verlängert die Firmware
 die konfigurierte Seitendauer bei Bedarf automatisch. Fehlt ein Langname, wird
@@ -88,7 +105,7 @@ Die Geschwindigkeit erscheint bei ausreichendem Platz als beispielsweise
 das Steig-/Sinkdreieck, trennt nach Möglichkeit ein Leerzeichen Höhe und
 Geschwindigkeit; nur bei Platzmangel wird der Abstand verkleinert.
 Fehlende Routenteile erzeugen kein einzelnes Trennzeichen. Alle Werte werden
-mit den laufenden FlightWall-Abrufen aktualisiert. Für Hubschrauber, A380,
+mit den laufenden ADS-B-Abrufen aktualisiert. Für Hubschrauber, A380,
 Militär, Polizei, Regierung und Luftschiff (`SHIP`) verwendet sie eigene
 14×7-Symbole; unbekannte Special Types erhalten ein allgemeines Symbol.
 
@@ -115,7 +132,7 @@ Flugzeughöhe und konfigurierter Standorthöhe. Bis 10° vom Zenit erscheint
 gelten `vorne`, `links`, `rechts`, `hinten` und die beiden Schulterangaben;
 ab der konfigurierten Entfernung werden die vier groben Richtungen mit `weit`
 gekennzeichnet. Eine Winkel- und Entfernungshysterese verhindert springende
-Texte an den Grenzen. Die FlightWall-API bleibt unverändert.
+Texte an den Grenzen.
 
 Special Types erhalten ein kleines farbiges Symbol neben der Flugzeugkennung.
 Vor einem OTA-Flashvorgang erscheint kurz `OTA UPDATE / BITTE WARTEN`; danach
@@ -176,7 +193,8 @@ erneut.
 
 Die Statusseite zeigt Firmwareversion und Erstellungszeitpunkt, Laufzeit,
 freien und minimal freien RAM, WLAN-Signal, Luxwert, Helligkeitsstufe,
-Zeitpunkt des letzten FlightWall-Abrufs, Core-Zuordnung, Stackreserven und den
+Zeitpunkt des letzten ADS-B-Abrufs, empfangene und geeignete Flugzeuge,
+unbekannte Flughafen- und Airline-Codes, Core-Zuordnung, Stackreserven und den
 Grund des letzten Neustarts. Über eine bestätigungspflichtige Schaltfläche kann
 der ESP neu gestartet werden. Maschinenlesbare Basiswerte stehen zusätzlich
 unter `/api/status` als JSON bereit.

@@ -13,6 +13,12 @@
 
 #include <Adafruit_GFX.h>
 #include <Adafruit_Protomatter.h>
+#include "AdsbClient.hpp"
+#include "AircraftProcessor.hpp"
+#include "AirlineNames.hpp"
+#include "Geo.hpp"
+#include "RouteClient.hpp"
+#include "UnknownCodes.hpp"
 #include "secrets.h"
 
 #ifndef OTA_PASSWORD
@@ -21,8 +27,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "2.1.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-03 12:17:49 CEST";
+constexpr char APP_VERSION[] = "3.0.0-dev";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-04 18:26:21 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -58,9 +64,13 @@ constexpr float ABOVE_ZENITH_DEG = 30.0f;
 constexpr float ZENITH_HYSTERESIS_DEG = 2.0f;
 constexpr float FAR_DISTANCE_HYSTERESIS_KM = 0.3f;
 
-constexpr char DEFAULT_FLIGHTWALL_HOST[] = "raspi-flw";
-constexpr uint16_t DEFAULT_FLIGHTWALL_PORT = 8088;
-constexpr char DEFAULT_FLIGHTWALL_PATH[] = "/api/state";
+constexpr char DEFAULT_ADSB_URL[] =
+    "http://t-eddl146.fritz.box:8080/data/aircraft.json";
+constexpr char DEFAULT_ROUTE_URL[] = "https://adsb.im/api/0/routeset";
+constexpr double DEFAULT_SITE_LATITUDE = 51.122500;
+constexpr double DEFAULT_SITE_LONGITUDE = 6.839444;
+constexpr float DEFAULT_VIEW_HEADING = 322.0f;
+constexpr int DEFAULT_MAXIMUM_ALTITUDE_FT = 15000;
 constexpr char LOCAL_TIME_ZONE[] = "CET-1CEST,M3.5.0,M10.5.0/3";
 constexpr char NTP_SERVER_PRIMARY[] = "pool.ntp.org";
 constexpr char NTP_SERVER_SECONDARY[] = "time.cloudflare.com";
@@ -153,9 +163,22 @@ float farDirectionDistanceKm = 5.0f;
 uint32_t pageIntervalMs = DEFAULT_PAGE_INTERVAL_MS;
 float lowLuxThreshold = 20.0f;
 float highLuxThreshold = 800.0f;
-String flightwallHost = DEFAULT_FLIGHTWALL_HOST;
-uint16_t flightwallPort = DEFAULT_FLIGHTWALL_PORT;
-String flightwallPath = DEFAULT_FLIGHTWALL_PATH;
+String adsbUrl = DEFAULT_ADSB_URL;
+String routeUrl = DEFAULT_ROUTE_URL;
+double siteLatitude = DEFAULT_SITE_LATITUDE;
+double siteLongitude = DEFAULT_SITE_LONGITUDE;
+float viewHeading = DEFAULT_VIEW_HEADING;
+bool routesEnabled = true;
+bool hideSportAircraft = true;
+bool altitudeFilterEnabled = false;
+int maximumAltitudeFt = DEFAULT_MAXIMUM_ALTITUDE_FT;
+AdsbClient adsbClient("");
+RouteClient routeClient;
+String routedFlight;
+RouteResult currentRoute;
+uint32_t lastRouteAttempt = 0;
+size_t lastReceivedAircraft = 0;
+size_t lastCandidateAircraft = 0;
 String customPageText;
 bool pageEnabled[] = {true, true, true, true, true, true, true};
 uint8_t pageOrder[] = {0, 1, 2, 3, 4, 5, 6};
@@ -1192,8 +1215,11 @@ void drawStatus(const String &line1, const String &line2) {
 
 
 bool aircraftIsInsideDisplayRadius() {
+  const float allowedRadius = flight.specialType.length()
+                                  ? displayRadiusKm * 2.0f
+                                  : displayRadiusKm;
   return flight.available && !isnan(flight.distanceKm) &&
-         flight.distanceKm <= displayRadiusKm;
+         flight.distanceKm <= allowedRadius;
 }
 
 
@@ -1699,85 +1725,96 @@ String httpFailureText(int status) {
 }
 
 
-bool fetchFlightWall() {
+String airlineCode(const String &callsign) {
+  if (callsign.length() < 4) return "";
+  for (size_t index = 3; index < callsign.length(); ++index) {
+    if (isDigit(callsign[index])) return callsign.substring(0, 3);
+  }
+  return "";
+}
+
+
+String verticalMotion(const Aircraft &aircraft) {
+  if (!aircraft.hasVerticalRate) return "unbekannt";
+  if (aircraft.verticalRateFpm > 64) return "steigt";
+  if (aircraft.verticalRateFpm < -64) return "sinkt";
+  return "haelt";
+}
+
+
+bool fetchLocalFlight() {
   if (WiFi.status() != WL_CONNECTED) {
     setNetworkError("WLAN GETRENNT");
-    Serial.println("FlightWall: Wi-Fi is disconnected");
+    Serial.println("ADS-B: Wi-Fi is disconnected");
     return false;
   }
 
-  IPAddress serverAddress;
-  const String host = flightwallHost;
-  const uint16_t port = flightwallPort;
-  String path = flightwallPath;
-  if (!path.startsWith("/")) path = "/" + path;
-  if (WiFi.hostByName(host.c_str(), serverAddress) != 1) {
-    setNetworkError("DNS FEHLER");
-    Serial.print("FlightWall: DNS lookup failed for ");
-    Serial.println(host);
-    return false;
-  }
-  Serial.print("FlightWall: ");
-  Serial.print(host);
-  Serial.print(" resolved to ");
-  Serial.println(serverAddress);
+  ProcessingConfig config;
+  config.latitude = siteLatitude;
+  config.longitude = siteLongitude;
+  config.maxPositionAgeSeconds = 15.0f;
+  config.radiusKm = displayRadiusKm;
+  config.hideSportAircraft = hideSportAircraft;
+  config.maximumAltitudeFt = altitudeFilterEnabled ? maximumAltitudeFt : 0;
+  adsbClient.setUrl(adsbUrl);
+  routeClient.configure(routesEnabled, routeUrl);
 
-  WiFiClient client;
-  HTTPClient http;
-  http.useHTTP10(true);
-  http.setConnectTimeout(3000);
-  http.setTimeout(4000);
-
-  const String url = "http://" + host + ":" + String(port) + path;
-  if (!http.begin(client, url)) {
-    setNetworkError("URL FEHLER");
+  const AdsbResult result = adsbClient.fetch(config);
+  lastReceivedAircraft = result.receivedAircraft;
+  lastCandidateAircraft = result.candidates.size();
+  if (!result.ok) {
+    setNetworkError(result.error.length() ? result.error : "ADS-B FEHLER");
+    Serial.printf("ADS-B error: %s\n", result.error.c_str());
     return false;
   }
 
-  const int status = http.GET();
-  if (status != HTTP_CODE_OK) {
-    if (status < 0) {
-      setNetworkError(httpFailureText(status));
-      Serial.print("FlightWall transport error ");
-      Serial.print(status);
-      Serial.print(": ");
-      Serial.println(HTTPClient::errorToString(status));
-    } else {
-      setNetworkError("HTTP " + String(status));
-      Serial.print("FlightWall HTTP status: ");
-      Serial.println(status);
-    }
-    http.end();
-    return false;
-  }
-
-  const String json = http.getString();
-  if (json.indexOf("\"available\"") < 0) {
-    setNetworkError("JSON FEHLER");
-    Serial.println("FlightWall: response does not contain 'available'");
-    http.end();
-    return false;
-  }
   FlightData next;
-  next.available = jsonBoolean(json, "available");
-  next.flight = jsonString(json, "flight");
-  next.airline = jsonString(json, "airline");
-  next.type = jsonString(json, "type");
-  next.direction = jsonString(json, "direction");
-  next.verticalMotion = jsonString(json, "vertical_motion");
-  next.motion = jsonString(json, "motion");
-  next.origin = jsonString(json, "origin");
-  next.destination = jsonString(json, "destination");
-  next.originName = jsonString(json, "origin_name");
-  next.destinationName = jsonString(json, "destination_name");
-  next.distanceKm = jsonNumber(json, "distance_km");
-  next.altitudeFt = jsonNumber(json, "altitude_ft");
-  next.speedKmh = jsonNumber(json, "speed_kmh");
-  next.cpaKm = jsonNumber(json, "cpa_km");
-  next.cpaMinutes = jsonNumber(json, "cpa_minutes");
-  next.verticalRateFpm = jsonNumber(json, "vertical_rate_fpm");
-  next.relativeBearing = jsonNumber(json, "relative_bearing");
-  next.specialType = jsonFirstArrayString(json, "special_types");
+  Aircraft selected;
+  if (selectAircraft(result.candidates, config, selected)) {
+    const bool retryRoute = currentRoute.status == "unavailable" &&
+                            millis() - lastRouteAttempt >= 60000;
+    if (selected.flight != routedFlight || retryRoute) {
+      routedFlight = selected.flight;
+      lastRouteAttempt = millis();
+      currentRoute = routeClient.lookup(selected.flight, selected.latitude,
+                                        selected.longitude,
+                                        result.feedTimestamp);
+    }
+
+    next.available = true;
+    next.flight = selected.flight.length() ? selected.flight : selected.hex;
+    const String code = currentRoute.airlineCode.length()
+                            ? currentRoute.airlineCode
+                            : airlineCode(selected.flight);
+    const String translatedAirline = airlineDisplayName(code);
+    if (!code.isEmpty() && translatedAirline.isEmpty())
+      rememberUnknownAirline(code);
+    next.airline = selected.airline.length() ? selected.airline
+                                             : translatedAirline;
+    if (next.airline.isEmpty()) next.airline = code;
+    next.type = selected.type;
+    next.specialType = selected.specialTypes.empty()
+                           ? "" : selected.specialTypes.front();
+    next.direction = selected.direction;
+    next.verticalMotion = verticalMotion(selected);
+    next.motion = selected.motion;
+    next.origin = currentRoute.origin;
+    next.destination = currentRoute.destination;
+    next.originName = currentRoute.originName;
+    next.destinationName = currentRoute.destinationName;
+    next.distanceKm = selected.distanceKm;
+    next.altitudeFt = selected.hasAltitude ? selected.altitudeFt : NAN;
+    next.speedKmh = selected.hasSpeed ? selected.speedKn * 1.852f : NAN;
+    next.cpaKm = selected.hasCpa ? selected.cpaKm : NAN;
+    next.cpaMinutes = selected.hasCpaMinutes && selected.cpaMinutes >= 0.0f
+                          ? selected.cpaMinutes : NAN;
+    next.verticalRateFpm = selected.hasVerticalRate
+                               ? selected.verticalRateFpm : NAN;
+    next.relativeBearing = relativeBearing(selected.bearing, viewHeading);
+  } else {
+    routedFlight = "";
+    currentRoute = {};
+  }
 
   if (xSemaphoreTake(flightMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
     networkFlight = next;
@@ -1785,7 +1822,10 @@ bool fetchFlightWall() {
     networkLastError = "";
     xSemaphoreGive(flightMutex);
   }
-  http.end();
+  Serial.printf("ADS-B: %u aircraft, %u candidates, selection %s\n",
+                static_cast<unsigned>(lastReceivedAircraft),
+                static_cast<unsigned>(lastCandidateAircraft),
+                next.available ? next.flight.c_str() : "none");
   return true;
 }
 
@@ -1876,6 +1916,29 @@ String jsonEscape(String value) {
 }
 
 
+String unknownCodesText(bool airports) {
+  const size_t count = airports ? unknownAirportCount() : unknownAirlineCount();
+  String text;
+  for (size_t index = 0; index < count; ++index) {
+    if (index) text += ", ";
+    text += airports ? unknownAirportAt(index) : unknownAirlineAt(index);
+  }
+  return text.length() ? text : "keine";
+}
+
+
+String unknownCodesJson(bool airports) {
+  const size_t count = airports ? unknownAirportCount() : unknownAirlineCount();
+  String json = "[";
+  for (size_t index = 0; index < count; ++index) {
+    if (index) json += ',';
+    json += "\"" + jsonEscape(airports ? unknownAirportAt(index)
+                                         : unknownAirlineAt(index)) + "\"";
+  }
+  return json + "]";
+}
+
+
 String webPage() {
   FlightData statusFlight;
   String statusError;
@@ -1894,10 +1957,10 @@ String webPage() {
   html += F("<title>FlightWall MatrixPortal</title><style>");
   html += F("body{font:16px system-ui;background:#10131a;color:#eef2ff;margin:auto;max-width:720px;padding:20px}");
   html += F("h1{font-size:1.5rem}fieldset{border:1px solid #445;border-radius:10px;margin:14px 0;padding:14px}");
-  html += F("label{display:block;margin:12px 0}input[type=number],select{width:100%;box-sizing:border-box;padding:9px}");
+  html += F("label{display:block;margin:12px 0}input[type=number],input[type=text],input[type=url],select{width:100%;box-sizing:border-box;padding:9px}");
   html += F("button{background:#00bcd4;color:#001018;border:0;border-radius:8px;padding:12px 18px;font-weight:bold}");
   html += F(".status{display:grid;grid-template-columns:auto 1fr;gap:6px 14px}.muted{color:#aab}</style></head><body>");
-  html += F("<h1>FlightWall MatrixPortal 2.0</h1><form method='post' action='/save'>");
+  html += F("<h1>FlightWall MatrixPortal 3.0</h1><form method='post' action='/save'>");
   html += F("<fieldset><legend>Display</legend><label><input type='checkbox' name='display' value='1'");
   html += checked(displayEnabled);
   html += F("> Display eingeschaltet</label><label>Anzeigeradius (km)<input type='number' name='radius' min='1' max='100' step='0.5' value='");
@@ -1915,13 +1978,25 @@ String webPage() {
   html += F("'></label><p class='muted'>Die Nachtruhe darf über Mitternacht reichen. Gleiche Zeiten deaktivieren die Abdunklung.</p><button type='submit' formaction='/display-test'>");
   html += (displayTestActive || displayTestCommand == 1) ?
       "Displaytest beenden" : "Displaytest starten";
-  html += F("</button><p class='muted'>Etwa 23 Sekunden: Matrix-Prüfbilder und alle Typensymbole mit Bedeutung.</p></fieldset><fieldset><legend>FlightWall-Verbindung</legend><label>Host<input name='fwHost' maxlength='63' value='");
-  html += htmlEscape(flightwallHost);
-  html += F("'></label><label>Port<input type='number' name='fwPort' min='1' max='65535' value='");
-  html += String(flightwallPort);
-  html += F("'></label><label>API-Pfad<input name='fwPath' maxlength='96' value='");
-  html += htmlEscape(flightwallPath);
-  html += F("'></label><button type='submit' formaction='/test-flightwall'>Verbindung testen</button></fieldset>");
+  html += F("</button><p class='muted'>Etwa 23 Sekunden: Matrix-Prüfbilder und alle Typensymbole mit Bedeutung.</p></fieldset><fieldset><legend>Flugzeugdaten</legend><label>ADS-B-Adresse<input type='url' name='adsbUrl' maxlength='180' value='");
+  html += htmlEscape(adsbUrl);
+  html += F("'></label><label>Breitengrad<input type='number' name='siteLat' min='-90' max='90' step='0.000001' value='");
+  html += String(siteLatitude, 6);
+  html += F("'></label><label>Längengrad<input type='number' name='siteLon' min='-180' max='180' step='0.000001' value='");
+  html += String(siteLongitude, 6);
+  html += F("'></label><label>Blickrichtung (Grad)<input type='number' name='viewHeading' min='0' max='359' step='1' value='");
+  html += String(viewHeading, 0);
+  html += F("'></label><label><input type='checkbox' name='hideSport' value='1'");
+  html += checked(hideSportAircraft);
+  html += F("> Sport- und Kleinflugzeuge ausblenden</label><label><input type='checkbox' name='altitudeFilter' value='1'");
+  html += checked(altitudeFilterEnabled);
+  html += F("> Flugzeuge oberhalb der Maximalhöhe ausblenden</label><label>Maximalhöhe (ft)<input type='number' name='maximumAltitude' min='1000' max='100000' step='500' value='");
+  html += String(maximumAltitudeFt);
+  html += F("'></label><label><input type='checkbox' name='routesEnabled' value='1'");
+  html += checked(routesEnabled);
+  html += F("> Routen über adsb.im ergänzen</label><label>Routen-Dienst<input type='url' name='routeUrl' maxlength='180' value='");
+  html += htmlEscape(routeUrl);
+  html += F("'></label><button type='submit' formaction='/test-adsb'>ADS-B-Verbindung testen</button></fieldset>");
   html += F("<fieldset><legend>Anzeigeseiten</legend><label><input type='checkbox' name='smooth' value='1'");
   html += checked(smoothTransitions);
   html += F("> Sanfte Übergänge</label><label>Freitext (maximal 128 Zeichen)<textarea name='customText' maxlength='128' rows='3' style='width:100%;box-sizing:border-box;padding:9px'>");
@@ -1966,10 +2041,19 @@ String webPage() {
   html += isnan(filteredLux) ? "-" : String(filteredLux, 1);
   html += F("</b><span>Flug</span><b>");
   html += statusFlight.available ? displayAscii(statusFlight.flight) : "keiner";
-  html += F("</b><span>FlightWall</span><b>");
+  html += F("</b><span>ADS-B</span><b>");
   html += statusError.length() ? displayAscii(statusError) : "OK";
-  html += F("</b><span>API</span><b>");
-  html += htmlEscape(flightwallHost + ":" + String(flightwallPort) + flightwallPath);
+  html += F("</b><span>Quelle</span><b>");
+  html += htmlEscape(adsbUrl);
+  html += F("</b><span>Empfangen / Kandidaten</span><b>");
+  html += String(lastReceivedAircraft) + " / " + String(lastCandidateAircraft);
+  html += F("</b><span>Standort / Blickrichtung</span><b>");
+  html += String(siteLatitude, 6) + " / " + String(siteLongitude, 6) +
+          " / " + String(viewHeading, 0) + "°";
+  html += F("</b><span>Unbekannte Flughäfen</span><b>");
+  html += unknownCodesText(true);
+  html += F("</b><span>Unbekannte Airlines</span><b>");
+  html += unknownCodesText(false);
   html += F("</b><span>Letzter Abruf</span><b>");
   html += statusUpdated ? String((millis() - statusUpdated) / 1000) + " s" : "-";
   html += F("</b><span>Firmware</span><b>");
@@ -2051,16 +2135,22 @@ void applyWebSettings() {
     customPageText = displayAscii(webServer.arg("customText"));
     customPageText.trim();
     if (customPageText.length() > 128) customPageText.remove(128);
-    String requestedHost = webServer.arg("fwHost");
-    requestedHost.trim();
-    if (validFlightWallHost(requestedHost)) flightwallHost = requestedHost;
-    flightwallPort = constrain(webServer.arg("fwPort").toInt(), 1, 65535);
-    String requestedPath = webServer.arg("fwPath");
-    requestedPath.trim();
-    if (!requestedPath.startsWith("/")) requestedPath = "/" + requestedPath;
-    if (requestedPath.length() >= 2 && requestedPath.length() <= 96) {
-      flightwallPath = requestedPath;
-    }
+    String requestedAdsbUrl = webServer.arg("adsbUrl");
+    requestedAdsbUrl.trim();
+    if (requestedAdsbUrl.startsWith("http://") ||
+        requestedAdsbUrl.startsWith("https://")) adsbUrl = requestedAdsbUrl;
+    String requestedRouteUrl = webServer.arg("routeUrl");
+    requestedRouteUrl.trim();
+    if (requestedRouteUrl.startsWith("http://") ||
+        requestedRouteUrl.startsWith("https://")) routeUrl = requestedRouteUrl;
+    siteLatitude = constrain(webServer.arg("siteLat").toDouble(), -90.0, 90.0);
+    siteLongitude = constrain(webServer.arg("siteLon").toDouble(), -180.0, 180.0);
+    viewHeading = constrain(webServer.arg("viewHeading").toFloat(), 0.0f, 359.0f);
+    routesEnabled = webServer.hasArg("routesEnabled");
+    hideSportAircraft = webServer.hasArg("hideSport");
+    altitudeFilterEnabled = webServer.hasArg("altitudeFilter");
+    maximumAltitudeFt = constrain(
+        webServer.arg("maximumAltitude").toInt(), 1000, 100000);
     smoothTransitions = webServer.hasArg("smooth");
     bool anyPageEnabled = false;
     for (uint8_t page = 0; page < PAGE_COUNT; ++page) {
@@ -2098,9 +2188,15 @@ void applyWebSettings() {
     preferences.putFloat("farKm", farDirectionDistanceKm);
     preferences.putFloat("lowLux", lowLuxThreshold);
     preferences.putFloat("highLux", highLuxThreshold);
-    preferences.putString("fwHost", flightwallHost);
-    preferences.putUShort("fwPort", flightwallPort);
-    preferences.putString("fwPath", flightwallPath);
+    preferences.putString("adsbUrl", adsbUrl);
+    preferences.putString("routeUrl", routeUrl);
+    preferences.putDouble("siteLat", siteLatitude);
+    preferences.putDouble("siteLon", siteLongitude);
+    preferences.putFloat("heading", viewHeading);
+    preferences.putBool("routesOn", routesEnabled);
+    preferences.putBool("hideSport", hideSportAircraft);
+    preferences.putBool("altFilter", altitudeFilterEnabled);
+    preferences.putInt("maxAltFt", maximumAltitudeFt);
     preferences.putString("customText", customPageText);
     preferences.putBool("smooth", smoothTransitions);
     for (uint8_t page = 0; page < PAGE_COUNT; ++page) {
@@ -2121,14 +2217,14 @@ void handleWebSave() {
 }
 
 
-void handleFlightWallTest() {
+void handleAdsbTest() {
   applyWebSettings();
-  const bool success = fetchFlightWall();
+  const bool success = fetchLocalFlight();
   const String message = success ? "Verbindung erfolgreich." :
       "Verbindung fehlgeschlagen: " + networkLastError;
   webServer.send(success ? 200 : 502, "text/html; charset=utf-8",
       "<!doctype html><html lang='de'><meta name='viewport' content='width=device-width'>"
-      "<body style='font:18px system-ui;max-width:600px;margin:40px auto'><h1>FlightWall-Test</h1><p>" +
+      "<body style='font:18px system-ui;max-width:600px;margin:40px auto'><h1>ADS-B-Test</h1><p>" +
       htmlEscape(message) + "</p><p><a href='/'>Zurueck</a></p></body></html>");
 }
 
@@ -2143,6 +2239,18 @@ void handleStatusApi() {
       ",\"brightness_percent\":" + String(BRIGHTNESS_LEVELS[brightnessIndex]) +
       ",\"observer_elevation_m\":" + String(observerElevationM, 0) +
       ",\"far_direction_km\":" + String(farDirectionDistanceKm, 1) +
+      ",\"adsb_url\":\"" + jsonEscape(adsbUrl) + "\"" +
+      ",\"site_latitude\":" + String(siteLatitude, 6) +
+      ",\"site_longitude\":" + String(siteLongitude, 6) +
+      ",\"view_heading\":" + String(viewHeading, 0) +
+      ",\"routes_enabled\":" + String(routesEnabled ? "true" : "false") +
+      ",\"hide_sport_aircraft\":" + String(hideSportAircraft ? "true" : "false") +
+      ",\"altitude_filter_enabled\":" + String(altitudeFilterEnabled ? "true" : "false") +
+      ",\"maximum_altitude_ft\":" + String(maximumAltitudeFt) +
+      ",\"received_aircraft\":" + String(lastReceivedAircraft) +
+      ",\"candidate_aircraft\":" + String(lastCandidateAircraft) +
+      ",\"unknown_airports\":" + unknownCodesJson(true) +
+      ",\"unknown_airlines\":" + unknownCodesJson(false) +
       ",\"quiet_hours_enabled\":" + String(quietHoursEnabled ? "true" : "false") +
       ",\"quiet_hours_active\":" + String(quietHoursAreActive() ? "true" : "false") +
       ",\"display_test\":" + String(displayTestActive ? "true" : "false") +
@@ -2311,7 +2419,7 @@ void startWebServer() {
   webServer.on("/", HTTP_GET, []() { webServer.send(200, "text/html; charset=utf-8", webPage()); });
   webServer.on("/api/status", HTTP_GET, handleStatusApi);
   webServer.on("/save", HTTP_POST, handleWebSave);
-  webServer.on("/test-flightwall", HTTP_POST, handleFlightWallTest);
+  webServer.on("/test-adsb", HTTP_POST, handleAdsbTest);
   webServer.on("/display-test", HTTP_POST, handleDisplayTest);
   webServer.on("/restart", HTTP_POST, handleRestart);
   webServer.on("/update", HTTP_GET, handleOtaPage);
@@ -2329,7 +2437,7 @@ void networkTask(void *) {
   lastWiFiAttempt = millis();
   if (connectWiFi(20000)) {
     startWebServer();
-    fetchFlightWall();
+    fetchLocalFlight();
     lastPoll = millis();
   }
   for (;;) {
@@ -2346,7 +2454,7 @@ void networkTask(void *) {
     }
     if (WiFi.status() == WL_CONNECTED && now - lastPoll >= POLL_INTERVAL_MS) {
       lastPoll = now;
-      fetchFlightWall();
+      fetchLocalFlight();
     }
     vTaskDelay(pdMS_TO_TICKS(5));
   }
@@ -2405,9 +2513,16 @@ void setup() {
   pageIntervalMs = preferences.getUInt("pageMs", DEFAULT_PAGE_INTERVAL_MS);
   lowLuxThreshold = preferences.getFloat("lowLux", 20.0f);
   highLuxThreshold = preferences.getFloat("highLux", 800.0f);
-  flightwallHost = preferences.getString("fwHost", DEFAULT_FLIGHTWALL_HOST);
-  flightwallPort = preferences.getUShort("fwPort", DEFAULT_FLIGHTWALL_PORT);
-  flightwallPath = preferences.getString("fwPath", DEFAULT_FLIGHTWALL_PATH);
+  adsbUrl = preferences.getString("adsbUrl", DEFAULT_ADSB_URL);
+  routeUrl = preferences.getString("routeUrl", DEFAULT_ROUTE_URL);
+  siteLatitude = preferences.getDouble("siteLat", DEFAULT_SITE_LATITUDE);
+  siteLongitude = preferences.getDouble("siteLon", DEFAULT_SITE_LONGITUDE);
+  viewHeading = preferences.getFloat("heading", DEFAULT_VIEW_HEADING);
+  routesEnabled = preferences.getBool("routesOn", true);
+  hideSportAircraft = preferences.getBool("hideSport", true);
+  altitudeFilterEnabled = preferences.getBool("altFilter", false);
+  maximumAltitudeFt = preferences.getInt(
+      "maxAltFt", DEFAULT_MAXIMUM_ALTITUDE_FT);
   customPageText = displayAscii(preferences.getString("customText", ""));
   customPageText.trim();
   if (customPageText.length() > 128) customPageText.remove(128);
@@ -2420,8 +2535,12 @@ void setup() {
     pageOrder[page] = preferences.getUChar(
         ("order" + String(page)).c_str(), page);
   }
-  if (settingsVersion < 9) preferences.putUChar("settingsVer", 9);
+  if (settingsVersion < 10) preferences.putUChar("settingsVer", 10);
   displayRadiusKm = constrain(displayRadiusKm, 1.0f, 100.0f);
+  siteLatitude = constrain(siteLatitude, -90.0, 90.0);
+  siteLongitude = constrain(siteLongitude, -180.0, 180.0);
+  viewHeading = constrain(viewHeading, 0.0f, 359.0f);
+  maximumAltitudeFt = constrain(maximumAltitudeFt, 1000, 100000);
   pageIntervalMs = constrain(pageIntervalMs, 2000UL, 60000UL);
   bool validStoredOrder = true;
   bool storedOrderUsed[PAGE_COUNT] = {};
