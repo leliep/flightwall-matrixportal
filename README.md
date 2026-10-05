@@ -50,9 +50,11 @@ Nach erfolgreicher WLAN-Verbindung ist die Konfiguration normalerweise unter
 funktioniert, zeigt der serielle Monitor die IP-Adresse an.
 
 Unter `http://matrixportal.local/display` steht zusätzlich ein responsives
-Web-Display für iPhone, Tablet und Desktop bereit. Es verwendet dieselben
-Flugdaten, Farben, aktivierten Seiten, Reihenfolge und Seitenzeiten wie die
-LED-Matrix und aktualisiert sich automatisch.
+FlightWall-Dashboard für iPhone, Tablet und Desktop bereit. Es zeigt das
+aktuelle Flugzeug in einer eigenständigen, für Webbrowser optimierten Ansicht:
+Callsign, Flugzeugtyp, Airline, Route mit Flughafennamen, Entfernung, Höhe,
+Geschwindigkeit, CPA, Steig-/Sinktendenz und Blickrichtung. Die Daten werden
+automatisch aktualisiert.
 
 Konfigurierbar sind Display ein/aus, automatische oder manuelle Helligkeit,
 Lux-Schwellen, lokaler Anzeigeradius, Standort, Blickrichtung, ADS-B-Quelle,
