@@ -29,6 +29,7 @@ const AirlineName names[] = {
   {"BEL", "Brussels Airlines"},
   {"BGA", "Airbus Transport International"},
   {"BOX", "AeroLogic"},
+  {"BPO", "Bundespolizei"},
   {"BTI", "Air Baltic"},
   {"CAI", "Corendon Airlines"},
   {"CAO", "Air China Cargo"},

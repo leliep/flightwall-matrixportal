@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Airline-/Operator-Code `BPO` als Bundespolizei ergänzt
 - gut lesbares Gradzeichen bei der Temperatur der BME280-Matrixanzeige
 - BME280-Luftdruck anhand der konfigurierten Standorthöhe auf Meereshöhe
   reduziert; Stationsdruck bleibt als Diagnosewert erhalten
