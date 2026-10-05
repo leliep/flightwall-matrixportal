@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- vollständige Verarbeitung, Zwischenspeicherung und Darstellung von
+  Multihop-Routen wie `CGN-BER-CGN`
 - Airline-/Operator-Code `CHX` als Luftrettung ergänzt; ADS-B-Platzhalter
   `UNKNOWN` wird durch vorhandene Lookup-Namen ersetzt
 - Airline-/Operator-Code `BPO` als Bundespolizei ergänzt

@@ -73,6 +73,10 @@ Der Statusbereich im Webinterface aktualisiert sich bei sichtbarer Seite alle
 fünf Sekunden, ohne ungespeicherte Eingaben im Konfigurationsformular zu ändern.
 Für die Blickrichtung werden außerdem die Standorthöhe über NHN und die
 Entfernungsgrenze für `weit` gespeichert.
+Routen mit Zwischenlandungen bleiben vollständig erhalten, beispielsweise
+`CGN-BER-CGN`. Matrix, Web-Display, Status-API und Routentest zeigen dabei alle
+Flughäfen in der korrekten Reihenfolge; Start und Endziel werden zusätzlich
+weiterhin separat bereitgestellt.
 Die vollständige ADS-B-URL und der Routendienst lassen sich ändern und direkt
 testen. Die sieben
 Anzeigeseiten können einzeln aktiviert, frei sortiert und mit einer eigenen

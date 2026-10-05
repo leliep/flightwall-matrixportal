@@ -3,6 +3,8 @@
 #include <Arduino.h>
 
 struct RouteResult {
+  String routeCodes;
+  String routeNames;
   String origin;
   String destination;
   String originName;

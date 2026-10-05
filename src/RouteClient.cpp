@@ -38,12 +38,30 @@ String upperTrimmed(String value) {
 }
 
 void fillNames(RouteResult& route) {
+  if (route.routeCodes.isEmpty() &&
+      (!route.origin.isEmpty() || !route.destination.isEmpty())) {
+    route.routeCodes = route.origin;
+    if (!route.destination.isEmpty()) {
+      if (!route.routeCodes.isEmpty()) route.routeCodes += '-';
+      route.routeCodes += route.destination;
+    }
+  }
+  const std::vector<String> codes = split(route.routeCodes, '-');
+  route.routeNames = "";
+  if (!codes.empty()) {
+    route.origin = upperTrimmed(codes.front());
+    route.destination = upperTrimmed(codes.back());
+  }
+  for (const String& rawCode : codes) {
+    const String code = upperTrimmed(rawCode);
+    if (code.isEmpty()) continue;
+    const String name = airportDisplayName(code);
+    if (name.isEmpty()) rememberUnknownAirport(code);
+    if (!route.routeNames.isEmpty()) route.routeNames += " > ";
+    route.routeNames += name.isEmpty() ? code : name;
+  }
   route.originName = airportDisplayName(route.origin);
   route.destinationName = airportDisplayName(route.destination);
-  if (!route.origin.isEmpty() && route.originName.isEmpty())
-    rememberUnknownAirport(route.origin);
-  if (!route.destination.isEmpty() && route.destinationName.isEmpty())
-    rememberUnknownAirport(route.destination);
 }
 
 void extractCodes(JsonObjectConst row, RouteResult& route) {
@@ -54,10 +72,9 @@ void extractCodes(JsonObjectConst row, RouteResult& route) {
     if (!row[key].is<const char*>()) continue;
     String codes = row[key].as<String>();
     codes.replace("->", "-");
-    const int separator = codes.indexOf('-');
-    if (separator > 0) {
-      route.origin = upperTrimmed(codes.substring(0, separator));
-      route.destination = upperTrimmed(codes.substring(separator + 1));
+    codes.replace(">", "-");
+    route.routeCodes = upperTrimmed(codes);
+    if (route.routeCodes.indexOf('-') > 0) {
       return;
     }
   }
@@ -74,6 +91,11 @@ void extractCodes(JsonObjectConst row, RouteResult& route) {
   if (destination.is<JsonObjectConst>())
     route.destination =
         upperTrimmed(destination["iata"] | destination["icao"] | "");
+  route.routeCodes = route.origin;
+  if (!route.destination.isEmpty()) {
+    if (!route.routeCodes.isEmpty()) route.routeCodes += '-';
+    route.routeCodes += route.destination;
+  }
 }
 }  // namespace
 
@@ -98,6 +120,9 @@ RouteResult RouteClient::readCache(const String& callsign, uint32_t now) {
     result.origin = fields[3];
     result.destination = fields[4];
     result.airlineCode = fields[5];
+    result.routeCodes = fields.size() >= 7
+                            ? fields[6]
+                            : result.origin + "-" + result.destination;
     result.status = found ? "cached" : "not_found";
     fillNames(result);
     preferences.end();
@@ -114,7 +139,8 @@ void RouteClient::writeCache(const String& callsign, const RouteResult& route,
   const uint8_t slot = preferences.getUChar("next", 0) % cacheSlots;
   const String value = callsign + "|" + String(now) + "|" +
                        (route.found() ? "1" : "0") + "|" + route.origin +
-                       "|" + route.destination + "|" + route.airlineCode;
+                       "|" + route.destination + "|" + route.airlineCode +
+                       "|" + route.routeCodes;
   preferences.putString(cacheKey(slot).c_str(), value);
   preferences.putUChar("next", (slot + 1) % cacheSlots);
   preferences.end();

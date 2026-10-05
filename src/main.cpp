@@ -30,7 +30,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "3.0.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-05 21:47:53 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-05 21:57:08 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -113,6 +113,8 @@ struct FlightData {
   String motion;
   String origin;
   String destination;
+  String routeCodes;
+  String routeNames;
   String originName;
   String destinationName;
   float distanceKm = NAN;
@@ -821,6 +823,11 @@ void drawMainPage() {
 
 
 String compactRoute() {
+  if (flight.routeCodes.length()) {
+    String route = clipped(flight.routeCodes, 21);
+    route.replace("-", ">");
+    return route;
+  }
   const String origin = clipped(flight.origin, 4);
   const String destination = clipped(flight.destination, 4);
   if (origin.length() && destination.length()) return origin + ">" + destination;
@@ -1179,27 +1186,48 @@ int16_t scrollingTextX(const String &text, uint32_t elapsedMs) {
 }
 
 
+bool flightHasMultiHopRoute() {
+  const int firstSeparator = flight.routeCodes.indexOf('-');
+  return firstSeparator >= 0 &&
+         flight.routeCodes.indexOf('-', firstSeparator + 1) >= 0;
+}
+
+
 void drawAirportNamesPage() {
   drawLine(0, 0, "Flughaefen", cyan);
+  const uint32_t elapsed = millis() - currentPageStarted;
+  if (flightHasMultiHopRoute()) {
+    String codes = displayAscii(flight.routeCodes);
+    codes.replace("-", ">");
+    const String names = displayAscii(flight.routeNames);
+    drawLine(scrollingTextX(codes, elapsed), 11, codes, white);
+    drawLine(scrollingTextX(names, elapsed), 22, names, yellow);
+    return;
+  }
   String originText = "S " + (flight.originName.length() ?
       flight.originName : (flight.origin.length() ? flight.origin : "unbekannt"));
   String destinationText = "Z " + (flight.destinationName.length() ?
       flight.destinationName : (flight.destination.length() ? flight.destination : "unbekannt"));
   originText = displayAscii(originText);
   destinationText = displayAscii(destinationText);
-  const uint32_t elapsed = millis() - currentPageStarted;
   drawLine(scrollingTextX(originText, elapsed), 11, originText, white);
   drawLine(scrollingTextX(destinationText, elapsed), 22, destinationText, yellow);
 }
 
 
 bool airportNamesPageHasData() {
-  return flight.originName.length() || flight.origin.length() ||
+  return flight.routeCodes.length() || flight.originName.length() || flight.origin.length() ||
          flight.destinationName.length() || flight.destination.length();
 }
 
 
 uint32_t airportNamesPageDuration() {
+  if (flightHasMultiHopRoute()) {
+    String codes = displayAscii(flight.routeCodes);
+    codes.replace("-", ">");
+    return max(scrollingTextDuration(codes),
+               scrollingTextDuration(displayAscii(flight.routeNames)));
+  }
   String originText = displayAscii("S " + (flight.originName.length() ?
       flight.originName : flight.origin));
   String destinationText = displayAscii("Z " + (flight.destinationName.length() ?
@@ -1926,6 +1954,8 @@ bool fetchLocalFlight() {
     next.motion = selected.motion;
     next.origin = currentRoute.origin;
     next.destination = currentRoute.destination;
+    next.routeCodes = currentRoute.routeCodes;
+    next.routeNames = currentRoute.routeNames;
     next.originName = currentRoute.originName;
     next.destinationName = currentRoute.destinationName;
     next.distanceKm = selected.distanceKm;
@@ -2207,7 +2237,9 @@ String webPage() {
   html += F("</b><span>Route</span><b>");
   html += statusFlight.available &&
                   (statusFlight.origin.length() || statusFlight.destination.length())
-              ? htmlEscape(statusFlight.origin + " → " + statusFlight.destination)
+              ? htmlEscape(statusFlight.routeCodes.length()
+                               ? statusFlight.routeCodes
+                               : statusFlight.origin + " → " + statusFlight.destination)
               : "-";
   html += F("</b><span>Entfernung / Höhe</span><b>");
   html += statusFlight.available
@@ -2473,11 +2505,9 @@ void handleRouteTest() {
   if (!reachable) {
     detail = "Fehler: " + htmlEscape(result.error);
   } else if (result.found()) {
-    detail = "Route: <b>" + htmlEscape(result.origin) + " → " +
-             htmlEscape(result.destination) + "</b>";
-    if (result.originName.length() || result.destinationName.length()) {
-      detail += " (" + htmlEscape(result.originName) + " → " +
-                htmlEscape(result.destinationName) + ")";
+    detail = "Route: <b>" + htmlEscape(result.routeCodes) + "</b>";
+    if (result.routeNames.length()) {
+      detail += " (" + htmlEscape(result.routeNames) + ")";
     }
     if (result.airlineCode.length())
       detail += "<br>Airline-Code: <b>" +
@@ -2542,6 +2572,8 @@ void handleDisplayApi() {
           ",\"motion\":\"" + jsonEscape(shown.motion) + "\"" +
           ",\"origin\":\"" + jsonEscape(shown.origin) + "\"" +
           ",\"destination\":\"" + jsonEscape(shown.destination) + "\"" +
+          ",\"route_codes\":\"" + jsonEscape(shown.routeCodes) + "\"" +
+          ",\"route_names\":\"" + jsonEscape(shown.routeNames) + "\"" +
           ",\"origin_name\":\"" + jsonEscape(shown.originName) + "\"" +
           ",\"destination_name\":\"" + jsonEscape(shown.destinationName) + "\"" +
           ",\"distance_km\":" + jsonNumberOrNull(shown.distanceKm) +
@@ -2619,6 +2651,8 @@ void handleStatusApi() {
       ",\"special_type\":\"" + jsonEscape(statusFlight.specialType) + "\"" +
       ",\"origin\":\"" + jsonEscape(statusFlight.origin) + "\"" +
       ",\"destination\":\"" + jsonEscape(statusFlight.destination) + "\"" +
+      ",\"route_codes\":\"" + jsonEscape(statusFlight.routeCodes) + "\"" +
+      ",\"route_names\":\"" + jsonEscape(statusFlight.routeNames) + "\"" +
       ",\"distance_km\":" + jsonNumberOrNull(statusFlight.distanceKm) +
       ",\"altitude_ft\":" + jsonNumberOrNull(statusFlight.altitudeFt, 0) +
       ",\"speed_kmh\":" + jsonNumberOrNull(statusFlight.speedKmh, 0) +
