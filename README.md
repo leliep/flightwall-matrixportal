@@ -66,6 +66,9 @@ wird per NTP bezogen und automatisch zwischen MEZ und MESZ umgestellt.
 Wenn kein Flugzeug angezeigt wird, blinkt der Betriebs-Pixel unten links bei
 erfolgreichem ADS-B-Abruf weiß. Nach einem fehlgeschlagenen
 Datenabruf blinkt er rot, bis wieder gültige Daten empfangen wurden.
+Die Statusanzeige und `/api/status` melden außerdem die interne
+ESP32-S3-Chiptemperatur. Sie dient zur thermischen Überwachung und entspricht
+nicht der Umgebungstemperatur.
 Für die Blickrichtung werden außerdem die Standorthöhe über NHN und die
 Entfernungsgrenze für `weit` gespeichert.
 Die vollständige ADS-B-URL und der Routendienst lassen sich ändern und direkt

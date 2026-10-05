@@ -16,6 +16,7 @@
 - eigenständiges responsives FlightWall-Dashboard unter `/display` mit
   Callsign, Airline, Flugzeugtyp, Route, Flugdaten, CPA und Blickrichtung;
   für iPhone, Tablet und Desktop optimiert
+- interne ESP32-S3-Chiptemperatur in Statusseite und Status-API
 - passwortgeschütztes Firmware-Update über das Webinterface
 - passwortgeschützter OTA-Upload aus PlatformIO
 - 3 Bit Farbtiefe mit sieben Helligkeitsstufen und logarithmischer Lux-Regelung

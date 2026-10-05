@@ -29,7 +29,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "3.0.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-05 11:15:24 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-05 11:37:51 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -1921,6 +1921,11 @@ String uptimeText() {
 }
 
 
+float chipTemperatureC() {
+  return temperatureRead();
+}
+
+
 String jsonEscape(String value) {
   value.replace("\\", "\\\\");
   value.replace("\"", "\\\"");
@@ -2141,6 +2146,8 @@ String webPage() {
   html += F("</b><span>Freier RAM</span><b>");
   html += String(ESP.getFreeHeap() / 1024) + " KiB (Minimum " +
           String(ESP.getMinFreeHeap() / 1024) + " KiB)";
+  html += F("</b><span>ESP32-S3-Chiptemperatur</span><b>");
+  html += numberOrDash(chipTemperatureC()) + " °C";
   html += F("</b><span>Helligkeit</span><b>");
   html += String(BRIGHTNESS_LEVELS[brightnessIndex]) + "% / " +
           (automaticBrightnessEnabled ? "Automatik" : "manuell");
@@ -2432,6 +2439,7 @@ void handleStatusApi() {
       "\",\"build\":\"" + jsonEscape(BUILD_TIMESTAMP) +
       "\",\"uptime_seconds\":" + String(millis() / 1000) +
       ",\"free_heap\":" + String(ESP.getFreeHeap()) +
+      ",\"chip_temperature_c\":" + jsonNumberOrNull(chipTemperatureC()) +
       ",\"rssi\":" + String(WiFi.RSSI()) +
       ",\"lux\":" + (isnan(filteredLux) ? String("null") : String(filteredLux, 1)) +
       ",\"brightness_percent\":" + String(BRIGHTNESS_LEVELS[brightnessIndex]) +
