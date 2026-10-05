@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Lookup-Ergänzungen für MCO, ERF, PEG, GEC und NBT
 - FlightMatrixServer-Funktionen direkt in den MatrixPortal ESP32-S3 integriert
 - direkter ADS-B-Abruf und lokale Auswahl des anzuzeigenden Flugzeugs
 - lokale CPA-, Richtungs-, Special-Type-, Kleinflugzeug- und Höhenauswertung
