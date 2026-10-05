@@ -77,6 +77,11 @@ Routen mit Zwischenlandungen bleiben vollständig erhalten, beispielsweise
 `CGN-BER-CGN`. Matrix, Web-Display, Status-API und Routentest zeigen dabei alle
 Flughäfen in der korrekten Reihenfolge; Start und Endziel werden zusätzlich
 weiterhin separat bereitgestellt.
+Neue Routenergebnisse werden beim Flugzeugwechsel ausschließlich im RAM
+zwischengespeichert. Die persistente Speicherung erfolgt gesammelt, sobald
+kein Flugzeug angezeigt wird oder die Nachtruhe aktiv ist. Während des kurzen
+Flash-Schreibvorgangs wird die Matrix kontrolliert dunkel geschaltet, um
+zufällige Lichtpunkte durch Flashzugriffe des ESP32-S3 zu vermeiden.
 Die vollständige ADS-B-URL und der Routendienst lassen sich ändern und direkt
 testen. Die sieben
 Anzeigeseiten können einzeln aktiviert, frei sortiert und mit einer eigenen

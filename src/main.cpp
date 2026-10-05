@@ -30,7 +30,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "3.0.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-05 21:57:08 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-05 22:12:43 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -151,6 +151,8 @@ uint32_t otaRebootAt = 0;
 uint32_t manualRebootAt = 0;
 volatile bool otaInProgress = false;
 volatile bool otaPreparing = false;
+volatile bool routeCacheWritePreparing = false;
+volatile bool routeCacheWriteInProgress = false;
 volatile uint8_t displayTestCommand = 0;
 volatile bool displayTestActive = false;
 uint32_t displayTestStarted = 0;
@@ -1475,6 +1477,12 @@ void drawDisplay() {
     matrix.show();
     return;
   }
+  if (routeCacheWritePreparing || routeCacheWriteInProgress) {
+    resetPageTransition();
+    matrix.fillScreen(0);
+    matrix.show();
+    return;
+  }
   if (serviceDisplayTest()) return;
   if (quietHoursAreActive()) {
     resetPageTransition();
@@ -2266,6 +2274,8 @@ String webPage() {
   html += lastRouteError.length() ? htmlEscape(lastRouteError) : "keiner";
   html += F("</b><span>Routenstatus</span><b>");
   html += htmlEscape(currentRoute.status);
+  html += F("</b><span>Routencache wartet auf Flash</span><b>");
+  html += routeClient.hasPendingWrites() ? "ja" : "nein";
   html += F("</b><span>Quelle</span><b>");
   html += htmlEscape(adsbUrl);
   html += F("</b><span>Empfangen / Kandidaten</span><b>");
@@ -2644,6 +2654,8 @@ void handleStatusApi() {
       ",\"display_error\":\"" + jsonEscape(statusError) + "\"" +
       ",\"route_error\":\"" + jsonEscape(lastRouteError) + "\"" +
       ",\"route_status\":\"" + jsonEscape(currentRoute.status) + "\"" +
+      ",\"route_cache_write_pending\":" +
+          String(routeClient.hasPendingWrites() ? "true" : "false") +
       ",\"flight_available\":" + String(statusFlight.available ? "true" : "false") +
       ",\"flight\":\"" + jsonEscape(statusFlight.flight) + "\"" +
       ",\"airline\":\"" + jsonEscape(statusFlight.airline) + "\"" +
@@ -2852,6 +2864,26 @@ void startWebServer() {
 }
 
 
+void flushDeferredRouteCacheIfIdle() {
+  if (!routeClient.hasPendingWrites() || routeCacheWritePreparing ||
+      routeCacheWriteInProgress) return;
+  bool aircraftActive = true;
+  if (xSemaphoreTake(flightMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+    aircraftActive = networkFlight.available;
+    xSemaphoreGive(flightMutex);
+  }
+  if (aircraftActive && !quietHoursAreActive()) return;
+
+  routeCacheWritePreparing = true;
+  vTaskDelay(pdMS_TO_TICKS(120));
+  routeCacheWriteInProgress = true;
+  routeClient.flushPendingWrites();
+  routeCacheWriteInProgress = false;
+  routeCacheWritePreparing = false;
+  Serial.println("Deferred route cache written while display was blanked");
+}
+
+
 void networkTask(void *) {
   lastWiFiAttempt = millis();
   if (connectWiFi(20000)) {
@@ -2875,6 +2907,7 @@ void networkTask(void *) {
       lastPoll = now;
       fetchLocalFlight();
     }
+    flushDeferredRouteCacheIfIdle();
     vTaskDelay(pdMS_TO_TICKS(5));
   }
 }

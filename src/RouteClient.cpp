@@ -104,6 +104,53 @@ void RouteClient::configure(bool enabled, const String& url) {
   url_ = url;
 }
 
+RouteResult RouteClient::readMemoryCache(const String& callsign,
+                                         uint32_t now) {
+  for (MemoryCacheEntry& entry : memoryCache_) {
+    if (entry.callsign != callsign) continue;
+    const uint32_t ttl = entry.route.found() ? positiveTtl : negativeTtl;
+    if (now && entry.updated && now - entry.updated >= ttl) return {};
+    RouteResult result = entry.route;
+    result.status = result.found() ? "memory" : "not_found";
+    return result;
+  }
+  return {};
+}
+
+void RouteClient::rememberInMemory(const String& callsign,
+                                   const RouteResult& route, uint32_t now,
+                                   bool pendingWrite) {
+  MemoryCacheEntry* target = nullptr;
+  for (MemoryCacheEntry& entry : memoryCache_) {
+    if (entry.callsign == callsign) {
+      target = &entry;
+      break;
+    }
+  }
+  if (target == nullptr) {
+    target = &memoryCache_[nextMemorySlot_++ % memoryCacheSlots_];
+  }
+  target->callsign = callsign;
+  target->route = route;
+  target->updated = now;
+  target->pendingWrite = target->pendingWrite || pendingWrite;
+}
+
+bool RouteClient::hasPendingWrites() const {
+  for (const MemoryCacheEntry& entry : memoryCache_) {
+    if (entry.pendingWrite) return true;
+  }
+  return false;
+}
+
+void RouteClient::flushPendingWrites() {
+  for (MemoryCacheEntry& entry : memoryCache_) {
+    if (!entry.pendingWrite || entry.callsign.isEmpty()) continue;
+    writeCache(entry.callsign, entry.route, entry.updated);
+    entry.pendingWrite = false;
+  }
+}
+
 RouteResult RouteClient::readCache(const String& callsign, uint32_t now) {
   Preferences preferences;
   preferences.begin("routecache", true);
@@ -209,15 +256,21 @@ RouteResult RouteClient::lookup(const String& callsign, double latitude,
     lastError_ = "";
     return {};
   }
-  RouteResult cached = readCache(callsign, now);
+  RouteResult cached = readMemoryCache(callsign, now);
   if (cached.status != "unavailable") {
+    lastError_ = "";
+    return cached;
+  }
+  cached = readCache(callsign, now);
+  if (cached.status != "unavailable") {
+    rememberInMemory(callsign, cached, now, false);
     lastError_ = "";
     return cached;
   }
 
   RouteResult result = fetch(callsign, latitude, longitude);
   lastError_ = result.error;
-  if (result.error.isEmpty()) writeCache(callsign, result, now);
+  if (result.error.isEmpty()) rememberInMemory(callsign, result, now, true);
   return result;
 }
 

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Routencache beim Flugzeugwechsel in RAM verlagert; verzögerte persistente
+  Speicherung bei kontrolliert dunkler Matrix im flugzeugfreien Zustand
 - vollständige Verarbeitung, Zwischenspeicherung und Darstellung von
   Multihop-Routen wie `CGN-BER-CGN`
 - Airline-/Operator-Code `CHX` als Luftrettung ergänzt; ADS-B-Platzhalter

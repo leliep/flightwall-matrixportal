@@ -24,8 +24,20 @@ class RouteClient {
                      uint32_t now);
   RouteResult test(const String& callsign, double latitude, double longitude);
   const String& lastError() const { return lastError_; }
+  bool hasPendingWrites() const;
+  void flushPendingWrites();
 
  private:
+  struct MemoryCacheEntry {
+    String callsign;
+    RouteResult route;
+    uint32_t updated = 0;
+    bool pendingWrite = false;
+  };
+
+  RouteResult readMemoryCache(const String& callsign, uint32_t now);
+  void rememberInMemory(const String& callsign, const RouteResult& route,
+                        uint32_t now, bool pendingWrite);
   RouteResult readCache(const String& callsign, uint32_t now);
   void writeCache(const String& callsign, const RouteResult& route,
                   uint32_t now);
@@ -34,4 +46,7 @@ class RouteClient {
   bool enabled_ = true;
   String url_;
   String lastError_;
+  static constexpr size_t memoryCacheSlots_ = 32;
+  MemoryCacheEntry memoryCache_[memoryCacheSlots_];
+  size_t nextMemorySlot_ = 0;
 };
