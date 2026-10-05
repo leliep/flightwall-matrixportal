@@ -30,7 +30,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "3.0.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-05 19:11:59 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-05 19:23:16 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -1256,7 +1256,11 @@ void drawIdleDisplay() {
       isfinite(ambientTemperatureC) && isfinite(relativeHumidityPercent) &&
       isfinite(airPressureHpa)) {
     drawLine(0, 1, "TEMP", cyan);
-    drawLine(48, 1, String(ambientTemperatureC, 1) + " C", yellow);
+    const String temperatureText(ambientTemperatureC, 1);
+    drawLine(48, 1, temperatureText, yellow);
+    const int16_t degreeX = 48 + temperatureText.length() * 6 + 1;
+    matrix.drawCircle(degreeX + 1, 2, 1, yellow);
+    drawLine(degreeX + 4, 1, "C", yellow);
     drawLine(0, 11, "FEUCHTE", cyan);
     drawLine(48, 11, String(relativeHumidityPercent, 1) + " %", green);
     drawLine(0, 21, "DRUCK", cyan);
