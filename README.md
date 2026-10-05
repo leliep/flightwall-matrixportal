@@ -201,10 +201,19 @@ erneut.
 - **DOWN:** manueller Modus, Helligkeit verringern
 - **UP + DOWN:** Helligkeitsautomatik aktivieren
 
+## BME280
+
+Ein BME280 wird an den I²C-Adressen `0x76` und `0x77` automatisch gesucht.
+Die Firmware prüft sowohl den mit dem BH1750 geteilten Bus auf GPIO 3/9 als
+auch den STEMMA-QT-Bus auf GPIO 16/17. Umgebungstemperatur, relative
+Luftfeuchtigkeit und Luftdruck erscheinen in der Statusseite und unter
+`/api/status`. Die spätere Anzeige dieser Werte auf der Matrix im Ruhezustand
+ist noch nicht aktiviert.
+
 ## Diagnose
 
 Die Statusseite zeigt Firmwareversion und Erstellungszeitpunkt, Laufzeit,
-freien und minimal freien RAM, WLAN-Signal, Luxwert, Helligkeitsstufe,
+freien und minimal freien RAM, WLAN-Signal, Luxwert, BME280-Umgebungswerte, Helligkeitsstufe,
 Zeitpunkt des letzten ADS-B-Abrufs, empfangene und geeignete Flugzeuge,
 unbekannte Flughafen- und Airline-Codes, Core-Zuordnung, Stackreserven und den
 Grund des letzten Neustarts. Über eine bestätigungspflichtige Schaltfläche kann

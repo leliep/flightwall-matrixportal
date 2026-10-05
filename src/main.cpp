@@ -12,6 +12,7 @@
 #include <time.h>
 
 #include <Adafruit_GFX.h>
+#include <Adafruit_BME280.h>
 #include <Adafruit_Protomatter.h>
 #include "AdsbClient.hpp"
 #include "AircraftProcessor.hpp"
@@ -29,7 +30,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "3.0.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-05 13:36:18 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-05 18:53:17 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -55,6 +56,13 @@ constexpr int8_t LIGHT_SENSOR_SCL_PIN = 9;
 // Both addresses are probed automatically, starting with this one.
 constexpr uint8_t BH1750_PREFERRED_ADDRESS = 0x23;
 constexpr uint8_t BH1750_ALTERNATE_ADDRESS = 0x5C;
+constexpr int8_t STEMMA_SDA_PIN = 16;
+constexpr int8_t STEMMA_SCL_PIN = 17;
+constexpr uint8_t BME280_PREFERRED_ADDRESS = 0x76;
+constexpr uint8_t BME280_ALTERNATE_ADDRESS = 0x77;
+constexpr uint32_t ENVIRONMENT_SENSOR_INTERVAL_MS = 5000;
+constexpr uint32_t ENVIRONMENT_SENSOR_RETRY_MS = 15000;
+constexpr uint8_t ENVIRONMENT_SENSOR_FAILURE_LIMIT = 3;
 
 // Only aircraft at or inside this distance are shown. Change this value to
 // adjust the local display radius without modifying the FlightWall server.
@@ -91,6 +99,8 @@ Adafruit_Protomatter matrix(
     clockPin, latchPin, oePin, true);
 constexpr uint16_t AIRPORT_TEXT_CANVAS_WIDTH = 128 * 6;
 GFXcanvas1 airportTextCanvas(AIRPORT_TEXT_CANVAS_WIDTH, 8);
+TwoWire environmentWire(1);
+Adafruit_BME280 environmentSensor;
 
 struct FlightData {
   bool available = false;
@@ -154,6 +164,15 @@ uint8_t lightSensorFailures = 0;
 float filteredLux = NAN;
 uint32_t lastLightSensorRead = 0;
 uint32_t lastLightSensorProbe = 0;
+bool environmentSensorAvailable = false;
+bool environmentSensorOnStemma = false;
+uint8_t environmentSensorAddress = 0;
+uint8_t environmentSensorFailures = 0;
+float ambientTemperatureC = NAN;
+float relativeHumidityPercent = NAN;
+float airPressureHpa = NAN;
+uint32_t lastEnvironmentSensorRead = 0;
+uint32_t lastEnvironmentSensorProbe = 0;
 uint32_t lastButtonEvent = 0;
 uint32_t brightnessMessageUntil = 0;
 String brightnessMessageTitle = "HELLIGKEIT";
@@ -1558,6 +1577,69 @@ bool readBh1750(float &lux) {
 }
 
 
+bool beginEnvironmentSensorAt(TwoWire &bus, uint8_t address, bool onStemma) {
+  if (!environmentSensor.begin(address, &bus)) return false;
+  environmentSensorAvailable = true;
+  environmentSensorOnStemma = onStemma;
+  environmentSensorAddress = address;
+  environmentSensorFailures = 0;
+  Serial.printf("BME280 found at 0x%02X on %s bus\n", address,
+                onStemma ? "STEMMA QT" : "BH1750");
+  return true;
+}
+
+
+bool findEnvironmentSensor() {
+  lastEnvironmentSensorProbe = millis();
+  const uint8_t addresses[] = {
+      BME280_PREFERRED_ADDRESS, BME280_ALTERNATE_ADDRESS};
+  for (const uint8_t address : addresses) {
+    if (beginEnvironmentSensorAt(Wire, address, false)) return true;
+  }
+  for (const uint8_t address : addresses) {
+    if (beginEnvironmentSensorAt(environmentWire, address, true)) return true;
+  }
+  environmentSensorAvailable = false;
+  environmentSensorAddress = 0;
+  ambientTemperatureC = NAN;
+  relativeHumidityPercent = NAN;
+  airPressureHpa = NAN;
+  Serial.println("BME280 not found");
+  return false;
+}
+
+
+void serviceEnvironmentSensor() {
+  const uint32_t now = millis();
+  if (!environmentSensorAvailable) {
+    if (now - lastEnvironmentSensorProbe >= ENVIRONMENT_SENSOR_RETRY_MS) {
+      findEnvironmentSensor();
+    }
+    return;
+  }
+  if (now - lastEnvironmentSensorRead < ENVIRONMENT_SENSOR_INTERVAL_MS) return;
+  lastEnvironmentSensorRead = now;
+
+  const float temperature = environmentSensor.readTemperature();
+  const float humidity = environmentSensor.readHumidity();
+  const float pressure = environmentSensor.readPressure() / 100.0f;
+  if (!isfinite(temperature) || !isfinite(humidity) || !isfinite(pressure)) {
+    if (++environmentSensorFailures >= ENVIRONMENT_SENSOR_FAILURE_LIMIT) {
+      environmentSensorAvailable = false;
+      ambientTemperatureC = NAN;
+      relativeHumidityPercent = NAN;
+      airPressureHpa = NAN;
+      Serial.println("BME280 stopped responding");
+    }
+    return;
+  }
+  environmentSensorFailures = 0;
+  ambientTemperatureC = temperature;
+  relativeHumidityPercent = humidity;
+  airPressureHpa = pressure;
+}
+
+
 uint8_t automaticBrightnessIndex(float lux) {
   if (lux <= lowLuxThreshold) return 0;
   if (lux >= highLuxThreshold) return BRIGHTNESS_LEVEL_COUNT - 1;
@@ -2148,6 +2230,19 @@ String webPage() {
           String(ESP.getMinFreeHeap() / 1024) + " KiB)";
   html += F("</b><span>ESP32-S3-Chiptemperatur</span><b>");
   html += numberOrDash(chipTemperatureC()) + " °C";
+  html += F("</b><span>BME280</span><b>");
+  if (environmentSensorAvailable) {
+    html += "verbunden / 0x" + String(environmentSensorAddress, HEX) +
+            (environmentSensorOnStemma ? " / STEMMA QT" : " / GPIO 3/9");
+  } else {
+    html += "nicht gefunden";
+  }
+  html += F("</b><span>Umgebungstemperatur</span><b>");
+  html += numberOrDash(ambientTemperatureC) + " °C";
+  html += F("</b><span>Relative Feuchte</span><b>");
+  html += numberOrDash(relativeHumidityPercent) + " %";
+  html += F("</b><span>Luftdruck</span><b>");
+  html += numberOrDash(airPressureHpa) + " hPa";
   html += F("</b><span>Helligkeit</span><b>");
   html += String(BRIGHTNESS_LEVELS[brightnessIndex]) + "% / " +
           (automaticBrightnessEnabled ? "Automatik" : "manuell");
@@ -2441,6 +2536,10 @@ void handleStatusApi() {
       "\",\"uptime_seconds\":" + String(millis() / 1000) +
       ",\"free_heap\":" + String(ESP.getFreeHeap()) +
       ",\"chip_temperature_c\":" + jsonNumberOrNull(chipTemperatureC()) +
+      ",\"bme280_available\":" + String(environmentSensorAvailable ? "true" : "false") +
+      ",\"ambient_temperature_c\":" + jsonNumberOrNull(ambientTemperatureC) +
+      ",\"relative_humidity_percent\":" + jsonNumberOrNull(relativeHumidityPercent) +
+      ",\"air_pressure_hpa\":" + jsonNumberOrNull(airPressureHpa) +
       ",\"rssi\":" + String(WiFi.RSSI()) +
       ",\"lux\":" + (isnan(filteredLux) ? String("null") : String(filteredLux, 1)) +
       ",\"brightness_percent\":" + String(BRIGHTNESS_LEVELS[brightnessIndex]) +
@@ -2810,7 +2909,10 @@ void setup() {
 
   Wire.begin(LIGHT_SENSOR_SDA_PIN, LIGHT_SENSOR_SCL_PIN);
   Wire.setTimeOut(50);
+  environmentWire.begin(STEMMA_SDA_PIN, STEMMA_SCL_PIN);
+  environmentWire.setTimeOut(50);
   findLightSensor();
+  findEnvironmentSensor();
 
   drawStatus("FLIGHTWALL", "VERBINDET...");
   if (xTaskCreatePinnedToCore(
@@ -2827,6 +2929,7 @@ void loop() {
   syncNetworkState();
   handleBrightnessButtons();
   serviceLightSensor();
+  serviceEnvironmentSensor();
   if (!automaticBrightnessEnabled && brightnessIndex != manualBrightnessIndex) {
     applyBrightnessIndex(manualBrightnessIndex, false);
   }
