@@ -30,7 +30,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "3.0.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-05 19:04:12 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-05 19:11:59 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -170,6 +170,7 @@ uint8_t environmentSensorAddress = 0;
 uint8_t environmentSensorFailures = 0;
 float ambientTemperatureC = NAN;
 float relativeHumidityPercent = NAN;
+float stationPressureHpa = NAN;
 float airPressureHpa = NAN;
 uint32_t lastEnvironmentSensorRead = 0;
 uint32_t lastEnvironmentSensorProbe = 0;
@@ -1600,6 +1601,13 @@ bool beginEnvironmentSensorAt(TwoWire &bus, uint8_t address, bool onStemma) {
 }
 
 
+float pressureReducedToSeaLevel(float pressureHpa, float elevationM) {
+  const float altitudeFactor = 1.0f - elevationM / 44330.0f;
+  if (!isfinite(pressureHpa) || altitudeFactor <= 0.0f) return NAN;
+  return pressureHpa / powf(altitudeFactor, 5.255f);
+}
+
+
 bool findEnvironmentSensor() {
   lastEnvironmentSensorProbe = millis();
   const uint8_t addresses[] = {
@@ -1614,6 +1622,7 @@ bool findEnvironmentSensor() {
   environmentSensorAddress = 0;
   ambientTemperatureC = NAN;
   relativeHumidityPercent = NAN;
+  stationPressureHpa = NAN;
   airPressureHpa = NAN;
   Serial.println("BME280 not found");
   return false;
@@ -1639,6 +1648,7 @@ void serviceEnvironmentSensor() {
       environmentSensorAvailable = false;
       ambientTemperatureC = NAN;
       relativeHumidityPercent = NAN;
+      stationPressureHpa = NAN;
       airPressureHpa = NAN;
       Serial.println("BME280 stopped responding");
     }
@@ -1647,7 +1657,8 @@ void serviceEnvironmentSensor() {
   environmentSensorFailures = 0;
   ambientTemperatureC = temperature;
   relativeHumidityPercent = humidity;
-  airPressureHpa = pressure;
+  stationPressureHpa = pressure;
+  airPressureHpa = pressureReducedToSeaLevel(pressure, observerElevationM);
 }
 
 
@@ -2254,8 +2265,10 @@ String webPage() {
   html += numberOrDash(ambientTemperatureC) + " °C";
   html += F("</b><span>Relative Feuchte</span><b>");
   html += numberOrDash(relativeHumidityPercent) + " %";
-  html += F("</b><span>Luftdruck</span><b>");
+  html += F("</b><span>Luftdruck auf Meereshöhe</span><b>");
   html += numberOrDash(airPressureHpa) + " hPa";
+  html += F("</b><span>Stationsdruck (BME280 roh)</span><b>");
+  html += numberOrDash(stationPressureHpa) + " hPa";
   html += F("</b><span>BME280-Ruheanzeige</span><b>");
   html += environmentIdleDisplayEnabled ? "aktiv" : "aus";
   html += F("</b><span>Helligkeit</span><b>");
@@ -2558,6 +2571,7 @@ void handleStatusApi() {
           String(environmentIdleDisplayEnabled ? "true" : "false") +
       ",\"ambient_temperature_c\":" + jsonNumberOrNull(ambientTemperatureC) +
       ",\"relative_humidity_percent\":" + jsonNumberOrNull(relativeHumidityPercent) +
+      ",\"station_pressure_hpa\":" + jsonNumberOrNull(stationPressureHpa) +
       ",\"air_pressure_hpa\":" + jsonNumberOrNull(airPressureHpa) +
       ",\"rssi\":" + String(WiFi.RSSI()) +
       ",\"lux\":" + (isnan(filteredLux) ? String("null") : String(filteredLux, 1)) +

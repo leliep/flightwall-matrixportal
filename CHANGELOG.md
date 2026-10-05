@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- BME280-Luftdruck anhand der konfigurierten Standorthöhe auf Meereshöhe
+  reduziert; Stationsdruck bleibt als Diagnosewert erhalten
 - konfigurierbare BME280-Ruheanzeige auf der Matrix, wenn kein Flugzeug in der
   Nähe ist
 - BME280-Autoerkennung auf beiden I²C-Bussen und Umgebungswerte in Webstatus
