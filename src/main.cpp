@@ -29,7 +29,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "3.0.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-05 13:28:38 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-05 13:36:18 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -2073,7 +2073,7 @@ String webPage() {
   html += F("'></label><label>Schwelle hell (Lux)<input type='number' name='highLux' min='50' max='50000' step='10' value='");
   html += String(highLuxThreshold, 0);
   html += F("'></label></fieldset><button type='submit'>Einstellungen speichern</button></form>");
-  html += F("<fieldset><legend>Status</legend><div class='status'><span>Adresse</span><b>http://matrixportal.local</b><span>IP</span><b>");
+  html += F("<fieldset><legend>Status <small class='muted' id='statusRefresh'>wird automatisch aktualisiert</small></legend><div class='status' id='statusData'><span>Adresse</span><b>http://matrixportal.local</b><span>IP</span><b>");
   html += WiFi.localIP().toString();
   html += F("</b><span>WLAN</span><b>");
   html += String(WiFi.RSSI()) + " dBm";
@@ -2179,7 +2179,8 @@ String webPage() {
   if (strlen(OTA_PASSWORD) >= 8) {
     html += F("<p><a href='/update'>Firmware drahtlos aktualisieren</a></p>");
   }
-  html += F("<p class='muted'>UP/DOWN: manuell; beide Tasten: Automatik.</p></body></html>");
+  html += F("<p class='muted'>UP/DOWN: manuell; beide Tasten: Automatik.</p>"
+            "<script>let statusBusy=false;async function refreshStatus(){if(statusBusy||document.hidden)return;statusBusy=true;const note=document.getElementById('statusRefresh');try{const response=await fetch('/',{cache:'no-store'});if(!response.ok)throw 0;const page=new DOMParser().parseFromString(await response.text(),'text/html');const fresh=page.getElementById('statusData');const current=document.getElementById('statusData');if(fresh&&current)current.innerHTML=fresh.innerHTML;if(note)note.textContent='aktualisiert '+new Date().toLocaleTimeString('de-DE');}catch(error){if(note)note.textContent='Aktualisierung fehlgeschlagen';}finally{statusBusy=false;}}setInterval(refreshStatus,5000);</script></body></html>");
   return html;
 }
 

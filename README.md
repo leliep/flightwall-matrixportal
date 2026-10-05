@@ -69,6 +69,8 @@ Datenabruf blinkt er rot, bis wieder gültige Daten empfangen wurden.
 Die Statusanzeige und `/api/status` melden außerdem die interne
 ESP32-S3-Chiptemperatur. Sie dient zur thermischen Überwachung und entspricht
 nicht der Umgebungstemperatur.
+Der Statusbereich im Webinterface aktualisiert sich bei sichtbarer Seite alle
+fünf Sekunden, ohne ungespeicherte Eingaben im Konfigurationsformular zu ändern.
 Für die Blickrichtung werden außerdem die Standorthöhe über NHN und die
 Entfernungsgrenze für `weit` gespeichert.
 Die vollständige ADS-B-URL und der Routendienst lassen sich ändern und direkt
