@@ -207,8 +207,10 @@ Ein BME280 wird an den I²C-Adressen `0x76` und `0x77` automatisch gesucht.
 Die Firmware prüft sowohl den mit dem BH1750 geteilten Bus auf GPIO 3/9 als
 auch den STEMMA-QT-Bus auf GPIO 16/17. Umgebungstemperatur, relative
 Luftfeuchtigkeit und Luftdruck erscheinen in der Statusseite und unter
-`/api/status`. Die spätere Anzeige dieser Werte auf der Matrix im Ruhezustand
-ist noch nicht aktiviert.
+`/api/status`. In der Webkonfiguration lässt sich außerdem einschalten, dass
+die drei Messwerte auf der Matrix erscheinen, solange kein Flugzeug innerhalb
+des Anzeigeradius liegt. Ein erkanntes Flugzeug übernimmt die Anzeige sofort;
+Nachtruhe und ausgeschaltetes Display bleiben vollständig dunkel.
 
 ## Diagnose
 

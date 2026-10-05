@@ -30,7 +30,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "3.0.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-05 18:53:17 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-05 19:04:12 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -179,6 +179,7 @@ String brightnessMessageTitle = "HELLIGKEIT";
 String brightnessMessageValue;
 volatile uint8_t pendingButtonEvents = 0;
 bool displayEnabled = true;
+bool environmentIdleDisplayEnabled = true;
 bool quietHoursEnabled = false;
 uint16_t quietHoursStartMinutes = 23 * 60 + 55;
 uint16_t quietHoursEndMinutes = 5 * 60 + 55;
@@ -1250,6 +1251,16 @@ bool aircraftIsInsideDisplayRadius() {
 
 void drawIdleDisplay() {
   matrix.fillScreen(0);
+  if (environmentIdleDisplayEnabled && environmentSensorAvailable &&
+      isfinite(ambientTemperatureC) && isfinite(relativeHumidityPercent) &&
+      isfinite(airPressureHpa)) {
+    drawLine(0, 1, "TEMP", cyan);
+    drawLine(48, 1, String(ambientTemperatureC, 1) + " C", yellow);
+    drawLine(0, 11, "FEUCHTE", cyan);
+    drawLine(48, 11, String(relativeHumidityPercent, 1) + " %", green);
+    drawLine(0, 21, "DRUCK", cyan);
+    drawLine(48, 21, String(airPressureHpa, 1) + " hPa", blue);
+  }
   if ((millis() / IDLE_BLINK_HALF_PERIOD_MS) % 2 == 0) {
     matrix.drawPixel(0, 31, lastError.length() ? idleErrorPixel : idlePixel);
   }
@@ -2085,7 +2096,9 @@ String webPage() {
   html += F("<h1>FlightWall MatrixPortal 3.0</h1><form method='post' action='/save'>");
   html += F("<fieldset><legend>Display</legend><label><input type='checkbox' name='display' value='1'");
   html += checked(displayEnabled);
-  html += F("> Display eingeschaltet</label><label>Anzeigeradius (km)<input type='number' name='radius' min='1' max='100' step='0.5' value='");
+  html += F("> Display eingeschaltet</label><label><input type='checkbox' name='environmentIdle' value='1'");
+  html += checked(environmentIdleDisplayEnabled);
+  html += F("> BME280-Werte anzeigen, wenn kein Flugzeug in der Nähe ist</label><label>Anzeigeradius (km)<input type='number' name='radius' min='1' max='100' step='0.5' value='");
   html += String(displayRadiusKm, 1);
   html += F("'></label><label>Standorthöhe über NHN (m)<input type='number' name='observerElevation' min='-500' max='9000' step='1' value='");
   html += String(observerElevationM, 0);
@@ -2243,6 +2256,8 @@ String webPage() {
   html += numberOrDash(relativeHumidityPercent) + " %";
   html += F("</b><span>Luftdruck</span><b>");
   html += numberOrDash(airPressureHpa) + " hPa";
+  html += F("</b><span>BME280-Ruheanzeige</span><b>");
+  html += environmentIdleDisplayEnabled ? "aktiv" : "aus";
   html += F("</b><span>Helligkeit</span><b>");
   html += String(BRIGHTNESS_LEVELS[brightnessIndex]) + "% / " +
           (automaticBrightnessEnabled ? "Automatik" : "manuell");
@@ -2295,6 +2310,7 @@ bool validFlightWallHost(const String &host) {
 void applyWebSettings() {
   if (xSemaphoreTake(preferencesMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
     displayEnabled = webServer.hasArg("display");
+    environmentIdleDisplayEnabled = webServer.hasArg("environmentIdle");
     quietHoursEnabled = webServer.hasArg("quietHours");
     uint16_t requestedQuietTime;
     if (parseTimeMinutes(webServer.arg("quietStart"), requestedQuietTime)) {
@@ -2358,6 +2374,7 @@ void applyWebSettings() {
       manualBrightnessIndex = requestedBrightness;
     }
     preferences.putBool("displayOn", displayEnabled);
+    preferences.putBool("envIdle", environmentIdleDisplayEnabled);
     preferences.putBool("quietOn", quietHoursEnabled);
     preferences.putUShort("quietStart", quietHoursStartMinutes);
     preferences.putUShort("quietEnd", quietHoursEndMinutes);
@@ -2537,6 +2554,8 @@ void handleStatusApi() {
       ",\"free_heap\":" + String(ESP.getFreeHeap()) +
       ",\"chip_temperature_c\":" + jsonNumberOrNull(chipTemperatureC()) +
       ",\"bme280_available\":" + String(environmentSensorAvailable ? "true" : "false") +
+      ",\"environment_idle_display_enabled\":" +
+          String(environmentIdleDisplayEnabled ? "true" : "false") +
       ",\"ambient_temperature_c\":" + jsonNumberOrNull(ambientTemperatureC) +
       ",\"relative_humidity_percent\":" + jsonNumberOrNull(relativeHumidityPercent) +
       ",\"air_pressure_hpa\":" + jsonNumberOrNull(airPressureHpa) +
@@ -2840,6 +2859,7 @@ void setup() {
   brightnessIndex = manualBrightnessIndex;
   automaticBrightnessEnabled = preferences.getBool("autoLight", true);
   displayEnabled = preferences.getBool("displayOn", true);
+  environmentIdleDisplayEnabled = preferences.getBool("envIdle", true);
   quietHoursEnabled = preferences.getBool("quietOn", false);
   quietHoursStartMinutes = constrain(
       preferences.getUShort("quietStart", 23 * 60 + 55),
