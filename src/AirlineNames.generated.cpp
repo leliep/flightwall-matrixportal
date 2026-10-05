@@ -38,6 +38,7 @@ const AirlineName names[] = {
   {"CFG", "Condor Flugdienst"},
   {"CGF", "Cargo Air"},
   {"CHH", "Hainan Airlines"},
+  {"CHX", "Luftrettung"},
   {"CHZ", "Cherline"},
   {"CKK", "China Cargo Airlines"},
   {"CLX", "Cargolux"},
