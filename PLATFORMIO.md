@@ -71,11 +71,11 @@ Start über **Terminal → Aufgabe ausführen… → FlightWall: Git-Update + OT
 
 Der Displaytest zeigt nach den Matrix-Prüfbildern alle Typensymbole mit ihrer
 Bedeutung und dauert insgesamt etwa 23 Sekunden. Der aktuelle Teststand
-verwendet 3 Bit Farbtiefe. Damit stehen sieben
-Helligkeitsstufen von 15 % bis 100 % zur Verfügung. Die automatische Regelung
-verteilt diese logarithmisch zwischen den eingestellten Lux-Schwellen. Falls
-auf der 128×32-Matrix Bildstörungen auftreten, kann `BIT_DEPTH` in
-`src/main.cpp` wieder auf 2 gesetzt werden.
+verwendet zur Unterdrückung sporadischer Störpixel 2 Bit Farbtiefe. Damit
+stehen drei native Helligkeitsstufen mit 33 %, 66 % und 100 % zur Verfügung.
+Die automatische Regelung verteilt diese logarithmisch zwischen den
+eingestellten Lux-Schwellen. Die räumliche Auflösung bleibt unverändert bei
+128×32 Pixeln.
 
 ## Datenschutz
 

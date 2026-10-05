@@ -28,9 +28,9 @@
 #endif
 
 constexpr uint16_t MATRIX_WIDTH = 128;
-constexpr uint8_t BIT_DEPTH = 3;
+constexpr uint8_t BIT_DEPTH = 2;
 constexpr char APP_VERSION[] = "3.0.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-05 22:12:43 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-05 22:30:20 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -83,8 +83,10 @@ constexpr int DEFAULT_MAXIMUM_ALTITUDE_FT = 15000;
 constexpr char LOCAL_TIME_ZONE[] = "CET-1CEST,M3.5.0,M10.5.0/3";
 constexpr char NTP_SERVER_PRIMARY[] = "pool.ntp.org";
 constexpr char NTP_SERVER_SECONDARY[] = "time.cloudflare.com";
-// At 3-bit color depth, seven non-zero PWM levels are available.
-constexpr uint8_t BRIGHTNESS_LEVELS[] = {15, 30, 45, 60, 75, 90, 100};
+// At 2-bit color depth, three non-zero PWM levels are available. The reduced
+// color depth gives the Protomatter ISR more timing margin and is intended to
+// suppress occasional stray pixels on the panel.
+constexpr uint8_t BRIGHTNESS_LEVELS[] = {33, 66, 100};
 constexpr uint8_t BRIGHTNESS_LEVEL_COUNT =
     sizeof(BRIGHTNESS_LEVELS) / sizeof(BRIGHTNESS_LEVELS[0]);
 
@@ -2326,6 +2328,8 @@ String webPage() {
   html += F("</b><span>Helligkeit</span><b>");
   html += String(BRIGHTNESS_LEVELS[brightnessIndex]) + "% / " +
           (automaticBrightnessEnabled ? "Automatik" : "manuell");
+  html += F("</b><span>Matrix-Farbtiefe</span><b>");
+  html += String(BIT_DEPTH) + " Bit";
   html += F("</b><span>Blickgeometrie</span><b>");
   html += String(observerElevationM, 0) + " m NHN / weit ab " +
           String(farDirectionDistanceKm, 1) + " km";
@@ -2628,6 +2632,7 @@ void handleStatusApi() {
       ",\"rssi\":" + String(WiFi.RSSI()) +
       ",\"lux\":" + (isnan(filteredLux) ? String("null") : String(filteredLux, 1)) +
       ",\"brightness_percent\":" + String(BRIGHTNESS_LEVELS[brightnessIndex]) +
+      ",\"matrix_bit_depth\":" + String(BIT_DEPTH) +
       ",\"observer_elevation_m\":" + String(observerElevationM, 0) +
       ",\"far_direction_km\":" + String(farDirectionDistanceKm, 1) +
       ",\"adsb_url\":\"" + jsonEscape(adsbUrl) + "\"" +
@@ -2946,7 +2951,19 @@ void setup() {
     preferences.putUChar("brightness", manualBrightnessIndex);
     preferences.putUChar("settingsVer", 2);
   }
-  if (manualBrightnessIndex >= BRIGHTNESS_LEVEL_COUNT) manualBrightnessIndex = 3;
+  if (settingsVersion < 11) {
+    // Preserve the approximate brightness selected with the former seven
+    // 3-bit levels when migrating to the three native 2-bit levels.
+    if (manualBrightnessIndex <= 1) {
+      manualBrightnessIndex = 0;
+    } else if (manualBrightnessIndex <= 4) {
+      manualBrightnessIndex = 1;
+    } else {
+      manualBrightnessIndex = 2;
+    }
+    preferences.putUChar("brightness", manualBrightnessIndex);
+  }
+  if (manualBrightnessIndex >= BRIGHTNESS_LEVEL_COUNT) manualBrightnessIndex = 1;
   brightnessIndex = manualBrightnessIndex;
   automaticBrightnessEnabled = preferences.getBool("autoLight", true);
   displayEnabled = preferences.getBool("displayOn", true);
@@ -2988,7 +3005,7 @@ void setup() {
     pageOrder[page] = preferences.getUChar(
         ("order" + String(page)).c_str(), page);
   }
-  if (settingsVersion < 10) preferences.putUChar("settingsVer", 10);
+  if (settingsVersion < 11) preferences.putUChar("settingsVer", 11);
   displayRadiusKm = constrain(displayRadiusKm, 1.0f, 100.0f);
   siteLatitude = constrain(siteLatitude, -90.0, 90.0);
   siteLongitude = constrain(siteLongitude, -180.0, 180.0);

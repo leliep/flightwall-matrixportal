@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Matrix-Farbtiefe zur weiteren Unterdrückung sporadischer Störpixel von 3 auf
+  2 Bit reduziert; Helligkeitsautomatik und gespeicherte Auswahl auf die drei
+  nativen Stufen 33 %, 66 % und 100 % migriert
 - Routencache beim Flugzeugwechsel in RAM verlagert; verzögerte persistente
   Speicherung bei kontrolliert dunkler Matrix im flugzeugfreien Zustand
 - vollständige Verarbeitung, Zwischenspeicherung und Darstellung von
@@ -35,7 +38,7 @@
 - interne ESP32-S3-Chiptemperatur in Statusseite und Status-API
 - passwortgeschütztes Firmware-Update über das Webinterface
 - passwortgeschützter OTA-Upload aus PlatformIO
-- 3 Bit Farbtiefe mit sieben Helligkeitsstufen und logarithmischer Lux-Regelung
+- 2 Bit Farbtiefe mit drei Helligkeitsstufen und logarithmischer Lux-Regelung
 - schwarzes Display während OTA-Flashzugriffen zur Unterdrückung sichtbarer Störungen
 - konfigurierbare ADS-B- und Routen-Adressen mit Verbindungstest
 - einzeln aktivierbare und frei sortierbare Seiten mit eigener Anzeigedauer
