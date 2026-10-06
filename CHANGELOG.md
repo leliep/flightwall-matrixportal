@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Betriebs-Pixel an die 2-Bit-Farbtiefe angepasst, damit weißes und rotes
+  Blinken im Ruhezustand wieder sicher sichtbar sind
 - Scrollgeschwindigkeit der Freitextseite als langsam, mittel oder schnell
   konfigurierbar und dauerhaft gespeichert; Standard ist mittel
 - Webserver, mDNS und OTA werden nach einer WLAN-Unterbrechung automatisch

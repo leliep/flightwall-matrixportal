@@ -30,7 +30,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 2;
 constexpr char APP_VERSION[] = "3.0.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-06 20:42:58 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-06 20:58:44 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -339,9 +339,10 @@ void updateColors() {
   orange = matrix.color565(scaledChannel(255), scaledChannel(170), 0);
   cyan = matrix.color565(0, scaledChannel(255), scaledChannel(255));
   violet = matrix.color565(scaledChannel(180), 0, scaledChannel(255));
-  // Fixed first non-zero 3-bit level, independent of automatic brightness.
-  idlePixel = matrix.color565(48, 48, 48);
-  idleErrorPixel = matrix.color565(48, 0, 0);
+  // Fixed first reliably visible 2-bit level, independent of automatic
+  // brightness. Lower values are rounded down to black by Protomatter.
+  idlePixel = matrix.color565(85, 85, 85);
+  idleErrorPixel = matrix.color565(85, 0, 0);
 }
 
 
