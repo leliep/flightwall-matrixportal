@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Webserver, mDNS und OTA werden nach einer WLAN-Unterbrechung automatisch
+  sauber beendet und nach der Neuverbindung erneut gestartet; Diagnosezähler
+  zeigen WLAN-Neuverbindungen und Webserver-Starts
+- Web-Display-Abfrageintervall zur Entlastung bei mehreren Clients von einer
+  auf zwei Sekunden erhöht
 - Callsign-Airlinecodes haben Vorrang vor Routendienst-Platzhaltern; der Wert
   `unknown` von adsb.im kann BPO/GAF und andere erkennbare Präfixe nicht mehr
   zu `Airline N/A` überschreiben

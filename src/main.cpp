@@ -30,7 +30,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 2;
 constexpr char APP_VERSION[] = "3.0.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-06 19:59:37 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-06 20:28:05 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -148,7 +148,12 @@ SemaphoreHandle_t preferencesMutex;
 TaskHandle_t networkTaskHandle = nullptr;
 TaskHandle_t displayTaskHandle = nullptr;
 bool webServerStarted = false;
+bool webServerConfigured = false;
 bool otaStarted = false;
+bool wifiWasConnected = false;
+uint32_t wifiReconnectCount = 0;
+uint32_t webServerStartCount = 0;
+uint32_t lastWifiDisconnect = 0;
 uint32_t otaRebootAt = 0;
 uint32_t manualRebootAt = 0;
 volatile bool otaInProgress = false;
@@ -2283,6 +2288,12 @@ String webPage() {
   html += WiFi.localIP().toString();
   html += F("</b><span>WLAN</span><b>");
   html += String(WiFi.RSSI()) + " dBm";
+  html += F("</b><span>WLAN-Neuverbindungen</span><b>");
+  html += String(wifiReconnectCount);
+  html += F("</b><span>Webserver-Starts</span><b>");
+  html += String(webServerStartCount);
+  html += F("</b><span>Letzte WLAN-Unterbrechung</span><b>");
+  html += lastWifiDisconnect ? ageText(lastWifiDisconnect) : "keine";
   html += F("</b><span>BH1750</span><b>");
   html += lightSensorAvailable ? "verbunden" : "nicht gefunden";
   html += F("</b><span>Lux</span><b>");
@@ -2695,6 +2706,12 @@ void handleStatusApi() {
       ",\"station_pressure_hpa\":" + jsonNumberOrNull(stationPressureHpa) +
       ",\"air_pressure_hpa\":" + jsonNumberOrNull(airPressureHpa) +
       ",\"rssi\":" + String(WiFi.RSSI()) +
+      ",\"wifi_reconnects\":" + String(wifiReconnectCount) +
+      ",\"webserver_starts\":" + String(webServerStartCount) +
+      ",\"last_wifi_disconnect_age_seconds\":" +
+          (lastWifiDisconnect
+               ? String((millis() - lastWifiDisconnect) / 1000)
+               : "null") +
       ",\"lux\":" + (isnan(filteredLux) ? String("null") : String(filteredLux, 1)) +
       ",\"brightness_percent\":" + String(BRIGHTNESS_LEVELS[brightnessIndex]) +
       ",\"matrix_bit_depth\":" + String(BIT_DEPTH) +
@@ -2917,23 +2934,41 @@ void startArduinoOta() {
 
 void startWebServer() {
   if (webServerStarted) return;
-  webServer.on("/", HTTP_GET, []() { webServer.send(200, "text/html; charset=utf-8", webPage()); });
-  webServer.on("/display", HTTP_GET, handleWebDisplay);
-  webServer.on("/api/display", HTTP_GET, handleDisplayApi);
-  webServer.on("/api/status", HTTP_GET, handleStatusApi);
-  webServer.on("/save", HTTP_POST, handleWebSave);
-  webServer.on("/test-adsb", HTTP_POST, handleAdsbTest);
-  webServer.on("/test-route", HTTP_POST, handleRouteTest);
-  webServer.on("/display-test", HTTP_POST, handleDisplayTest);
-  webServer.on("/restart", HTTP_POST, handleRestart);
-  webServer.on("/update", HTTP_GET, handleOtaPage);
-  webServer.on("/update", HTTP_POST, finishOtaUpload, handleOtaUpload);
-  webServer.onNotFound([]() { webServer.send(404, "text/plain; charset=utf-8", "Nicht gefunden"); });
+  if (!webServerConfigured) {
+    webServer.on("/", HTTP_GET, []() { webServer.send(200, "text/html; charset=utf-8", webPage()); });
+    webServer.on("/display", HTTP_GET, handleWebDisplay);
+    webServer.on("/api/display", HTTP_GET, handleDisplayApi);
+    webServer.on("/api/status", HTTP_GET, handleStatusApi);
+    webServer.on("/save", HTTP_POST, handleWebSave);
+    webServer.on("/test-adsb", HTTP_POST, handleAdsbTest);
+    webServer.on("/test-route", HTTP_POST, handleRouteTest);
+    webServer.on("/display-test", HTTP_POST, handleDisplayTest);
+    webServer.on("/restart", HTTP_POST, handleRestart);
+    webServer.on("/update", HTTP_GET, handleOtaPage);
+    webServer.on("/update", HTTP_POST, finishOtaUpload, handleOtaUpload);
+    webServer.onNotFound([]() { webServer.send(404, "text/plain; charset=utf-8", "Nicht gefunden"); });
+    webServerConfigured = true;
+  }
   webServer.begin();
   if (MDNS.begin("matrixportal")) MDNS.addService("http", "tcp", 80);
   webServerStarted = true;
+  ++webServerStartCount;
   startArduinoOta();
   Serial.println("Web interface: http://matrixportal.local");
+}
+
+
+void stopNetworkServices() {
+  if (otaStarted) {
+    ArduinoOTA.end();
+    otaStarted = false;
+  }
+  MDNS.end();
+  if (webServerStarted) {
+    webServer.stop();
+    webServerStarted = false;
+  }
+  Serial.println("Network services stopped after Wi-Fi disconnect");
 }
 
 
@@ -2960,23 +2995,36 @@ void flushDeferredRouteCacheIfIdle() {
 void networkTask(void *) {
   lastWiFiAttempt = millis();
   if (connectWiFi(20000)) {
+    wifiWasConnected = true;
     startWebServer();
     fetchLocalFlight();
     lastPoll = millis();
   }
   for (;;) {
     const uint32_t now = millis();
-    if (WiFi.status() == WL_CONNECTED) {
+    const bool wifiConnected = WiFi.status() == WL_CONNECTED;
+    if (!wifiConnected && wifiWasConnected) {
+      wifiWasConnected = false;
+      lastWifiDisconnect = now;
+      stopNetworkServices();
+      setNetworkError("WLAN GETRENNT");
+    } else if (wifiConnected && !wifiWasConnected) {
+      wifiWasConnected = true;
+      ++wifiReconnectCount;
+      startWebServer();
+      Serial.println("Network services restarted after Wi-Fi reconnect");
+    }
+    if (wifiConnected) {
       webServer.handleClient();
       if (otaStarted) ArduinoOTA.handle();
     }
     if (otaRebootAt && static_cast<int32_t>(now - otaRebootAt) >= 0) ESP.restart();
     if (manualRebootAt && static_cast<int32_t>(now - manualRebootAt) >= 0) ESP.restart();
-    if (WiFi.status() != WL_CONNECTED && now - lastWiFiAttempt >= WIFI_RETRY_MS) {
+    if (!wifiConnected && now - lastWiFiAttempt >= WIFI_RETRY_MS) {
       lastWiFiAttempt = now;
-      if (connectWiFi(10000)) startWebServer();
+      connectWiFi(10000);
     }
-    if (WiFi.status() == WL_CONNECTED && now - lastPoll >= POLL_INTERVAL_MS) {
+    if (wifiConnected && now - lastPoll >= POLL_INTERVAL_MS) {
       lastPoll = now;
       fetchLocalFlight();
     }
