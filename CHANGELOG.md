@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- fehlender Airline-/Betreibername wird bei Special Types durch eine lesbare
+  Klassifizierung wie `Military`, `Police` oder `Helicopter` ersetzt
+- Lookup-Ergänzungen für TAS, ZYL, AXS und BBC
 - `GAF…` wird unabhängig von den ADS-B-Daten eindeutig als German Airforce
   erkannt, sichtbar so bezeichnet und mit dem Militärsymbol dargestellt
 - zwei dauerhaft gespeicherte ADS-B-Quellen mit frei wählbarer aktiver Quelle;

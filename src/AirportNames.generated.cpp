@@ -329,6 +329,7 @@ const AirportName names[] = {
   {"SZF", "Samsun"},
   {"SZG", "Salzburg"},
   {"SZX", "Shenzhen"},
+  {"TAS", "Taschkent"},
   {"TAT", "Poprad-Tatry"},
   {"TBS", "Tiflis"},
   {"TFN", "Teneriffa Nord"},
@@ -373,6 +374,7 @@ const AirportName names[] = {
   {"ZAG", "Zagreb"},
   {"ZRH", "Zürich"},
   {"ZTH", "Zakynthos"},
+  {"ZYL", "Sylhet"},
 };
 }  // namespace
 

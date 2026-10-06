@@ -30,7 +30,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 2;
 constexpr char APP_VERSION[] = "3.0.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-06 17:04:28 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-06 18:55:57 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -1898,6 +1898,26 @@ String airlineCode(const String &callsign) {
 }
 
 
+String specialTypeDisplayName(String specialType) {
+  String category = specialType;
+  category.toUpperCase();
+  if (category.indexOf("BUNDESPOLIZEI") >= 0) return "Bundespolizei";
+  if (category.indexOf("AIRFORCE") >= 0) return "German Airforce";
+  if (category.indexOf("MILIT") >= 0) return "Military";
+  if (category.indexOf("POLICE") >= 0 ||
+      category.indexOf("POLIZEI") >= 0) return "Police";
+  if (category.indexOf("GOVERNMENT") >= 0 ||
+      category.indexOf("REGIERUNG") >= 0) return "Government";
+  if (category.indexOf("HELICOPTER") >= 0 ||
+      category.indexOf("HUBSCHRAUBER") >= 0) return "Helicopter";
+  if (category.indexOf("AIRSHIP") >= 0 ||
+      category.indexOf("LUFTSCHIFF") >= 0 ||
+      category.indexOf("SHIP") >= 0) return "Airship";
+  if (category.indexOf("A380") >= 0) return "A380";
+  return specialType;
+}
+
+
 String verticalMotion(const Aircraft &aircraft) {
   if (!aircraft.hasVerticalRate) return "unbekannt";
   if (aircraft.verticalRateFpm > 64) return "steigt";
@@ -1952,6 +1972,8 @@ bool fetchLocalFlight() {
 
     next.available = true;
     next.flight = selected.flight.length() ? selected.flight : selected.hex;
+    next.specialType = selected.specialTypes.empty()
+                           ? "" : selected.specialTypes.front();
     const String code = currentRoute.airlineCode.length()
                             ? currentRoute.airlineCode
                             : airlineCode(selected.flight);
@@ -1973,9 +1995,9 @@ bool fetchLocalFlight() {
                          : translatedAirline;
     }
     if (next.airline.isEmpty()) next.airline = code;
+    if (next.airline.isEmpty() && next.specialType.length())
+      next.airline = specialTypeDisplayName(next.specialType);
     next.type = selected.type;
-    next.specialType = selected.specialTypes.empty()
-                           ? "" : selected.specialTypes.front();
     next.direction = selected.direction;
     next.verticalMotion = verticalMotion(selected);
     next.motion = selected.motion;
