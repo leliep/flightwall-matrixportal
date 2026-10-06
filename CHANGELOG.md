@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `GAF…` wird unabhängig von den ADS-B-Daten eindeutig als German Airforce
+  erkannt, sichtbar so bezeichnet und mit dem Militärsymbol dargestellt
 - zwei dauerhaft gespeicherte ADS-B-Quellen mit frei wählbarer aktiver Quelle;
   bestehende Konfigurationen werden als Quelle 1 übernommen
 - `BPO…` wird unabhängig vom restlichen Callsign eindeutig als Bundespolizei

@@ -30,7 +30,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 2;
 constexpr char APP_VERSION[] = "3.0.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-06 14:44:05 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-06 17:04:28 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -483,7 +483,8 @@ uint16_t aircraftColor() {
   String category = flight.specialType;
   category.toUpperCase();
   if (category.indexOf("POLICE") >= 0 || category.indexOf("POLIZEI") >= 0) return cyan;
-  if (category.indexOf("MILIT") >= 0) return red;
+  if (category.indexOf("MILIT") >= 0 ||
+      category.indexOf("AIRFORCE") >= 0) return red;
   if (category.indexOf("HELICOPTER") >= 0 || category.indexOf("HUBSCHRAUBER") >= 0) return yellow;
   if (category.indexOf("A380") >= 0) return violet;
   if (category.indexOf("GOVERNMENT") >= 0 || category.indexOf("REGIERUNG") >= 0) return blue;
@@ -510,7 +511,8 @@ CompactIconKind compactIconKind(const String &specialType) {
     return CompactIconKind::Helicopter;
   }
   if (category.indexOf("A380") >= 0) return CompactIconKind::A380;
-  if (category.indexOf("MILIT") >= 0) return CompactIconKind::Military;
+  if (category.indexOf("MILIT") >= 0 ||
+      category.indexOf("AIRFORCE") >= 0) return CompactIconKind::Military;
   if (category.indexOf("POLICE") >= 0 ||
       category.indexOf("POLIZEI") >= 0) {
     return CompactIconKind::Police;
@@ -610,7 +612,8 @@ void drawSpecialIcon(int16_t x = 96) {
     matrix.drawFastVLine(x + 3, 1, 6, color);
     matrix.drawFastHLine(x, 3, 7, color);
     matrix.drawFastHLine(x + 2, 6, 3, color);
-  } else if (category.indexOf("MILIT") >= 0) {
+  } else if (category.indexOf("MILIT") >= 0 ||
+             category.indexOf("AIRFORCE") >= 0) {
     matrix.drawPixel(x + 3, 0, color);
     matrix.drawFastHLine(x + 2, 1, 3, color);
     matrix.drawFastHLine(x + 1, 2, 5, color);
@@ -1959,12 +1962,16 @@ bool fetchLocalFlight() {
     providedAirline.trim();
     String providedAirlineComparison = providedAirline;
     providedAirlineComparison.toUpperCase();
-    next.airline = code == "BPO"
-                       ? "Bundespolizei"
-                       : providedAirline.length() &&
-                           providedAirlineComparison != "UNKNOWN"
-                       ? providedAirline
-                       : translatedAirline;
+    if (code == "BPO") {
+      next.airline = "Bundespolizei";
+    } else if (code == "GAF") {
+      next.airline = "German Airforce";
+    } else {
+      next.airline = providedAirline.length() &&
+                             providedAirlineComparison != "UNKNOWN"
+                         ? providedAirline
+                         : translatedAirline;
+    }
     if (next.airline.isEmpty()) next.airline = code;
     next.type = selected.type;
     next.specialType = selected.specialTypes.empty()

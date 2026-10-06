@@ -36,6 +36,8 @@ void detectSpecialTypes(Aircraft& aircraft) {
                 aircraft.airline;
   text.toUpperCase();
 
+  if (aircraft.flight.startsWith("GAF"))
+    aircraft.specialTypes.push_back("German Airforce");
   const bool federalPolice = aircraft.flight.startsWith("BPO") ||
       containsAny(text, {"BUNDESPOLIZEI", "FEDERAL POLICE"});
   if (federalPolice) {
@@ -44,9 +46,9 @@ void detectSpecialTypes(Aircraft& aircraft) {
              aircraft.flight.startsWith("POL")) {
     aircraft.specialTypes.push_back("police");
   }
-  if ((aircraft.dbFlags & 1U) ||
+  if (!aircraft.flight.startsWith("GAF") && ((aircraft.dbFlags & 1U) ||
       containsAny(text, {"MILITARY", "LUFTWAFFE", "AIR FORCE", "ARMY",
-                         "NAVY", "MARINE", "HEER"}))
+                         "NAVY", "MARINE", "HEER"})))
     aircraft.specialTypes.push_back("military");
   if (containsAny(text, {"GOVERNMENT", "GOVT", "REGIERUNG",
                          "BUNDESREPUBLIK", "STAATSFLUG", "STATE OF"}))
