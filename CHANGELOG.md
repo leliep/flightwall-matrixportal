@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Scrollgeschwindigkeit der Freitextseite als langsam, mittel oder schnell
+  konfigurierbar und dauerhaft gespeichert; Standard ist mittel
 - Webserver, mDNS und OTA werden nach einer WLAN-Unterbrechung automatisch
   sauber beendet und nach der Neuverbindung erneut gestartet; Diagnosezähler
   zeigen WLAN-Neuverbindungen und Webserver-Starts

@@ -30,7 +30,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 2;
 constexpr char APP_VERSION[] = "3.0.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-06 20:28:05 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-06 20:42:58 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -220,6 +220,7 @@ uint32_t lastRouteAttempt = 0;
 size_t lastReceivedAircraft = 0;
 size_t lastCandidateAircraft = 0;
 String customPageText;
+uint8_t customScrollSpeed = 1;
 bool pageEnabled[] = {true, true, true, true, true, true, true};
 uint8_t pageOrder[] = {0, 1, 2, 3, 4, 5, 6};
 uint32_t pageDurationMs[] = {
@@ -1252,12 +1253,27 @@ uint32_t airportNamesPageDuration() {
 
 
 constexpr uint32_t CUSTOM_SCROLL_PAUSE_MS = 500;
+constexpr uint16_t CUSTOM_SCROLL_PIXEL_MS[] = {120, 80, 50};
+
+
+uint16_t customScrollPixelMs() {
+  return CUSTOM_SCROLL_PIXEL_MS[customScrollSpeed];
+}
+
+
+const char *customScrollSpeedName() {
+  switch (customScrollSpeed) {
+    case 0: return "langsam";
+    case 2: return "schnell";
+    default: return "mittel";
+  }
+}
 
 
 uint32_t customPageScrollDuration() {
   const uint32_t textWidth = customPageText.length() * 6UL;
   return CUSTOM_SCROLL_PAUSE_MS +
-         (MATRIX_WIDTH + textWidth) * SCROLL_PIXEL_MS +
+         (MATRIX_WIDTH + textWidth) * customScrollPixelMs() +
          CUSTOM_SCROLL_PAUSE_MS;
 }
 
@@ -1267,7 +1283,7 @@ void drawCustomTextPage() {
   const uint32_t textWidth = customPageText.length() * 6UL;
   int32_t x = MATRIX_WIDTH;
   if (elapsed > CUSTOM_SCROLL_PAUSE_MS) {
-    x -= (elapsed - CUSTOM_SCROLL_PAUSE_MS) / SCROLL_PIXEL_MS;
+    x -= (elapsed - CUSTOM_SCROLL_PAUSE_MS) / customScrollPixelMs();
   }
   const int32_t finalX = -static_cast<int32_t>(textWidth);
   if (x < finalX) x = finalX;
@@ -2254,7 +2270,13 @@ String webPage() {
   html += checked(smoothTransitions);
   html += F("> Sanfte Übergänge</label><label>Freitext (maximal 128 Zeichen)<textarea name='customText' maxlength='128' rows='3' style='width:100%;box-sizing:border-box;padding:9px'>");
   html += htmlEscape(customPageText);
-  html += F("</textarea></label><p class='muted'>Ein leerer Freitext überspringt die Seite automatisch.</p>");
+  html += F("</textarea></label><label>Freitext-Scrollgeschwindigkeit<select name='customScrollSpeed'><option value='2'");
+  html += selected(customScrollSpeed == 2);
+  html += F(">schnell</option><option value='1'");
+  html += selected(customScrollSpeed == 1);
+  html += F(">mittel</option><option value='0'");
+  html += selected(customScrollSpeed == 0);
+  html += F(">langsam</option></select></label><p class='muted'>Ein leerer Freitext überspringt die Seite automatisch.</p>");
   for (uint8_t page = 0; page < PAGE_COUNT; ++page) {
     html += "<label><input type='checkbox' name='page" + String(page) + "On' value='1'";
     html += checked(pageEnabled[page]);
@@ -2466,6 +2488,12 @@ void applyWebSettings() {
     customPageText = displayAscii(webServer.arg("customText"));
     customPageText.trim();
     if (customPageText.length() > 128) customPageText.remove(128);
+    const int requestedCustomScrollSpeed =
+        webServer.arg("customScrollSpeed").toInt();
+    customScrollSpeed = requestedCustomScrollSpeed >= 0 &&
+                                requestedCustomScrollSpeed <= 2
+                            ? requestedCustomScrollSpeed
+                            : 1;
     String requestedAdsbUrl1 = webServer.arg("adsbUrl1");
     requestedAdsbUrl1.trim();
     if (requestedAdsbUrl1.startsWith("http://") ||
@@ -2540,6 +2568,7 @@ void applyWebSettings() {
     preferences.putBool("altFilter", altitudeFilterEnabled);
     preferences.putInt("maxAltFt", maximumAltitudeFt);
     preferences.putString("customText", customPageText);
+    preferences.putUChar("customSpd", customScrollSpeed);
     preferences.putBool("smooth", smoothTransitions);
     for (uint8_t page = 0; page < PAGE_COUNT; ++page) {
       preferences.putBool(("p" + String(page) + "On").c_str(), pageEnabled[page]);
@@ -2636,6 +2665,7 @@ void handleDisplayApi() {
          (updated ? String((millis() - updated) / 1000) : "null") +
          ",\"error\":\"" + jsonEscape(error) + "\"" +
          ",\"custom_text\":\"" + jsonEscape(customPageText) + "\"" +
+         ",\"custom_scroll_speed\":\"" + customScrollSpeedName() + "\"" +
          ",\"page_enabled\":[";
   for (uint8_t page = 0; page < PAGE_COUNT; ++page) {
     if (page) json += ',';
@@ -3116,6 +3146,8 @@ void setup() {
   customPageText = displayAscii(preferences.getString("customText", ""));
   customPageText.trim();
   if (customPageText.length() > 128) customPageText.remove(128);
+  customScrollSpeed = preferences.getUChar("customSpd", 1);
+  if (customScrollSpeed > 2) customScrollSpeed = 1;
   smoothTransitions = preferences.getBool("smooth", true);
   for (uint8_t page = 0; page < PAGE_COUNT; ++page) {
     pageEnabled[page] = preferences.getBool(
