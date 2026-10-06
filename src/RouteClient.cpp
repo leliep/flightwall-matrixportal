@@ -243,6 +243,7 @@ RouteResult RouteClient::fetch(const String& callsign, double latitude,
     if (!returned.isEmpty() && returned != callsign) continue;
     extractCodes(row, result);
     result.airlineCode = upperTrimmed(row["airline_code"] | "");
+    if (result.airlineCode == "UNKNOWN") result.airlineCode = "";
     break;
   }
   fillNames(result);

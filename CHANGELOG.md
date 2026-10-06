@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Callsign-Airlinecodes haben Vorrang vor Routendienst-Platzhaltern; der Wert
+  `unknown` von adsb.im kann BPO/GAF und andere erkennbare Präfixe nicht mehr
+  zu `Airline N/A` überschreiben
 - fehlender Airline-/Betreibername wird bei Special Types durch eine lesbare
   Klassifizierung wie `Military`, `Police` oder `Helicopter` ersetzt
 - Lookup-Ergänzungen für TAS, ZYL, AXS und BBC

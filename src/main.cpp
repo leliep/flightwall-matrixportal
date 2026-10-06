@@ -30,7 +30,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 2;
 constexpr char APP_VERSION[] = "3.0.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-06 18:55:57 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-06 19:59:37 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -1974,9 +1974,14 @@ bool fetchLocalFlight() {
     next.flight = selected.flight.length() ? selected.flight : selected.hex;
     next.specialType = selected.specialTypes.empty()
                            ? "" : selected.specialTypes.front();
-    const String code = currentRoute.airlineCode.length()
-                            ? currentRoute.airlineCode
-                            : airlineCode(selected.flight);
+    const String callsignAirlineCode = airlineCode(selected.flight);
+    String routeAirlineCode = currentRoute.airlineCode;
+    routeAirlineCode.trim();
+    routeAirlineCode.toUpperCase();
+    if (routeAirlineCode == "UNKNOWN") routeAirlineCode = "";
+    const String code = callsignAirlineCode.length()
+                            ? callsignAirlineCode
+                            : routeAirlineCode;
     const String translatedAirline = airlineDisplayName(code);
     if (!code.isEmpty() && translatedAirline.isEmpty())
       rememberUnknownAirline(code);
@@ -1984,9 +1989,9 @@ bool fetchLocalFlight() {
     providedAirline.trim();
     String providedAirlineComparison = providedAirline;
     providedAirlineComparison.toUpperCase();
-    if (code == "BPO") {
+    if (selected.flight.startsWith("BPO")) {
       next.airline = "Bundespolizei";
-    } else if (code == "GAF") {
+    } else if (selected.flight.startsWith("GAF")) {
       next.airline = "German Airforce";
     } else {
       next.airline = providedAirline.length() &&
