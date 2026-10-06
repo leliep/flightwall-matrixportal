@@ -43,7 +43,8 @@ void detectSpecialTypes(Aircraft& aircraft) {
   if (federalPolice) {
     aircraft.specialTypes.push_back("Bundespolizei");
   } else if (containsAny(text, {"POLICE", "POLIZEI", "POLICE AVIATION"}) ||
-             aircraft.flight.startsWith("POL")) {
+             aircraft.flight.startsWith("POL") ||
+             aircraft.flight.startsWith("HBT")) {
     aircraft.specialTypes.push_back("police");
   }
   if (!aircraft.flight.startsWith("GAF") && ((aircraft.dbFlags & 1U) ||

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Callsigns `HBT…` als Polizeihubschrauber bzw. Special Type `Police` erkannt
+  und Airline-Code HBT entsprechend übersetzt
 - Betriebs-Pixel an die 2-Bit-Farbtiefe angepasst, damit weißes und rotes
   Blinken im Ruhezustand wieder sicher sichtbar sind
 - Scrollgeschwindigkeit der Freitextseite als langsam, mittel oder schnell
