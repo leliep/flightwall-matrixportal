@@ -36,10 +36,14 @@ void detectSpecialTypes(Aircraft& aircraft) {
                 aircraft.airline;
   text.toUpperCase();
 
-  if (containsAny(text, {"POLICE", "POLIZEI", "BUNDESPOLIZEI",
-                         "FEDERAL POLICE", "POLICE AVIATION"}) ||
-      aircraft.flight.startsWith("BPO") || aircraft.flight.startsWith("POL"))
+  const bool federalPolice = aircraft.flight.startsWith("BPO") ||
+      containsAny(text, {"BUNDESPOLIZEI", "FEDERAL POLICE"});
+  if (federalPolice) {
+    aircraft.specialTypes.push_back("Bundespolizei");
+  } else if (containsAny(text, {"POLICE", "POLIZEI", "POLICE AVIATION"}) ||
+             aircraft.flight.startsWith("POL")) {
     aircraft.specialTypes.push_back("police");
+  }
   if ((aircraft.dbFlags & 1U) ||
       containsAny(text, {"MILITARY", "LUFTWAFFE", "AIR FORCE", "ARMY",
                          "NAVY", "MARINE", "HEER"}))

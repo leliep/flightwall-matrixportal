@@ -132,6 +132,7 @@ const AirlineName names[] = {
   {"RAM", "Royal Air Maroc"},
   {"RJA", "Royal Jordanian"},
   {"RUK", "Ryanair UK"},
+  {"RXI", "Riyadh Air"},
   {"RYR", "Ryanair"},
   {"SAR", "Sprintair"},
   {"SAS", "Scandinavian Airlines System"},

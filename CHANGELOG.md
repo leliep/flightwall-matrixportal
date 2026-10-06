@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- zwei dauerhaft gespeicherte ADS-B-Quellen mit frei wählbarer aktiver Quelle;
+  bestehende Konfigurationen werden als Quelle 1 übernommen
+- `BPO…` wird unabhängig vom restlichen Callsign eindeutig als Bundespolizei
+  erkannt und sichtbar so bezeichnet
+- Lookup-Ergänzungen für NVI (Navoiy) und RXI (Riyadh Air)
 - Matrix-Farbtiefe zur weiteren Unterdrückung sporadischer Störpixel von 3 auf
   2 Bit reduziert; Helligkeitsautomatik und gespeicherte Auswahl auf die drei
   nativen Stufen 33 %, 66 % und 100 % migriert

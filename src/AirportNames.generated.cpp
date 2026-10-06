@@ -250,6 +250,7 @@ const AirportName names[] = {
   {"NRT", "Tokio-Narita"},
   {"NTE", "Nantes"},
   {"NUE", "Nürnberg"},
+  {"NVI", "Navoiy"},
   {"NWI", "Norwich"},
   {"OGU", "Ordu-Giresun"},
   {"OLB", "Olbia"},

@@ -30,7 +30,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 2;
 constexpr char APP_VERSION[] = "3.0.0-dev";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-05 22:30:20 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-06 14:44:05 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -196,7 +196,9 @@ float farDirectionDistanceKm = 5.0f;
 uint32_t pageIntervalMs = DEFAULT_PAGE_INTERVAL_MS;
 float lowLuxThreshold = 20.0f;
 float highLuxThreshold = 800.0f;
-String adsbUrl = DEFAULT_ADSB_URL;
+String adsbUrl1 = DEFAULT_ADSB_URL;
+String adsbUrl2;
+uint8_t activeAdsbSource = 0;
 String routeUrl = DEFAULT_ROUTE_URL;
 double siteLatitude = DEFAULT_SITE_LATITUDE;
 double siteLongitude = DEFAULT_SITE_LONGITUDE;
@@ -1877,8 +1879,14 @@ String httpFailureText(int status) {
 }
 
 
+const String &activeAdsbUrl() {
+  return activeAdsbSource == 1 ? adsbUrl2 : adsbUrl1;
+}
+
+
 String airlineCode(const String &callsign) {
   if (callsign.startsWith("GAF")) return "GAF";
+  if (callsign.startsWith("BPO")) return "BPO";
   if (callsign.length() < 4) return "";
   for (size_t index = 3; index < callsign.length(); ++index) {
     if (isDigit(callsign[index])) return callsign.substring(0, 3);
@@ -1911,7 +1919,7 @@ bool fetchLocalFlight() {
   config.radiusKm = displayRadiusKm;
   config.hideSportAircraft = hideSportAircraft;
   config.maximumAltitudeFt = altitudeFilterEnabled ? maximumAltitudeFt : 0;
-  adsbClient.setUrl(adsbUrl);
+  adsbClient.setUrl(activeAdsbUrl());
   routeClient.configure(routesEnabled, routeUrl);
 
   const AdsbResult result = adsbClient.fetch(config);
@@ -1951,7 +1959,9 @@ bool fetchLocalFlight() {
     providedAirline.trim();
     String providedAirlineComparison = providedAirline;
     providedAirlineComparison.toUpperCase();
-    next.airline = providedAirline.length() &&
+    next.airline = code == "BPO"
+                       ? "Bundespolizei"
+                       : providedAirline.length() &&
                            providedAirlineComparison != "UNKNOWN"
                        ? providedAirline
                        : translatedAirline;
@@ -2174,9 +2184,15 @@ String webPage() {
   html += F("'></label><p class='muted'>Die Nachtruhe darf über Mitternacht reichen. Gleiche Zeiten deaktivieren die Abdunklung.</p><button type='submit' formaction='/display-test'>");
   html += (displayTestActive || displayTestCommand == 1) ?
       "Displaytest beenden" : "Displaytest starten";
-  html += F("</button><p class='muted'>Etwa 23 Sekunden: Matrix-Prüfbilder und alle Typensymbole mit Bedeutung.</p></fieldset><fieldset><legend>Flugzeugdaten</legend><label>ADS-B-Adresse<input type='url' name='adsbUrl' maxlength='180' value='");
-  html += htmlEscape(adsbUrl);
-  html += F("'></label><label>Breitengrad<input type='number' name='siteLat' min='-90' max='90' step='0.000001' value='");
+  html += F("</button><p class='muted'>Etwa 23 Sekunden: Matrix-Prüfbilder und alle Typensymbole mit Bedeutung.</p></fieldset><fieldset><legend>Flugzeugdaten</legend><label>Aktive ADS-B-Quelle<select name='activeAdsbSource'><option value='1'");
+  html += selected(activeAdsbSource == 0);
+  html += F(">Quelle 1</option><option value='2'");
+  html += selected(activeAdsbSource == 1);
+  html += F(">Quelle 2</option></select></label><label>ADS-B-Adresse Quelle 1<input type='url' name='adsbUrl1' maxlength='180' value='");
+  html += htmlEscape(adsbUrl1);
+  html += F("'></label><label>ADS-B-Adresse Quelle 2<input type='url' name='adsbUrl2' maxlength='180' value='");
+  html += htmlEscape(adsbUrl2);
+  html += F("' placeholder='http://zweiter-empfaenger/data/aircraft.json'></label><p class='muted'>Nur die ausgewählte Quelle wird abgefragt. Quelle 2 darf unkonfiguriert bleiben.</p><label>Breitengrad<input type='number' name='siteLat' min='-90' max='90' step='0.000001' value='");
   html += String(siteLatitude, 6);
   html += F("'></label><label>Längengrad<input type='number' name='siteLon' min='-180' max='180' step='0.000001' value='");
   html += String(siteLongitude, 6);
@@ -2278,8 +2294,13 @@ String webPage() {
   html += htmlEscape(currentRoute.status);
   html += F("</b><span>Routencache wartet auf Flash</span><b>");
   html += routeClient.hasPendingWrites() ? "ja" : "nein";
-  html += F("</b><span>Quelle</span><b>");
-  html += htmlEscape(adsbUrl);
+  html += F("</b><span>Aktive ADS-B-Quelle</span><b>");
+  html += "Quelle " + String(activeAdsbSource + 1) + " / " +
+          htmlEscape(activeAdsbUrl());
+  html += F("</b><span>ADS-B-Quelle 1</span><b>");
+  html += htmlEscape(adsbUrl1);
+  html += F("</b><span>ADS-B-Quelle 2</span><b>");
+  html += adsbUrl2.length() ? htmlEscape(adsbUrl2) : "nicht konfiguriert";
   html += F("</b><span>Empfangen / Kandidaten</span><b>");
   html += String(lastReceivedAircraft) + " / " + String(lastCandidateAircraft);
   html += F("</b><span>Standort / Blickrichtung</span><b>");
@@ -2400,10 +2421,18 @@ void applyWebSettings() {
     customPageText = displayAscii(webServer.arg("customText"));
     customPageText.trim();
     if (customPageText.length() > 128) customPageText.remove(128);
-    String requestedAdsbUrl = webServer.arg("adsbUrl");
-    requestedAdsbUrl.trim();
-    if (requestedAdsbUrl.startsWith("http://") ||
-        requestedAdsbUrl.startsWith("https://")) adsbUrl = requestedAdsbUrl;
+    String requestedAdsbUrl1 = webServer.arg("adsbUrl1");
+    requestedAdsbUrl1.trim();
+    if (requestedAdsbUrl1.startsWith("http://") ||
+        requestedAdsbUrl1.startsWith("https://")) adsbUrl1 = requestedAdsbUrl1;
+    String requestedAdsbUrl2 = webServer.arg("adsbUrl2");
+    requestedAdsbUrl2.trim();
+    if (requestedAdsbUrl2.isEmpty() || requestedAdsbUrl2.startsWith("http://") ||
+        requestedAdsbUrl2.startsWith("https://")) adsbUrl2 = requestedAdsbUrl2;
+    const uint8_t requestedAdsbSource =
+        webServer.arg("activeAdsbSource").toInt() == 2 ? 1 : 0;
+    activeAdsbSource = requestedAdsbSource == 1 && adsbUrl2.length()
+                           ? 1 : 0;
     String requestedRouteUrl = webServer.arg("routeUrl");
     requestedRouteUrl.trim();
     if (requestedRouteUrl.startsWith("http://") ||
@@ -2454,7 +2483,9 @@ void applyWebSettings() {
     preferences.putFloat("farKm", farDirectionDistanceKm);
     preferences.putFloat("lowLux", lowLuxThreshold);
     preferences.putFloat("highLux", highLuxThreshold);
-    preferences.putString("adsbUrl", adsbUrl);
+    preferences.putString("adsbUrl", adsbUrl1);
+    preferences.putString("adsbUrl2", adsbUrl2);
+    preferences.putUChar("adsbActive", activeAdsbSource);
     preferences.putString("routeUrl", routeUrl);
     preferences.putDouble("siteLat", siteLatitude);
     preferences.putDouble("siteLon", siteLongitude);
@@ -2635,7 +2666,10 @@ void handleStatusApi() {
       ",\"matrix_bit_depth\":" + String(BIT_DEPTH) +
       ",\"observer_elevation_m\":" + String(observerElevationM, 0) +
       ",\"far_direction_km\":" + String(farDirectionDistanceKm, 1) +
-      ",\"adsb_url\":\"" + jsonEscape(adsbUrl) + "\"" +
+      ",\"adsb_url\":\"" + jsonEscape(activeAdsbUrl()) + "\"" +
+      ",\"adsb_url_1\":\"" + jsonEscape(adsbUrl1) + "\"" +
+      ",\"adsb_url_2\":\"" + jsonEscape(adsbUrl2) + "\"" +
+      ",\"active_adsb_source\":" + String(activeAdsbSource + 1) +
       ",\"site_latitude\":" + String(siteLatitude, 6) +
       ",\"site_longitude\":" + String(siteLongitude, 6) +
       ",\"view_heading\":" + String(viewHeading, 0) +
@@ -2983,7 +3017,11 @@ void setup() {
   pageIntervalMs = preferences.getUInt("pageMs", DEFAULT_PAGE_INTERVAL_MS);
   lowLuxThreshold = preferences.getFloat("lowLux", 20.0f);
   highLuxThreshold = preferences.getFloat("highLux", 800.0f);
-  adsbUrl = preferences.getString("adsbUrl", DEFAULT_ADSB_URL);
+  adsbUrl1 = preferences.getString("adsbUrl", DEFAULT_ADSB_URL);
+  adsbUrl2 = preferences.getString("adsbUrl2", "");
+  activeAdsbSource = preferences.getUChar("adsbActive", 0);
+  if (activeAdsbSource > 1 || (activeAdsbSource == 1 && !adsbUrl2.length()))
+    activeAdsbSource = 0;
   routeUrl = preferences.getString("routeUrl", DEFAULT_ROUTE_URL);
   siteLatitude = preferences.getDouble("siteLat", DEFAULT_SITE_LATITUDE);
   siteLongitude = preferences.getDouble("siteLon", DEFAULT_SITE_LONGITUDE);
