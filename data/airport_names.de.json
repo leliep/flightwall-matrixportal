@@ -244,8 +244,8 @@
   "NRN": "Weeze",
   "NRT": "Tokio-Narita",
   "NTE": "Nantes",
-  "NVI": "Navoiy",
   "NUE": "Nürnberg",
+  "NVI": "Navoiy",
   "NWI": "Norwich",
   "OGU": "Ordu-Giresun",
   "OLB": "Olbia",
@@ -367,7 +367,7 @@
   "YYZ": "Toronto",
   "ZAD": "Zadar",
   "ZAG": "Zagreb",
-  "ZYL": "Sylhet",
   "ZRH": "Zürich",
-  "ZTH": "Zakynthos"
+  "ZTH": "Zakynthos",
+  "ZYL": "Sylhet"
 }

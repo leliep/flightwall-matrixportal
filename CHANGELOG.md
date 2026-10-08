@@ -1,7 +1,9 @@
 # Changelog
 
-## Unreleased
+## 3.0.0 – 2026-10-08
 
+- Airline-Code und Callsign-Präfix `NRW` als Polizeifliegerstaffel NRW bzw.
+  Special Type `Police` ergänzt
 - Callsigns `HBT…` als Polizeihubschrauber bzw. Special Type `Police` erkannt
   und Airline-Code HBT entsprechend übersetzt
 - Betriebs-Pixel an die 2-Bit-Farbtiefe angepasst, damit weißes und rotes

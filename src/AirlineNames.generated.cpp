@@ -123,6 +123,7 @@ const AirlineName names[] = {
   {"NIA", "Nile Air"},
   {"NMA", "Nesma Airlines"},
   {"NOZ", "Norwegian Air Shuttle AOC AS"},
+  {"NRW", "Polizeifliegerstaffel NRW"},
   {"NSZ", "Norwegian Air Sweden AOC"},
   {"NYX", "NyxAir"},
   {"OCN", "O Air"},
