@@ -223,8 +223,9 @@ Luftfeuchtigkeit und der anhand der konfigurierten Standorthöhe auf Meereshöhe
 reduzierte Luftdruck erscheinen in der Statusseite und unter `/api/status`.
 Der direkt gemessene Stationsdruck bleibt dort zusätzlich als Diagnosewert
 verfügbar. In der Webkonfiguration lässt sich außerdem einschalten, dass
-die drei Messwerte auf der Matrix erscheinen, solange kein Flugzeug innerhalb
-des Anzeigeradius liegt. Ein erkanntes Flugzeug übernimmt die Anzeige sofort;
+die komplette Wetterseite auf der Matrix erscheint, solange kein Flugzeug innerhalb
+des Anzeigeradius liegt. Dieser gemeinsame Schalter steuert sowohl die
+BME280- als auch die MQTT-Werte. Ein erkanntes Flugzeug übernimmt die Anzeige sofort;
 Nachtruhe und ausgeschaltetes Display bleiben vollständig dunkel.
 
 ## MQTT-Wetter

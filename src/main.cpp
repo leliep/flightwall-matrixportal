@@ -33,8 +33,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 2;
-constexpr char APP_VERSION[] = "3.1.1";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-09 18:20:18 CEST";
+constexpr char APP_VERSION[] = "3.1.2";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-09 18:26:13 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -1417,7 +1417,8 @@ void drawIdleDisplay() {
   const bool bmeAvailable = environmentIdleDisplayEnabled &&
       environmentSensorAvailable && isfinite(ambientTemperatureC) &&
       isfinite(relativeHumidityPercent) && isfinite(airPressureHpa);
-  const bool mqttAvailable = mqttWeatherAvailable();
+  const bool mqttAvailable = environmentIdleDisplayEnabled &&
+      mqttWeatherAvailable();
   if (bmeAvailable || mqttAvailable)
     drawCompactClimateDisplay(bmeAvailable, mqttAvailable);
   if ((millis() / IDLE_BLINK_HALF_PERIOD_MS) % 2 == 0) {
@@ -2333,7 +2334,7 @@ String webPage() {
   html += checked(displayEnabled);
   html += F("> Display eingeschaltet</label><label><input type='checkbox' name='environmentIdle' value='1'");
   html += checked(environmentIdleDisplayEnabled);
-  html += F("> BME280-Werte anzeigen, wenn kein Flugzeug in der Nähe ist</label><label>Anzeigeradius (km)<input type='number' name='radius' min='1' max='100' step='0.5' value='");
+  html += F("> Wetterdaten anzeigen, wenn kein Flugzeug in der Nähe ist</label><label>Anzeigeradius (km)<input type='number' name='radius' min='1' max='100' step='0.5' value='");
   html += String(displayRadiusKm, 1);
   html += F("'></label><label>Standorthöhe über NHN (m)<input type='number' name='observerElevation' min='-500' max='9000' step='1' value='");
   html += String(observerElevationM, 0);
@@ -2538,7 +2539,7 @@ String webPage() {
   html += numberOrDash(airPressureHpa) + " hPa";
   html += F("</b><span>Stationsdruck (BME280 roh)</span><b>");
   html += numberOrDash(stationPressureHpa) + " hPa";
-  html += F("</b><span>BME280-Ruheanzeige</span><b>");
+  html += F("</b><span>Wetterdaten-Ruheanzeige</span><b>");
   html += environmentIdleDisplayEnabled ? "aktiv" : "aus";
   html += F("</b><span>MQTT</span><b>");
   html += !mqttWeatherEnabled ? "aus" : (mqttConnected ? "verbunden" : "getrennt");
