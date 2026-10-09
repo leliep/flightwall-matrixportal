@@ -80,6 +80,12 @@ ESP32-S3-Chiptemperatur. Sie dient zur thermischen Überwachung und entspricht
 nicht der Umgebungstemperatur.
 Der Statusbereich im Webinterface aktualisiert sich bei sichtbarer Seite alle
 fünf Sekunden, ohne ungespeicherte Eingaben im Konfigurationsformular zu ändern.
+Vier farbige Zustandsanzeigen geben dort sofort Auskunft über System, ADS-B,
+MQTT und Sensoren. Die Detailwerte sind in responsive Karten für Netzwerk,
+aktuelles Flugzeug, ADS-B und Route, Konfiguration, Übersetzungstabellen,
+Wetter/Sensoren und Display gegliedert. Lange URLs, Speicher-, Task- und
+Resetinformationen bleiben in standardmäßig geschlossenen Diagnosebereichen;
+auf dem iPhone ordnen sich alle Karten automatisch einspaltig an.
 Für die Blickrichtung werden außerdem die Standorthöhe über NHN und die
 Entfernungsgrenze für `weit` gespeichert.
 Routen mit Zwischenlandungen bleiben vollständig erhalten, beispielsweise

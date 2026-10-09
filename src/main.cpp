@@ -33,8 +33,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 2;
-constexpr char APP_VERSION[] = "3.1.3";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-09 18:32:27 CEST";
+constexpr char APP_VERSION[] = "3.2.0";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-09 19:48:18 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -2336,12 +2336,14 @@ String webPage() {
   html += F("<!doctype html><html lang='de'><head><meta charset='utf-8'>");
   html += F("<meta name='viewport' content='width=device-width,initial-scale=1'>");
   html += F("<title>FlightWall MatrixPortal</title><style>");
-  html += F("body{font:16px system-ui;background:#10131a;color:#eef2ff;margin:auto;max-width:720px;padding:20px}");
+  html += F("body{font:16px system-ui;background:#10131a;color:#eef2ff;margin:auto;max-width:920px;padding:20px}");
   html += F("h1{font-size:1.5rem}fieldset{border:1px solid #445;border-radius:10px;margin:14px 0;padding:14px}");
   html += F("label{display:block;margin:12px 0}input[type=number],input[type=text],input[type=url],select{width:100%;box-sizing:border-box;padding:9px}");
   html += F("button{background:#00bcd4;color:#001018;border:0;border-radius:8px;padding:12px 18px;font-weight:bold}");
-  html += F(".status{display:grid;grid-template-columns:auto 1fr;gap:6px 14px}.muted{color:#aab}</style></head><body>");
-  html += F("<h1>FlightWall MatrixPortal 3.0</h1><form method='post' action='/save'>");
+  html += F(".status{display:grid;grid-template-columns:minmax(110px,auto) 1fr;gap:7px 14px}.status span{color:#aab}.status b{overflow-wrap:anywhere}.statusCards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.statusCard{background:#171c26;border:1px solid #343d50;border-radius:12px;padding:14px}.statusCard h3{margin:0 0 12px;font-size:1rem;color:#7ee7f0}.healthbar{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 14px}.pill{border-radius:999px;padding:7px 11px;font-size:.86rem;font-weight:700}.ok{background:#153b2b;color:#74e3aa}.warn{background:#493c16;color:#ffd166}.bad{background:#4a1f29;color:#ff8597}.off{background:#303541;color:#abb3c3}.wide{grid-column:1/-1}details summary{cursor:pointer;font-weight:700;color:#7ee7f0}details .status{margin-top:12px}@media(max-width:650px){body{padding:12px}.statusCards{grid-template-columns:1fr}.wide{grid-column:auto}.status{grid-template-columns:1fr}.status b{margin-bottom:7px}}.muted{color:#aab}</style></head><body>");
+  html += F("<h1>FlightWall MatrixPortal ");
+  html += APP_VERSION;
+  html += F("</h1><form method='post' action='/save'>");
   html += F("<fieldset><legend>Display</legend><label><input type='checkbox' name='display' value='1'");
   html += checked(displayEnabled);
   html += F("> Display eingeschaltet</label><label><input type='checkbox' name='environmentIdle' value='1'");
@@ -2446,7 +2448,15 @@ String webPage() {
   html += F("'></label><label>Schwelle hell (Lux)<input type='number' name='highLux' min='50' max='50000' step='10' value='");
   html += String(highLuxThreshold, 0);
   html += F("'></label></fieldset><button type='submit'>Einstellungen speichern</button></form>");
-  html += F("<fieldset><legend>Status <small class='muted' id='statusRefresh'>wird automatisch aktualisiert</small></legend><div class='status' id='statusData'><span>Adresse</span><b>http://matrixportal.local</b><span>IP</span><b>");
+  html += F("<fieldset><legend>Status <small class='muted' id='statusRefresh'>wird automatisch aktualisiert</small></legend><div id='statusData'><div class='healthbar'>");
+  html += statusError.length() ? F("<span class='pill warn'>● System eingeschränkt</span>") : F("<span class='pill ok'>● System OK</span>");
+  html += lastAdsbError.length() ? F("<span class='pill bad'>● ADS-B Fehler</span>") : F("<span class='pill ok'>● ADS-B OK</span>");
+  html += !mqttWeatherEnabled ? F("<span class='pill off'>● MQTT aus</span>") :
+          (mqttConnected ? F("<span class='pill ok'>● MQTT OK</span>") : F("<span class='pill warn'>● MQTT getrennt</span>"));
+  html += environmentSensorAvailable && lightSensorAvailable
+              ? F("<span class='pill ok'>● Sensoren OK</span>")
+              : F("<span class='pill warn'>● Sensor prüfen</span>");
+  html += F("</div><div class='statusCards'><section class='statusCard'><h3>Netzwerk</h3><div class='status'><span>Adresse</span><b>http://matrixportal.local</b><span>IP</span><b>");
   html += WiFi.localIP().toString();
   html += F("</b><span>WLAN</span><b>");
   html += String(WiFi.RSSI()) + " dBm";
@@ -2460,7 +2470,7 @@ String webPage() {
   html += lightSensorAvailable ? "verbunden" : "nicht gefunden";
   html += F("</b><span>Lux</span><b>");
   html += isnan(filteredLux) ? "-" : String(filteredLux, 1);
-  html += F("</b><span>Flug</span><b>");
+  html += F("</b></div></section><section class='statusCard'><h3>Aktuelles Flugzeug</h3><div class='status'><span>Flug</span><b>");
   html += statusFlight.available ? displayAscii(statusFlight.flight) : "keiner";
   html += F("</b><span>Airline / Typ</span><b>");
   html += statusFlight.available
@@ -2491,7 +2501,7 @@ String webPage() {
   html += String(displayRadiusKm, 1) + " / " +
           String(statusFlight.specialType.length()
                      ? displayRadiusKm * 2.0f : displayRadiusKm, 1) + " km";
-  html += F("</b><span>ADS-B</span><b>");
+  html += F("</b></div></section><section class='statusCard'><h3>ADS-B und Route</h3><div class='status'><span>ADS-B</span><b>");
   html += statusError.length() ? displayAscii(statusError) : "OK";
   html += F("</b><span>ADS-B-Fehler</span><b>");
   html += lastAdsbError.length() ? htmlEscape(lastAdsbError) : "keiner";
@@ -2502,25 +2512,32 @@ String webPage() {
   html += F("</b><span>Routencache wartet auf Flash</span><b>");
   html += routeClient.hasPendingWrites() ? "ja" : "nein";
   html += F("</b><span>Aktive ADS-B-Quelle</span><b>");
-  html += "Quelle " + String(activeAdsbSource + 1) + " / " +
-          htmlEscape(activeAdsbUrl());
-  html += F("</b><span>ADS-B-Quelle 1</span><b>");
-  html += htmlEscape(adsbUrl1);
-  html += F("</b><span>ADS-B-Quelle 2</span><b>");
-  html += adsbUrl2.length() ? htmlEscape(adsbUrl2) : "nicht konfiguriert";
+  html += "Quelle " + String(activeAdsbSource + 1);
   html += F("</b><span>Empfangen / Kandidaten</span><b>");
   html += String(lastReceivedAircraft) + " / " + String(lastCandidateAircraft);
-  html += F("</b><span>Standort / Blickrichtung</span><b>");
+  html += F("</b><span>Letzter Erfolg</span><b>");
+  html += ageText(lastAdsbSuccess);
+  html += F("</b></div></section><section class='statusCard'><h3>Konfiguration</h3><div class='status'><span>Standort / Blickrichtung</span><b>");
   html += String(siteLatitude, 6) + " / " + String(siteLongitude, 6) +
           " / " + String(viewHeading, 0) + "°";
-  html += F("</b><span>Unbekannte Flughäfen</span><b>");
+  html += F("</b><span>Anzeigeradius</span><b>");
+  html += String(displayRadiusKm, 1) + " km";
+  html += F("</b><span>Höhenfilter</span><b>");
+  html += altitudeFilterEnabled ? "bis " + String(maximumAltitudeFt) + " ft" : "aus";
+  html += F("</b><span>Kleinflugzeugfilter</span><b>");
+  html += hideSportAircraft ? "aktiv" : "aus";
+  html += F("</b><span>Wetteranzeige</span><b>");
+  html += environmentIdleDisplayEnabled ? "aktiv" : "aus";
+  html += F("</b></div></section><section class='statusCard wide'><h3>Übersetzungstabellen</h3><div class='status'><span>Unbekannte Flughäfen</span><b>");
   html += unknownCodesText(true);
   html += F("</b><span>Unbekannte Airlines</span><b>");
   html += unknownCodesText(false);
+  html += F("</b></div></section><details class='statusCard wide'><summary>Technische Diagnose</summary><div class='status'><span>ADS-B-Quelle 1</span><b>");
+  html += htmlEscape(adsbUrl1);
+  html += F("</b><span>ADS-B-Quelle 2</span><b>");
+  html += adsbUrl2.length() ? htmlEscape(adsbUrl2) : "nicht konfiguriert";
   html += F("</b><span>Letzter Versuch</span><b>");
   html += ageText(lastAdsbAttempt);
-  html += F("</b><span>Letzter Erfolg</span><b>");
-  html += ageText(lastAdsbSuccess);
   html += F("</b><span>Anzeige aktualisiert</span><b>");
   html += ageText(statusUpdated);
   html += F("</b><span>ADS-B-Zeitstempel</span><b>");
@@ -2536,7 +2553,7 @@ String webPage() {
           String(ESP.getMinFreeHeap() / 1024) + " KiB)";
   html += F("</b><span>ESP32-S3-Chiptemperatur</span><b>");
   html += numberOrDash(chipTemperatureC()) + " °C";
-  html += F("</b><span>BME280</span><b>");
+  html += F("</b></div></details><section class='statusCard'><h3>Wetter und Sensoren</h3><div class='status'><span>BME280</span><b>");
   if (environmentSensorAvailable) {
     html += "verbunden / 0x" + String(environmentSensorAddress, HEX) +
             (environmentSensorOnStemma ? " / STEMMA QT" : " / GPIO 3/9");
@@ -2568,7 +2585,7 @@ String webPage() {
   html += numberOrDash(statusWindGust) + " km/h";
   html += F("</b><span>Regen 24 h</span><b>");
   html += numberOrDash(statusRain) + " mm";
-  html += F("</b><span>Helligkeit</span><b>");
+  html += F("</b></div></section><section class='statusCard'><h3>Display</h3><div class='status'><span>Helligkeit</span><b>");
   html += String(BRIGHTNESS_LEVELS[brightnessIndex]) + "% / " +
           (automaticBrightnessEnabled ? "Automatik" : "manuell");
   html += F("</b><span>Matrix-Farbtiefe</span><b>");
@@ -2590,13 +2607,13 @@ String webPage() {
       (minutesAsTime(quietHoursStartMinutes) + "–" +
        minutesAsTime(quietHoursEndMinutes) +
        (quietHoursAreActive() ? " / aktiv" : " / inaktiv")) : "aus";
-  html += F("</b><span>Tasks</span><b>Netz Core 0 / Display Core 1</b><span>Stackreserve</span><b>");
+  html += F("</b></div></section><details class='statusCard wide'><summary>Task- und Resetdiagnose</summary><div class='status'><span>Tasks</span><b>Netz Core 0 / Display Core 1</b><span>Stackreserve</span><b>");
   html += networkTaskHandle ? String(uxTaskGetStackHighWaterMark(networkTaskHandle) * sizeof(StackType_t)) : "-";
   html += " / ";
   html += displayTaskHandle ? String(uxTaskGetStackHighWaterMark(displayTaskHandle) * sizeof(StackType_t)) : "-";
   html += F(" Bytes</b><span>Letzter Reset</span><b>");
   html += resetReasonText();
-  html += F("</b></div><form method='post' action='/restart' onsubmit=\"return confirm('ESP wirklich neu starten?')\"><p><button type='submit'>ESP neu starten</button></p></form></fieldset>");
+  html += F("</b></div></details></div></div><form method='post' action='/restart' onsubmit=\"return confirm('ESP wirklich neu starten?')\"><p><button type='submit'>ESP neu starten</button></p></form></fieldset>");
   html += F("<p><a href='/display'>Web-Display öffnen</a></p>");
   if (strlen(OTA_PASSWORD) >= 8) {
     html += F("<p><a href='/update'>Firmware drahtlos aktualisieren</a></p>");
