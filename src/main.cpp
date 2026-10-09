@@ -33,8 +33,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 2;
-constexpr char APP_VERSION[] = "3.1.2";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-09 18:26:13 CEST";
+constexpr char APP_VERSION[] = "3.1.3";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-09 18:32:27 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -1395,20 +1395,32 @@ void drawCompactClimateDisplay(bool bmeAvailable, bool mqttAvailable) {
   const int16_t degreeX = temperatureText.length() * 6 + 1;
   matrix.drawCircle(degreeX + 1, 6, 1, yellow);
   drawLine(degreeX + 4, 5, "C", yellow);
-  drawLine(42, 5, bmeAvailable
-      ? String(relativeHumidityPercent, 0) + "%" : "--%", cyan);
-  drawLine(72, 5, bmeAvailable
-      ? String(airPressureHpa, 0) + "hPa" : "----hPa", blue);
+  const String humidityText = bmeAvailable
+      ? String(relativeHumidityPercent, 0) + "%" : "--%";
+  const String pressureText = bmeAvailable
+      ? String(airPressureHpa, 0) + "hPa" : "----hPa";
+  constexpr int16_t middleColumnCenterX = 64;
+  const int16_t humidityX = middleColumnCenterX -
+      static_cast<int16_t>(humidityText.length() * 3);
+  const int16_t pressureX = MATRIX_WIDTH -
+      static_cast<int16_t>(pressureText.length() * 6);
+  drawLine(humidityX, 5, humidityText, cyan);
+  drawLine(pressureX, 5, pressureText, blue);
 
   drawLine(0, 18, direction.length() ? direction : "--", cyan);
   drawLine(24, 18, isfinite(speed) ? String(speed, 0) : "--", yellow);
-  drawLine(48, 18, "B", orange);
-  drawLine(60, 18, isfinite(gust) ? String(gust, 0) : "--", orange);
-  drawLine(84, 18, "R", blue);
+  const String gustText = isfinite(gust) ? String(gust, 0) : "--";
+  const int16_t gustX = middleColumnCenterX -
+      static_cast<int16_t>(gustText.length() * 3);
+  drawLine(gustX - 12, 18, "B", orange);
+  drawLine(gustX, 18, gustText, orange);
   String rainText = "--mm";
   if (isfinite(rain))
     rainText = String(rain, rain < 100.0f ? 1 : 0) + "mm";
-  drawLine(96, 18, rainText, blue);
+  const int16_t rainX = MATRIX_WIDTH -
+      static_cast<int16_t>(rainText.length() * 6);
+  drawLine(rainX - 12, 18, "R", blue);
+  drawLine(rainX, 18, rainText, blue);
 }
 
 
