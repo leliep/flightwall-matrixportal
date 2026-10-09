@@ -14,6 +14,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_BME280.h>
 #include <Adafruit_Protomatter.h>
+#include <PubSubClient.h>
 #include "AdsbClient.hpp"
 #include "AircraftProcessor.hpp"
 #include "AirlineNames.hpp"
@@ -26,11 +27,14 @@
 #ifndef OTA_PASSWORD
 #define OTA_PASSWORD ""
 #endif
+#ifndef MQTT_PASSWORD
+#define MQTT_PASSWORD ""
+#endif
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 2;
-constexpr char APP_VERSION[] = "3.0.0";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-08 15:06:00 CEST";
+constexpr char APP_VERSION[] = "3.1.0";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-09 18:12:04 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -63,6 +67,16 @@ constexpr uint8_t BME280_ALTERNATE_ADDRESS = 0x77;
 constexpr uint32_t ENVIRONMENT_SENSOR_INTERVAL_MS = 5000;
 constexpr uint32_t ENVIRONMENT_SENSOR_RETRY_MS = 15000;
 constexpr uint8_t ENVIRONMENT_SENSOR_FAILURE_LIMIT = 3;
+constexpr uint32_t MQTT_RETRY_MS = 15000;
+constexpr uint32_t MQTT_VALUE_STALE_MS = 15UL * 60UL * 1000UL;
+constexpr uint32_t IDLE_WEATHER_PAGE_MS = 5000;
+constexpr char DEFAULT_MQTT_HOST[] = "srv-mqtt.fritz.box";
+constexpr uint16_t DEFAULT_MQTT_PORT = 1883;
+constexpr char DEFAULT_MQTT_USER[] = "peter";
+constexpr char DEFAULT_WIND_DIRECTION_TOPIC[] = "zons/weather/windDir";
+constexpr char DEFAULT_WIND_SPEED_TOPIC[] = "zons/weather/windSpeed_kph";
+constexpr char DEFAULT_WIND_GUST_TOPIC[] = "zons/weather/windGust_kph";
+constexpr char DEFAULT_RAIN_TOPIC[] = "zons/weather/rain24_cm";
 
 // Only aircraft at or inside this distance are shown. Change this value to
 // adjust the local display radius without modifying the FlightWall server.
@@ -143,8 +157,11 @@ String lastAdsbError = "WARTE AUF DATEN";
 String lastRouteError;
 Preferences preferences;
 WebServer webServer(80);
+WiFiClient mqttTransport;
+PubSubClient mqttClient(mqttTransport);
 SemaphoreHandle_t flightMutex;
 SemaphoreHandle_t preferencesMutex;
+SemaphoreHandle_t weatherMutex;
 TaskHandle_t networkTaskHandle = nullptr;
 TaskHandle_t displayTaskHandle = nullptr;
 bool webServerStarted = false;
@@ -192,6 +209,28 @@ String brightnessMessageValue;
 volatile uint8_t pendingButtonEvents = 0;
 bool displayEnabled = true;
 bool environmentIdleDisplayEnabled = true;
+bool mqttWeatherEnabled = true;
+String mqttHost = DEFAULT_MQTT_HOST;
+uint16_t mqttPort = DEFAULT_MQTT_PORT;
+String mqttUser = DEFAULT_MQTT_USER;
+String mqttPassword = MQTT_PASSWORD;
+String windDirectionTopic = DEFAULT_WIND_DIRECTION_TOPIC;
+String windSpeedTopic = DEFAULT_WIND_SPEED_TOPIC;
+String windGustTopic = DEFAULT_WIND_GUST_TOPIC;
+String rainTopic = DEFAULT_RAIN_TOPIC;
+bool mqttConnected = false;
+uint32_t lastMqttAttempt = 0;
+uint32_t lastMqttMessage = 0;
+uint32_t mqttReconnectCount = 0;
+String mqttLastError = "NOCH NICHT VERBUNDEN";
+String windDirection;
+float windSpeedKph = NAN;
+float windGustKph = NAN;
+float rain24Mm = NAN;
+uint32_t windDirectionUpdated = 0;
+uint32_t windSpeedUpdated = 0;
+uint32_t windGustUpdated = 0;
+uint32_t rainUpdated = 0;
 bool quietHoursEnabled = false;
 uint16_t quietHoursStartMinutes = 23 * 60 + 55;
 uint16_t quietHoursEndMinutes = 5 * 60 + 55;
@@ -1309,11 +1348,69 @@ bool aircraftIsInsideDisplayRadius() {
 }
 
 
+bool weatherValueFresh(uint32_t updated) {
+  return updated && millis() - updated <= MQTT_VALUE_STALE_MS;
+}
+
+
+String weatherCompassDirection(float degrees) {
+  static const char *directions[] = {
+      "N", "NNO", "NO", "ONO", "O", "OSO", "SO", "SSO",
+      "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"};
+  while (degrees < 0.0f) degrees += 360.0f;
+  while (degrees >= 360.0f) degrees -= 360.0f;
+  return directions[static_cast<uint8_t>((degrees + 11.25f) / 22.5f) % 16];
+}
+
+
+bool mqttWeatherAvailable() {
+  if (!mqttWeatherEnabled || weatherMutex == nullptr) return false;
+  bool available = false;
+  if (xSemaphoreTake(weatherMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
+    available = weatherValueFresh(windDirectionUpdated) ||
+                weatherValueFresh(windSpeedUpdated) ||
+                weatherValueFresh(windGustUpdated) ||
+                weatherValueFresh(rainUpdated);
+    xSemaphoreGive(weatherMutex);
+  }
+  return available;
+}
+
+
+void drawMqttWeatherDisplay() {
+  String direction;
+  float speed = NAN;
+  float gust = NAN;
+  float rain = NAN;
+  if (xSemaphoreTake(weatherMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
+    if (weatherValueFresh(windDirectionUpdated)) direction = windDirection;
+    if (weatherValueFresh(windSpeedUpdated)) speed = windSpeedKph;
+    if (weatherValueFresh(windGustUpdated)) gust = windGustKph;
+    if (weatherValueFresh(rainUpdated)) rain = rain24Mm;
+    xSemaphoreGive(weatherMutex);
+  }
+  drawLine(0, 1, "WIND", cyan);
+  String windText = direction.length() ? direction + " " : "";
+  windText += isfinite(speed) ? String(speed, 1) + "kmh" : "-";
+  drawLine(30, 1, windText, yellow);
+  drawLine(0, 11, "REGEN", cyan);
+  drawLine(42, 11, isfinite(rain) ? String(rain, 1) + "mm" : "-", blue);
+  drawLine(0, 21, "BOEEN", cyan);
+  drawLine(42, 21, isfinite(gust) ? String(gust, 1) + "kmh" : "-", green);
+}
+
+
 void drawIdleDisplay() {
   matrix.fillScreen(0);
-  if (environmentIdleDisplayEnabled && environmentSensorAvailable &&
-      isfinite(ambientTemperatureC) && isfinite(relativeHumidityPercent) &&
-      isfinite(airPressureHpa)) {
+  const bool bmeAvailable = environmentIdleDisplayEnabled &&
+      environmentSensorAvailable && isfinite(ambientTemperatureC) &&
+      isfinite(relativeHumidityPercent) && isfinite(airPressureHpa);
+  const bool mqttAvailable = mqttWeatherAvailable();
+  const bool showMqtt = mqttAvailable &&
+      (!bmeAvailable || (millis() / IDLE_WEATHER_PAGE_MS) % 2 == 1);
+  if (showMqtt) {
+    drawMqttWeatherDisplay();
+  } else if (bmeAvailable) {
     drawLine(0, 1, "TEMP", cyan);
     const String temperatureText(ambientTemperatureC, 1);
     drawLine(48, 1, temperatureText, yellow);
@@ -1913,6 +2010,8 @@ String airlineCode(const String &callsign) {
   if (callsign.startsWith("GAF")) return "GAF";
   if (callsign.startsWith("BPO")) return "BPO";
   if (callsign.length() < 4) return "";
+  if (!isAlpha(callsign[0]) || !isAlpha(callsign[1]) ||
+      !isAlpha(callsign[2])) return "";
   for (size_t index = 3; index < callsign.length(); ++index) {
     if (isDigit(callsign[index])) return callsign.substring(0, 3);
   }
@@ -2209,6 +2308,17 @@ String webPage() {
     statusUpdated = networkLastSuccessfulPoll;
     xSemaphoreGive(flightMutex);
   }
+  String statusWindDirection;
+  float statusWindSpeed = NAN;
+  float statusWindGust = NAN;
+  float statusRain = NAN;
+  if (xSemaphoreTake(weatherMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+    statusWindDirection = windDirection;
+    statusWindSpeed = windSpeedKph;
+    statusWindGust = windGustKph;
+    statusRain = rain24Mm;
+    xSemaphoreGive(weatherMutex);
+  }
 
   String html;
   html.reserve(9000);
@@ -2267,6 +2377,24 @@ String webPage() {
   html += F("'></label><label>Test-Callsign<input type='text' name='routeTestCallsign' maxlength='10' value='DLH123'></label>"
             "<button type='submit' formaction='/test-route'>Routendienst testen</button> "
             "<button type='submit' formaction='/test-adsb'>ADS-B-Verbindung testen</button></fieldset>");
+  html += F("<fieldset><legend>MQTT-Wetter</legend><label><input type='checkbox' name='mqttWeather' value='1'");
+  html += checked(mqttWeatherEnabled);
+  html += F("> Wetterseite in der Ruheanzeige aktivieren</label><label>Mosquitto-Server<input type='text' name='mqttHost' maxlength='96' value='");
+  html += htmlEscape(mqttHost);
+  html += F("'></label><label>Port<input type='number' name='mqttPort' min='1' max='65535' value='");
+  html += String(mqttPort);
+  html += F("'></label><label>Benutzer<input type='text' name='mqttUser' maxlength='64' value='");
+  html += htmlEscape(mqttUser);
+  html += F("'></label><label>Passwort<input type='password' name='mqttPassword' maxlength='96' value='' placeholder='unverändert lassen'></label>");
+  html += F("<label>Windrichtung<input type='text' name='windDirectionTopic' maxlength='128' value='");
+  html += htmlEscape(windDirectionTopic);
+  html += F("'></label><label>Windgeschwindigkeit (km/h)<input type='text' name='windSpeedTopic' maxlength='128' value='");
+  html += htmlEscape(windSpeedTopic);
+  html += F("'></label><label>Windböen (km/h)<input type='text' name='windGustTopic' maxlength='128' value='");
+  html += htmlEscape(windGustTopic);
+  html += F("'></label><label>Regen 24 h (cm)<input type='text' name='rainTopic' maxlength='128' value='");
+  html += htmlEscape(rainTopic);
+  html += F("'></label><p class='muted'>Regen wird für die Anzeige von cm in mm umgerechnet. Ein leeres Passwortfeld behält das gespeicherte Passwort bei.</p></fieldset>");
   html += F("<fieldset><legend>Anzeigeseiten</legend><label><input type='checkbox' name='smooth' value='1'");
   html += checked(smoothTransitions);
   html += F("> Sanfte Übergänge</label><label>Freitext (maximal 128 Zeichen)<textarea name='customText' maxlength='128' rows='3' style='width:100%;box-sizing:border-box;padding:9px'>");
@@ -2414,6 +2542,21 @@ String webPage() {
   html += numberOrDash(stationPressureHpa) + " hPa";
   html += F("</b><span>BME280-Ruheanzeige</span><b>");
   html += environmentIdleDisplayEnabled ? "aktiv" : "aus";
+  html += F("</b><span>MQTT</span><b>");
+  html += !mqttWeatherEnabled ? "aus" : (mqttConnected ? "verbunden" : "getrennt");
+  html += F("</b><span>MQTT-Server</span><b>");
+  html += htmlEscape(mqttHost) + ":" + String(mqttPort);
+  html += F("</b><span>Letzte MQTT-Nachricht</span><b>");
+  html += ageText(lastMqttMessage);
+  html += F("</b><span>MQTT-Fehler</span><b>");
+  html += mqttLastError.length() ? htmlEscape(mqttLastError) : "keiner";
+  html += F("</b><span>Wind / Richtung</span><b>");
+  html += numberOrDash(statusWindSpeed) + " km/h / " +
+          (statusWindDirection.length() ? htmlEscape(statusWindDirection) : "-");
+  html += F("</b><span>Windböen</span><b>");
+  html += numberOrDash(statusWindGust) + " km/h";
+  html += F("</b><span>Regen 24 h</span><b>");
+  html += numberOrDash(statusRain) + " mm";
   html += F("</b><span>Helligkeit</span><b>");
   html += String(BRIGHTNESS_LEVELS[brightnessIndex]) + "% / " +
           (automaticBrightnessEnabled ? "Automatik" : "manuell");
@@ -2469,6 +2612,7 @@ void applyWebSettings() {
   if (xSemaphoreTake(preferencesMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
     displayEnabled = webServer.hasArg("display");
     environmentIdleDisplayEnabled = webServer.hasArg("environmentIdle");
+    mqttWeatherEnabled = webServer.hasArg("mqttWeather");
     quietHoursEnabled = webServer.hasArg("quietHours");
     uint16_t requestedQuietTime;
     if (parseTimeMinutes(webServer.arg("quietStart"), requestedQuietTime)) {
@@ -2519,6 +2663,22 @@ void applyWebSettings() {
     altitudeFilterEnabled = webServer.hasArg("altitudeFilter");
     maximumAltitudeFt = constrain(
         webServer.arg("maximumAltitude").toInt(), 1000, 100000);
+    String requestedMqttHost = webServer.arg("mqttHost");
+    requestedMqttHost.trim();
+    if (validFlightWallHost(requestedMqttHost)) mqttHost = requestedMqttHost;
+    mqttPort = constrain(webServer.arg("mqttPort").toInt(), 1, 65535);
+    mqttUser = webServer.arg("mqttUser");
+    mqttUser.trim();
+    String requestedMqttPassword = webServer.arg("mqttPassword");
+    if (requestedMqttPassword.length()) mqttPassword = requestedMqttPassword;
+    windDirectionTopic = webServer.arg("windDirectionTopic");
+    windSpeedTopic = webServer.arg("windSpeedTopic");
+    windGustTopic = webServer.arg("windGustTopic");
+    rainTopic = webServer.arg("rainTopic");
+    windDirectionTopic.trim();
+    windSpeedTopic.trim();
+    windGustTopic.trim();
+    rainTopic.trim();
     smoothTransitions = webServer.hasArg("smooth");
     bool anyPageEnabled = false;
     for (uint8_t page = 0; page < PAGE_COUNT; ++page) {
@@ -2547,6 +2707,15 @@ void applyWebSettings() {
     }
     preferences.putBool("displayOn", displayEnabled);
     preferences.putBool("envIdle", environmentIdleDisplayEnabled);
+    preferences.putBool("mqttOn", mqttWeatherEnabled);
+    preferences.putString("mqttHost", mqttHost);
+    preferences.putUShort("mqttPort", mqttPort);
+    preferences.putString("mqttUser", mqttUser);
+    preferences.putString("mqttPass", mqttPassword);
+    preferences.putString("windDirTop", windDirectionTopic);
+    preferences.putString("windSpdTop", windSpeedTopic);
+    preferences.putString("windGstTop", windGustTopic);
+    preferences.putString("rainTop", rainTopic);
     preferences.putBool("quietOn", quietHoursEnabled);
     preferences.putUShort("quietStart", quietHoursStartMinutes);
     preferences.putUShort("quietEnd", quietHoursEndMinutes);
@@ -2578,6 +2747,9 @@ void applyWebSettings() {
     }
     xSemaphoreGive(preferencesMutex);
   }
+  if (mqttClient.connected()) mqttClient.disconnect();
+  mqttConnected = false;
+  lastMqttAttempt = 0;
   resetPageTransition();
 }
 
@@ -2721,6 +2893,17 @@ void handleStatusApi() {
     statusUpdated = networkLastSuccessfulPoll;
     xSemaphoreGive(flightMutex);
   }
+  String statusWindDirection;
+  float statusWindSpeed = NAN;
+  float statusWindGust = NAN;
+  float statusRain = NAN;
+  if (xSemaphoreTake(weatherMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+    statusWindDirection = windDirection;
+    statusWindSpeed = windSpeedKph;
+    statusWindGust = windGustKph;
+    statusRain = rain24Mm;
+    xSemaphoreGive(weatherMutex);
+  }
   const float effectiveRadiusKm = statusFlight.specialType.length()
                                       ? displayRadiusKm * 2.0f
                                       : displayRadiusKm;
@@ -2736,6 +2919,17 @@ void handleStatusApi() {
       ",\"relative_humidity_percent\":" + jsonNumberOrNull(relativeHumidityPercent) +
       ",\"station_pressure_hpa\":" + jsonNumberOrNull(stationPressureHpa) +
       ",\"air_pressure_hpa\":" + jsonNumberOrNull(airPressureHpa) +
+      ",\"mqtt_weather_enabled\":" + String(mqttWeatherEnabled ? "true" : "false") +
+      ",\"mqtt_connected\":" + String(mqttConnected ? "true" : "false") +
+      ",\"mqtt_host\":\"" + jsonEscape(mqttHost) + "\"" +
+      ",\"mqtt_port\":" + String(mqttPort) +
+      ",\"mqtt_last_message_age_seconds\":" +
+          (lastMqttMessage ? String((millis() - lastMqttMessage) / 1000) : "null") +
+      ",\"mqtt_error\":\"" + jsonEscape(mqttLastError) + "\"" +
+      ",\"wind_direction\":\"" + jsonEscape(statusWindDirection) + "\"" +
+      ",\"wind_speed_kph\":" + jsonNumberOrNull(statusWindSpeed) +
+      ",\"wind_gust_kph\":" + jsonNumberOrNull(statusWindGust) +
+      ",\"rain24_mm\":" + jsonNumberOrNull(statusRain) +
       ",\"rssi\":" + String(WiFi.RSSI()) +
       ",\"wifi_reconnects\":" + String(wifiReconnectCount) +
       ",\"webserver_starts\":" + String(webServerStartCount) +
@@ -2963,6 +3157,100 @@ void startArduinoOta() {
 }
 
 
+bool parseMqttNumber(const String &payload, float &value) {
+  char *end = nullptr;
+  const float parsed = strtof(payload.c_str(), &end);
+  while (end && *end && isspace(static_cast<unsigned char>(*end))) ++end;
+  if (end == payload.c_str() || (end && *end) || !isfinite(parsed)) return false;
+  value = parsed;
+  return true;
+}
+
+
+void handleMqttMessage(char *topic, byte *payload, unsigned int length) {
+  if (length > 48 || weatherMutex == nullptr) return;
+  String value;
+  value.reserve(length);
+  for (unsigned int index = 0; index < length; ++index)
+    value += static_cast<char>(payload[index]);
+  value.trim();
+  const uint32_t now = millis();
+  if (xSemaphoreTake(weatherMutex, pdMS_TO_TICKS(50)) != pdTRUE) return;
+  if (windDirectionTopic == topic) {
+    float degrees;
+    if (parseMqttNumber(value, degrees)) {
+      windDirection = weatherCompassDirection(degrees);
+      windDirectionUpdated = now;
+    } else if (value.length() >= 1 && value.length() <= 3) {
+      value.toUpperCase();
+      value.replace("E", "O");
+      windDirection = displayAscii(value);
+      windDirectionUpdated = now;
+    }
+  } else {
+    float number;
+    if (parseMqttNumber(value, number)) {
+      if (windSpeedTopic == topic && number >= 0.0f) {
+        windSpeedKph = number;
+        windSpeedUpdated = now;
+      } else if (windGustTopic == topic && number >= 0.0f) {
+        windGustKph = number;
+        windGustUpdated = now;
+      } else if (rainTopic == topic && number >= 0.0f) {
+        // The source publishes centimetres; the display uses millimetres.
+        rain24Mm = number * 10.0f;
+        rainUpdated = now;
+      }
+    }
+  }
+  lastMqttMessage = now;
+  xSemaphoreGive(weatherMutex);
+}
+
+
+void subscribeMqttTopics() {
+  if (windDirectionTopic.length()) mqttClient.subscribe(windDirectionTopic.c_str());
+  if (windSpeedTopic.length()) mqttClient.subscribe(windSpeedTopic.c_str());
+  if (windGustTopic.length()) mqttClient.subscribe(windGustTopic.c_str());
+  if (rainTopic.length()) mqttClient.subscribe(rainTopic.c_str());
+}
+
+
+void serviceMqtt() {
+  if (!mqttWeatherEnabled || !mqttHost.length() || WiFi.status() != WL_CONNECTED) {
+    if (mqttClient.connected()) mqttClient.disconnect();
+    mqttConnected = false;
+    return;
+  }
+  if (mqttClient.connected()) {
+    mqttConnected = true;
+    mqttClient.loop();
+    return;
+  }
+  mqttConnected = false;
+  const uint32_t now = millis();
+  if (lastMqttAttempt && now - lastMqttAttempt < MQTT_RETRY_MS) return;
+  lastMqttAttempt = now;
+  mqttClient.setServer(mqttHost.c_str(), mqttPort);
+  mqttClient.setCallback(handleMqttMessage);
+  mqttClient.setSocketTimeout(2);
+  const String clientId = "flightwall-" + String((uint32_t)(ESP.getEfuseMac() & 0xFFFFFF), HEX);
+  const bool connected = mqttUser.length()
+      ? mqttClient.connect(clientId.c_str(), mqttUser.c_str(), mqttPassword.c_str())
+      : mqttClient.connect(clientId.c_str());
+  if (connected) {
+    mqttConnected = true;
+    mqttLastError = "";
+    ++mqttReconnectCount;
+    subscribeMqttTopics();
+    Serial.printf("MQTT connected to %s:%u\n", mqttHost.c_str(), mqttPort);
+  } else {
+    mqttLastError = "MQTT FEHLER " + String(mqttClient.state());
+    Serial.printf("MQTT connection failed: %d\n", mqttClient.state());
+  }
+}
+
+
 void startWebServer() {
   if (webServerStarted) return;
   if (!webServerConfigured) {
@@ -2990,6 +3278,8 @@ void startWebServer() {
 
 
 void stopNetworkServices() {
+  if (mqttClient.connected()) mqttClient.disconnect();
+  mqttConnected = false;
   if (otaStarted) {
     ArduinoOTA.end();
     otaStarted = false;
@@ -3048,6 +3338,7 @@ void networkTask(void *) {
     if (wifiConnected) {
       webServer.handleClient();
       if (otaStarted) ArduinoOTA.handle();
+      serviceMqtt();
     }
     if (otaRebootAt && static_cast<int32_t>(now - otaRebootAt) >= 0) ESP.restart();
     if (manualRebootAt && static_cast<int32_t>(now - manualRebootAt) >= 0) ESP.restart();
@@ -3071,7 +3362,9 @@ void setup() {
   displayTaskHandle = xTaskGetCurrentTaskHandle();
   flightMutex = xSemaphoreCreateMutex();
   preferencesMutex = xSemaphoreCreateMutex();
-  if (flightMutex == nullptr || preferencesMutex == nullptr) {
+  weatherMutex = xSemaphoreCreateMutex();
+  if (flightMutex == nullptr || preferencesMutex == nullptr ||
+      weatherMutex == nullptr) {
     Serial.println("Cannot create FreeRTOS mutexes");
     while (true) delay(1000);
   }
@@ -3115,6 +3408,18 @@ void setup() {
   automaticBrightnessEnabled = preferences.getBool("autoLight", true);
   displayEnabled = preferences.getBool("displayOn", true);
   environmentIdleDisplayEnabled = preferences.getBool("envIdle", true);
+  mqttWeatherEnabled = preferences.getBool("mqttOn", true);
+  mqttHost = preferences.getString("mqttHost", DEFAULT_MQTT_HOST);
+  mqttPort = preferences.getUShort("mqttPort", DEFAULT_MQTT_PORT);
+  mqttUser = preferences.getString("mqttUser", DEFAULT_MQTT_USER);
+  mqttPassword = preferences.getString("mqttPass", MQTT_PASSWORD);
+  windDirectionTopic = preferences.getString(
+      "windDirTop", DEFAULT_WIND_DIRECTION_TOPIC);
+  windSpeedTopic = preferences.getString(
+      "windSpdTop", DEFAULT_WIND_SPEED_TOPIC);
+  windGustTopic = preferences.getString(
+      "windGstTop", DEFAULT_WIND_GUST_TOPIC);
+  rainTopic = preferences.getString("rainTop", DEFAULT_RAIN_TOPIC);
   quietHoursEnabled = preferences.getBool("quietOn", false);
   quietHoursStartMinutes = constrain(
       preferences.getUShort("quietStart", 23 * 60 + 55),

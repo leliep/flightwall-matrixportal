@@ -45,6 +45,7 @@ void detectSpecialTypes(Aircraft& aircraft) {
   } else if (containsAny(text, {"POLICE", "POLIZEI", "POLICE AVIATION"}) ||
              aircraft.flight.startsWith("POL") ||
              aircraft.flight.startsWith("HBT") ||
+             aircraft.flight.startsWith("HUM") ||
              aircraft.flight.startsWith("NRW")) {
     aircraft.specialTypes.push_back("police");
   }

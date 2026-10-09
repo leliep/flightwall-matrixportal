@@ -84,6 +84,7 @@ const AirlineName names[] = {
   {"GTI", "Atlas Air"},
   {"HBT", "Police"},
   {"HLF", "Central Airlines"},
+  {"HUM", "Polizeifliegerstaffel NRW"},
   {"HYM", "HiSky"},
   {"IB", "Iberia"},
   {"IBE", "Iberia Airlines"},

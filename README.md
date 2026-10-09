@@ -5,7 +5,7 @@ Adafruit MatrixPortal S3 liest ADS-B-Daten direkt ein, wählt das relevante
 Flugzeug aus, ergänzt Route und Namen und steuert die 128×32-Pixel-Anzeige.
 Ein separater FlightMatrixServer ist nicht mehr erforderlich.
 
-## Version 3.0
+## Version 3.1
 
 - direkte readsb-/dump1090-Datenquelle (`aircraft.json`)
 - lokale Flugzeugauswahl mit CPA, Kleinflugzeug- und Höhenfilter
@@ -17,6 +17,7 @@ Ein separater FlightMatrixServer ist nicht mehr erforderlich.
   auf Core 1
 - Webinterface unter `http://matrixportal.local`
 - BH1750-Helligkeitsautomatik mit manuellem Fallback
+- MQTT-Wetterseite mit Windrichtung, Windgeschwindigkeit, Böen und Regenmenge
 - Bedienung über die UP- und DOWN-Tasten
 - dauerhaft gespeicherte Einstellungen
 - Diagnose für WLAN, DNS und HTTP
@@ -225,6 +226,23 @@ verfügbar. In der Webkonfiguration lässt sich außerdem einschalten, dass
 die drei Messwerte auf der Matrix erscheinen, solange kein Flugzeug innerhalb
 des Anzeigeradius liegt. Ein erkanntes Flugzeug übernimmt die Anzeige sofort;
 Nachtruhe und ausgeschaltetes Display bleiben vollständig dunkel.
+
+## MQTT-Wetter
+
+Die Firmware kann Windrichtung, Windgeschwindigkeit, Windböen und die
+Regenmenge der letzten 24 Stunden von einem Mosquitto-Server im lokalen Netz
+beziehen. Server, Port, Benutzer, Passwort und alle vier Topics werden im
+Webinterface konfiguriert; das Passwort erscheint weder dort noch in der
+Status-API im Klartext. Die gelieferten Zentimeter der Regenmenge werden für
+die Anzeige in Millimeter umgerechnet.
+
+Wenn kein Flugzeug angezeigt wird, wechseln sich die BME280-Seite und die
+MQTT-Wetterseite im Fünf-Sekunden-Takt ab. Die Wetterseite zeigt in ihren drei
+Zeilen Windrichtung und Windgeschwindigkeit, Regenmenge sowie Windböen. Eine
+numerische Windrichtung wird automatisch in eine von 16 deutschen
+Himmelsrichtungen umgesetzt. Werte, die länger als 15 Minuten nicht erneuert
+wurden, werden nicht mehr angezeigt. Verbindungszustand, letzter Empfang und
+Messwerte stehen zusätzlich in der Statusseite und unter `/api/status`.
 
 ## Diagnose
 
