@@ -33,8 +33,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 2;
-constexpr char APP_VERSION[] = "3.2.0";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-09 19:48:18 CEST";
+constexpr char APP_VERSION[] = "3.2.1";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-09 21:13:54 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -2532,7 +2532,7 @@ String webPage() {
   html += unknownCodesText(true);
   html += F("</b><span>Unbekannte Airlines</span><b>");
   html += unknownCodesText(false);
-  html += F("</b></div></section><details class='statusCard wide'><summary>Technische Diagnose</summary><div class='status'><span>ADS-B-Quelle 1</span><b>");
+  html += F("</b></div></section><details id='technicalDiagnosis' class='statusCard wide'><summary>Technische Diagnose</summary><div class='status'><span>ADS-B-Quelle 1</span><b>");
   html += htmlEscape(adsbUrl1);
   html += F("</b><span>ADS-B-Quelle 2</span><b>");
   html += adsbUrl2.length() ? htmlEscape(adsbUrl2) : "nicht konfiguriert";
@@ -2607,7 +2607,7 @@ String webPage() {
       (minutesAsTime(quietHoursStartMinutes) + "–" +
        minutesAsTime(quietHoursEndMinutes) +
        (quietHoursAreActive() ? " / aktiv" : " / inaktiv")) : "aus";
-  html += F("</b></div></section><details class='statusCard wide'><summary>Task- und Resetdiagnose</summary><div class='status'><span>Tasks</span><b>Netz Core 0 / Display Core 1</b><span>Stackreserve</span><b>");
+  html += F("</b></div></section><details id='taskDiagnosis' class='statusCard wide'><summary>Task- und Resetdiagnose</summary><div class='status'><span>Tasks</span><b>Netz Core 0 / Display Core 1</b><span>Stackreserve</span><b>");
   html += networkTaskHandle ? String(uxTaskGetStackHighWaterMark(networkTaskHandle) * sizeof(StackType_t)) : "-";
   html += " / ";
   html += displayTaskHandle ? String(uxTaskGetStackHighWaterMark(displayTaskHandle) * sizeof(StackType_t)) : "-";
@@ -2619,7 +2619,18 @@ String webPage() {
     html += F("<p><a href='/update'>Firmware drahtlos aktualisieren</a></p>");
   }
   html += F("<p class='muted'>UP/DOWN: manuell; beide Tasten: Automatik.</p>"
-            "<script>let statusBusy=false;async function refreshStatus(){if(statusBusy||document.hidden)return;statusBusy=true;const note=document.getElementById('statusRefresh');try{const response=await fetch('/',{cache:'no-store'});if(!response.ok)throw 0;const page=new DOMParser().parseFromString(await response.text(),'text/html');const fresh=page.getElementById('statusData');const current=document.getElementById('statusData');if(fresh&&current)current.innerHTML=fresh.innerHTML;if(note)note.textContent='aktualisiert '+new Date().toLocaleTimeString('de-DE');}catch(error){if(note)note.textContent='Aktualisierung fehlgeschlagen';}finally{statusBusy=false;}}setInterval(refreshStatus,5000);</script></body></html>");
+            "<script>let statusBusy=false;async function refreshStatus(){"
+            "if(statusBusy||document.hidden)return;statusBusy=true;"
+            "const note=document.getElementById('statusRefresh');"
+            "const current=document.getElementById('statusData');"
+            "const openDetails=current?[...current.querySelectorAll('details[id][open]')].map(item=>item.id):[];"
+            "try{const response=await fetch('/',{cache:'no-store'});if(!response.ok)throw 0;"
+            "const page=new DOMParser().parseFromString(await response.text(),'text/html');"
+            "const fresh=page.getElementById('statusData');"
+            "if(fresh&&current){current.innerHTML=fresh.innerHTML;openDetails.forEach(id=>{const item=document.getElementById(id);if(item)item.open=true;});}"
+            "if(note)note.textContent='aktualisiert '+new Date().toLocaleTimeString('de-DE');"
+            "}catch(error){if(note)note.textContent='Aktualisierung fehlgeschlagen';}"
+            "finally{statusBusy=false;}}setInterval(refreshStatus,5000);</script></body></html>");
   return html;
 }
 
