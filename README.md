@@ -5,6 +5,13 @@ Adafruit MatrixPortal S3 liest ADS-B-Daten direkt ein, wählt das relevante
 Flugzeug aus, ergänzt Route und Namen und steuert die 128×32-Pixel-Anzeige.
 Ein separater FlightMatrixServer ist nicht mehr erforderlich.
 
+## Anzeige im Betrieb
+
+![FlightWall MatrixPortal mit aktuellen Flugdaten](IMG_4482.png)
+
+*Die montierte 128×32-Pixel-Matrix mit Flugnummer, Flugzeugtyp, Airline und
+aktuellen Flugdaten.*
+
 ## Version 3.1
 
 - direkte readsb-/dump1090-Datenquelle (`aircraft.json`)
