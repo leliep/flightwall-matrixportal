@@ -236,9 +236,11 @@ Webinterface konfiguriert; das Passwort erscheint weder dort noch in der
 Status-API im Klartext. Die gelieferten Zentimeter der Regenmenge werden für
 die Anzeige in Millimeter umgerechnet.
 
-Wenn kein Flugzeug angezeigt wird, wechseln sich die BME280-Seite und die
-MQTT-Wetterseite im Fünf-Sekunden-Takt ab. Die Wetterseite zeigt in ihren drei
-Zeilen Windrichtung und Windgeschwindigkeit, Regenmenge sowie Windböen. Eine
+Wenn kein Flugzeug angezeigt wird, erscheinen sämtliche Klima- und Wetterwerte
+ruhig auf einer gemeinsamen Kompaktseite. Die obere Zeile zeigt Temperatur,
+Feuchte und Luftdruck, die untere Windrichtung, Windgeschwindigkeit, Böen (`B`)
+und Regenmenge (`R`). Wind und Böen werden platzsparend als ganze km/h
+dargestellt. Eine
 numerische Windrichtung wird automatisch in eine von 16 deutschen
 Himmelsrichtungen umgesetzt. Werte, die länger als 15 Minuten nicht erneuert
 wurden, werden nicht mehr angezeigt. Verbindungszustand, letzter Empfang und

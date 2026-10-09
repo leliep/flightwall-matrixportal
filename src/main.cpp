@@ -33,8 +33,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 2;
-constexpr char APP_VERSION[] = "3.1.0";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-09 18:12:04 CEST";
+constexpr char APP_VERSION[] = "3.1.1";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-09 18:20:18 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -69,7 +69,6 @@ constexpr uint32_t ENVIRONMENT_SENSOR_RETRY_MS = 15000;
 constexpr uint8_t ENVIRONMENT_SENSOR_FAILURE_LIMIT = 3;
 constexpr uint32_t MQTT_RETRY_MS = 15000;
 constexpr uint32_t MQTT_VALUE_STALE_MS = 15UL * 60UL * 1000UL;
-constexpr uint32_t IDLE_WEATHER_PAGE_MS = 5000;
 constexpr char DEFAULT_MQTT_HOST[] = "srv-mqtt.fritz.box";
 constexpr uint16_t DEFAULT_MQTT_PORT = 1883;
 constexpr char DEFAULT_MQTT_USER[] = "peter";
@@ -1377,26 +1376,39 @@ bool mqttWeatherAvailable() {
 }
 
 
-void drawMqttWeatherDisplay() {
+void drawCompactClimateDisplay(bool bmeAvailable, bool mqttAvailable) {
   String direction;
   float speed = NAN;
   float gust = NAN;
   float rain = NAN;
-  if (xSemaphoreTake(weatherMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
+  if (mqttAvailable &&
+      xSemaphoreTake(weatherMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
     if (weatherValueFresh(windDirectionUpdated)) direction = windDirection;
     if (weatherValueFresh(windSpeedUpdated)) speed = windSpeedKph;
     if (weatherValueFresh(windGustUpdated)) gust = windGustKph;
     if (weatherValueFresh(rainUpdated)) rain = rain24Mm;
     xSemaphoreGive(weatherMutex);
   }
-  drawLine(0, 1, "WIND", cyan);
-  String windText = direction.length() ? direction + " " : "";
-  windText += isfinite(speed) ? String(speed, 1) + "kmh" : "-";
-  drawLine(30, 1, windText, yellow);
-  drawLine(0, 11, "REGEN", cyan);
-  drawLine(42, 11, isfinite(rain) ? String(rain, 1) + "mm" : "-", blue);
-  drawLine(0, 21, "BOEEN", cyan);
-  drawLine(42, 21, isfinite(gust) ? String(gust, 1) + "kmh" : "-", green);
+  const String temperatureText = bmeAvailable
+      ? String(ambientTemperatureC, 1) : "--";
+  drawLine(0, 5, temperatureText, yellow);
+  const int16_t degreeX = temperatureText.length() * 6 + 1;
+  matrix.drawCircle(degreeX + 1, 6, 1, yellow);
+  drawLine(degreeX + 4, 5, "C", yellow);
+  drawLine(42, 5, bmeAvailable
+      ? String(relativeHumidityPercent, 0) + "%" : "--%", cyan);
+  drawLine(72, 5, bmeAvailable
+      ? String(airPressureHpa, 0) + "hPa" : "----hPa", blue);
+
+  drawLine(0, 18, direction.length() ? direction : "--", cyan);
+  drawLine(24, 18, isfinite(speed) ? String(speed, 0) : "--", yellow);
+  drawLine(48, 18, "B", orange);
+  drawLine(60, 18, isfinite(gust) ? String(gust, 0) : "--", orange);
+  drawLine(84, 18, "R", blue);
+  String rainText = "--mm";
+  if (isfinite(rain))
+    rainText = String(rain, rain < 100.0f ? 1 : 0) + "mm";
+  drawLine(96, 18, rainText, blue);
 }
 
 
@@ -1406,22 +1418,8 @@ void drawIdleDisplay() {
       environmentSensorAvailable && isfinite(ambientTemperatureC) &&
       isfinite(relativeHumidityPercent) && isfinite(airPressureHpa);
   const bool mqttAvailable = mqttWeatherAvailable();
-  const bool showMqtt = mqttAvailable &&
-      (!bmeAvailable || (millis() / IDLE_WEATHER_PAGE_MS) % 2 == 1);
-  if (showMqtt) {
-    drawMqttWeatherDisplay();
-  } else if (bmeAvailable) {
-    drawLine(0, 1, "TEMP", cyan);
-    const String temperatureText(ambientTemperatureC, 1);
-    drawLine(48, 1, temperatureText, yellow);
-    const int16_t degreeX = 48 + temperatureText.length() * 6 + 1;
-    matrix.drawCircle(degreeX + 1, 2, 1, yellow);
-    drawLine(degreeX + 4, 1, "C", yellow);
-    drawLine(0, 11, "FEUCHTE", cyan);
-    drawLine(48, 11, String(relativeHumidityPercent, 1) + " %", green);
-    drawLine(0, 21, "DRUCK", cyan);
-    drawLine(48, 21, String(airPressureHpa, 1) + " hPa", blue);
-  }
+  if (bmeAvailable || mqttAvailable)
+    drawCompactClimateDisplay(bmeAvailable, mqttAvailable);
   if ((millis() / IDLE_BLINK_HALF_PERIOD_MS) % 2 == 0) {
     matrix.drawPixel(0, 31, lastError.length() ? idleErrorPixel : idlePixel);
   }
