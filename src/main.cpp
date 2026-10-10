@@ -33,8 +33,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 2;
-constexpr char APP_VERSION[] = "3.2.3";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-10 17:23:57 CEST";
+constexpr char APP_VERSION[] = "3.2.4";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-10 17:37:46 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -332,27 +332,15 @@ constexpr uint8_t ABOVE_MARKER[7] = {
 constexpr uint8_t LOOK_ARROW_UP[7] = {
     0b0001000, 0b0011100, 0b0111110, 0b1111111,
     0b0011100, 0b0011100, 0b0011100};
-constexpr uint8_t LOOK_ARROW_UP_RIGHT[7] = {
-    0b0001111, 0b0001111, 0b0001111, 0b0011111,
-    0b0111100, 0b1111000, 0b1110000};
 constexpr uint8_t LOOK_ARROW_RIGHT[7] = {
     0b0001000, 0b0001100, 0b1111110, 0b1111111,
     0b1111110, 0b0001100, 0b0001000};
-constexpr uint8_t LOOK_ARROW_DOWN_RIGHT[7] = {
-    0b1100000, 0b1110000, 0b1111000, 0b0111111,
-    0b0011111, 0b0001111, 0b0001111};
 constexpr uint8_t LOOK_ARROW_DOWN[7] = {
     0b0011100, 0b0011100, 0b0011100, 0b1111111,
     0b0111110, 0b0011100, 0b0001000};
-constexpr uint8_t LOOK_ARROW_DOWN_LEFT[7] = {
-    0b0000111, 0b0001111, 0b0011110, 0b1111100,
-    0b1111000, 0b1111000, 0b1111000};
 constexpr uint8_t LOOK_ARROW_LEFT[7] = {
     0b0001000, 0b0011000, 0b0111111, 0b1111111,
     0b0111111, 0b0011000, 0b0001000};
-constexpr uint8_t LOOK_ARROW_UP_LEFT[7] = {
-    0b1111000, 0b1111000, 0b1111100, 0b1111110,
-    0b0001111, 0b0000111, 0b0000011};
 constexpr uint8_t ALTITUDE_TRIANGLE_UP[7] = {
     0b0001000, 0b0011100, 0b0011100, 0b0111110,
     0b0111110, 0b1111111, 0b1111111};
@@ -843,15 +831,15 @@ void drawLookArrowAt(float angle, int16_t x, int16_t y, uint16_t color) {
     case LookDirection::AboveFront:
     case LookDirection::Front:
     case LookDirection::FarFront: bitmap = LOOK_ARROW_UP; break;
-    case LookDirection::AboveRight: bitmap = LOOK_ARROW_UP_RIGHT; break;
+    case LookDirection::AboveRight: bitmap = ARROW_UP_RIGHT; break;
     case LookDirection::Right:
     case LookDirection::FarRight: bitmap = LOOK_ARROW_RIGHT; break;
-    case LookDirection::RightShoulder: bitmap = LOOK_ARROW_DOWN_RIGHT; break;
+    case LookDirection::RightShoulder: bitmap = ARROW_DOWN_RIGHT; break;
     case LookDirection::AboveBack:
     case LookDirection::Back:
     case LookDirection::FarBack: bitmap = LOOK_ARROW_DOWN; break;
-    case LookDirection::LeftShoulder: bitmap = LOOK_ARROW_DOWN_LEFT; break;
-    case LookDirection::AboveLeft: bitmap = LOOK_ARROW_UP_LEFT; break;
+    case LookDirection::LeftShoulder: bitmap = ARROW_DOWN_LEFT; break;
+    case LookDirection::AboveLeft: bitmap = ARROW_UP_LEFT; break;
     case LookDirection::Left:
     case LookDirection::FarLeft: bitmap = LOOK_ARROW_LEFT; break;
     default: break;
