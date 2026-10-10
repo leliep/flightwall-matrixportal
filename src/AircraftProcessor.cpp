@@ -76,7 +76,7 @@ bool isSportAircraft(const Aircraft& aircraft) {
   const String flight = normalizedRegistration(aircraft.flight);
   const auto isGermanLight = [](const String& value) {
     return value.length() == 5 && value[0] == 'D' &&
-           (value[1] == 'E' || value[1] == 'M');
+           (value[1] == 'E' || value[1] == 'K' || value[1] == 'M');
   };
   if (isGermanLight(registration) || isGermanLight(flight)) return true;
 

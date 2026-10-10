@@ -72,6 +72,8 @@ darf über Mitternacht reichen, beispielsweise von 23:55 bis 05:55. Während
 dieser Zeit bleibt die Matrix einschließlich Betriebs-Pixel vollständig dunkel;
 Netzwerk, Datenabruf, Webinterface und OTA bleiben aktiv. Die lokale Uhrzeit
 wird per NTP bezogen und automatisch zwischen MEZ und MESZ umgestellt.
+Der Kleinflugzeugfilter erkennt unter anderem deutsche `D-E…`-, `D-K…`- und
+`D-M…`-Kennzeichen; damit werden auch Motorsegler erfasst.
 Wenn kein Flugzeug angezeigt wird, blinkt der Betriebs-Pixel unten links bei
 erfolgreichem ADS-B-Abruf weiß. Nach einem fehlgeschlagenen
 Datenabruf blinkt er rot, bis wieder gültige Daten empfangen wurden.
