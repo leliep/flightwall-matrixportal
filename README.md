@@ -12,14 +12,14 @@ Ein separater FlightMatrixServer ist nicht mehr erforderlich.
 *Die montierte 128×32-Pixel-Matrix mit Flugnummer, Flugzeugtyp, Airline und
 aktuellen Flugdaten.*
 
-## Version 3.1
+## Version 3.2.5
 
 - direkte readsb-/dump1090-Datenquelle (`aircraft.json`)
 - lokale Flugzeugauswahl mit CPA, Kleinflugzeug- und Höhenfilter
 - doppelter Erfassungsradius für Special Types
 - Routenabfrage über adsb.im mit lokalem Cache
 - integrierte Flughafen- und Airline-Übersetzungstabellen
-- HUB75-Ausgabe mit 3 Bit Farbtiefe und sieben Helligkeitsstufen
+- HUB75-Ausgabe mit 2 Bit Farbtiefe und drei Helligkeitsstufen
 - Dual-Core-Betrieb: Netzwerk und Webserver auf Core 0, Display und Sensorik
   auf Core 1
 - Webinterface unter `http://matrixportal.local`
@@ -39,6 +39,92 @@ aktuellen Flugdaten.*
 6. Optional den seriellen Monitor mit 115200 Baud öffnen.
 
 `include/secrets.h` wird durch `.gitignore` vom Repository ausgeschlossen.
+
+## LED-Matrix und Ansteuerung
+
+### Verwendeter Aufbau
+
+| Komponente | Ausführung |
+|---|---|
+| Controller | Adafruit MatrixPortal S3 mit ESP32-S3 |
+| LED-Panels | 2 × RGB-HUB75, jeweils 64 × 32 Pixel |
+| Gesamtauflösung | 128 × 32 Pixel |
+| Anordnung | horizontal, Panel 1 links und Panel 2 rechts |
+| Verkettung | HUB75-OUT des ersten Panels an HUB75-IN des zweiten Panels |
+| Scanverfahren | 1/16-Scan mit vier Adressleitungen A bis D |
+| Bibliothek | Adafruit Protomatter 1.7.1 und Adafruit GFX 1.12.6 |
+| Farbtiefe | 2 Bit pro Farbkanal |
+| Bildausgabe | doppelter Bildpuffer; sichtbarer Pufferwechsel mit `matrix.show()` |
+
+Die beiden Panels verhalten sich für die Firmware wie eine einzige
+128 × 32-Pixel-Fläche. Der erste Pixelbereich reicht von `x=0` bis `x=63`,
+der zweite von `x=64` bis `x=127`. Falls die Panelreihenfolge nach dem Aufbau
+vertauscht erscheint, müssen die beiden HUB75-Datenkabel beziehungsweise die
+Reihenfolge der Panels getauscht werden.
+
+### HUB75-Signale des MatrixPortal S3
+
+Die Pinbelegung entspricht dem fest verdrahteten HUB75-Anschluss des
+MatrixPortal S3 und ist am Anfang von `src/main.cpp` hinterlegt:
+
+| HUB75-Signal | ESP32-S3 GPIO |
+|---|---:|
+| R1 | 42 |
+| G1 | 41 |
+| B1 | 40 |
+| R2 | 38 |
+| G2 | 39 |
+| B2 | 37 |
+| A | 45 |
+| B | 36 |
+| C | 48 |
+| D | 35 |
+| CLK | 2 |
+| LAT | 47 |
+| OE | 14 |
+
+Ein E-Adresssignal wird nicht verwendet. Der unveränderte Aufbau ist daher
+für 64 × 32-Panels mit 1/16-Scan vorgesehen. Panels mit anderer Auflösung,
+anderem Scanverfahren oder fünf Adressleitungen benötigen eine angepasste
+Protomatter-Konfiguration und sind nicht ohne Weiteres austauschbar.
+
+### Technische Ansteuerung
+
+Die Initialisierung erfolgt als 128 Pixel breite, einfach verkettete Matrix:
+
+```cpp
+Adafruit_Protomatter matrix(
+    128, 2, 1, rgbPins, 4, addrPins,
+    clockPin, latchPin, oePin, true);
+```
+
+Der letzte Parameter aktiviert den Doppelbuffer. Die Firmware zeichnet eine
+vollständige Seite zunächst unsichtbar in den rückwärtigen Puffer und schaltet
+sie anschließend mit `matrix.show()` auf die Anzeige. Vor Seitenwechseln und
+Flash-Schreibvorgängen werden beide Puffer gezielt gelöscht. Zusammen mit der
+auf 2 Bit reduzierten Farbtiefe verschafft dies der zeitkritischen
+Protomatter-Ansteuerung mehr Reserve und reduziert die zuvor beobachteten
+einzelnen Störpixel deutlich.
+
+Die drei Helligkeitsstufen 33, 66 und 100 Prozent werden vor dem Zeichnen auf
+die RGB-Farbwerte angewendet. Sie können manuell mit den beiden Tasten oder
+automatisch über den BH1750 gewählt werden. Die geringe Farbtiefe ist hier
+bewusst gewählt: Für die klaren Signalfarben und große Schrift der FlightWall
+ist sie ausreichend und verbessert gleichzeitig die Stabilität der Ausgabe.
+
+### Stromversorgung und Verkabelung
+
+Die LED-Panels werden **nicht** aus dem USB-Anschluss des MatrixPortal gespeist.
+Sie benötigen ein eigenes, ausreichend dimensioniertes und stabilisiertes
+5-V-Netzteil. Beide Panels werden parallel mit 5 V versorgt; der genaue
+Strombedarf hängt von Paneltyp, Helligkeit und dargestelltem Bild ab. Netzteil,
+beide Panels und MatrixPortal müssen eine gemeinsame Masse besitzen.
+
+Für die Datenverbindung werden kurze, sauber sitzende HUB75-Flachbandkabel
+empfohlen. Die Einspeisung erfolgt am `IN`-Anschluss des ersten Panels, dessen
+`OUT`-Anschluss mit `IN` des zweiten Panels verbunden wird. Vor Änderungen an
+Verkabelung oder Panelreihenfolge sollte die 5-V-Versorgung ausgeschaltet
+werden.
 
 ## Wiederherstellungspunkt
 
