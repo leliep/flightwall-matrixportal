@@ -356,6 +356,7 @@ const AirportName names[] = {
   {"VBS", "Brescia"},
   {"VCE", "Venedig"},
   {"VIE", "Wien"},
+  {"VIT", "Vitoria"},
   {"VLC", "Valencia"},
   {"VNO", "Vilnius"},
   {"VOL", "Volos"},

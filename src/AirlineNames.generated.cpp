@@ -102,6 +102,7 @@ const AirlineName names[] = {
   {"KMM", "KM Malta Airlines"},
   {"KPO", "Fly Alliance"},
   {"KQA", "Kenya Airways"},
+  {"LAV", "AlbaStar"},
   {"LBT", "Nouvelair"},
   {"LDX", "Sparfell Luftfahrt"},
   {"LGL", "Luxair"},

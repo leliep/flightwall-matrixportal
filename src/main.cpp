@@ -33,8 +33,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 2;
-constexpr char APP_VERSION[] = "3.2.1";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-09 21:13:54 CEST";
+constexpr char APP_VERSION[] = "3.2.2";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-10 11:56:18 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -428,6 +428,8 @@ String displayAscii(String text) {
   text.replace("Ç", "C");
   text.replace("š", "s");
   text.replace("Š", "S");
+  text.replace("ş", "s");
+  text.replace("Ş", "S");
 
   String ascii;
   ascii.reserve(text.length());
