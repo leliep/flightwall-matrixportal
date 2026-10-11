@@ -33,8 +33,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 2;
-constexpr char APP_VERSION[] = "3.3.0";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-11 09:24:08 CEST";
+constexpr char APP_VERSION[] = "3.3.1";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-11 12:28:47 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -144,6 +144,7 @@ struct FlightData {
   float cpaKm = NAN;
   float cpaMinutes = NAN;
   float verticalRateFpm = NAN;
+  float bearing = NAN;
   float relativeBearing = NAN;
   uint8_t emergencyCount = 0;
   uint8_t emergencyIndex = 0;
@@ -996,7 +997,18 @@ void drawCompactDetails() {
     }
   }
 
-  drawLine(0, 16, clipped(compactLookDirection(flight.relativeBearing), 19), cyan);
+  const int absoluteBearing = isnan(flight.bearing)
+      ? -1 : static_cast<int>(round(flight.bearing)) % 360;
+  const String bearingText = absoluteBearing < 0
+      ? "?" : String(absoluteBearing);
+  constexpr int16_t degreeX = 114;
+  const int16_t bearingX = degreeX - 1 - bearingText.length() * 6;
+  const uint8_t lookTextLength = static_cast<uint8_t>(max(1, bearingX / 6));
+  drawLine(0, 16,
+           clipped(compactLookDirection(flight.relativeBearing), lookTextLength),
+           cyan);
+  drawLine(bearingX, 16, bearingText, cyan);
+  matrix.drawCircle(degreeX + 1, 22, 1, cyan);
   drawLookArrowAt(flight.relativeBearing, 121, 16, yellow);
 }
 
@@ -2272,6 +2284,7 @@ bool fetchLocalFlight() {
                           ? selected.cpaMinutes : NAN;
     next.verticalRateFpm = selected.hasVerticalRate
                                ? selected.verticalRateFpm : NAN;
+    next.bearing = selected.hasPosition ? selected.bearing : NAN;
     next.relativeBearing = selected.hasPosition
                                ? relativeBearing(selected.bearing, viewHeading)
                                : NAN;
@@ -3095,6 +3108,7 @@ void handleDisplayApi() {
           ",\"cpa_minutes\":" + jsonNumberOrNull(shown.cpaMinutes, 0) +
           ",\"vertical_rate_fpm\":" +
               jsonNumberOrNull(shown.verticalRateFpm, 0) +
+          ",\"bearing\":" + jsonNumberOrNull(shown.bearing, 0) +
           ",\"relative_bearing\":" +
               jsonNumberOrNull(shown.relativeBearing) + "}}";
   webServer.sendHeader("Cache-Control", "no-store");
@@ -3222,6 +3236,7 @@ void handleStatusApi() {
       ",\"vertical_motion\":\"" +
           jsonEscape(statusFlight.verticalMotion) + "\"" +
       ",\"motion\":\"" + jsonEscape(statusFlight.motion) + "\"" +
+      ",\"bearing\":" + jsonNumberOrNull(statusFlight.bearing, 0) +
       ",\"relative_bearing\":" +
           jsonNumberOrNull(statusFlight.relativeBearing) +
       ",\"unknown_airports\":" + unknownCodesJson(true) +

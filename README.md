@@ -12,7 +12,7 @@ Ein separater FlightMatrixServer ist nicht mehr erforderlich.
 *Die montierte 128×32-Pixel-Matrix mit Flugnummer, Flugzeugtyp, Airline und
 aktuellen Flugdaten.*
 
-## Version 3.3.0
+## Version 3.3.1
 
 - direkte readsb-/dump1090-Datenquelle (`aircraft.json`)
 - lokale Flugzeugauswahl mit CPA, Kleinflugzeug- und Höhenfilter
@@ -242,9 +242,8 @@ und setzt den Seitenzeitpunkt neu. Dadurch erscheinen weder Bildreste noch alte
 Scrollpositionen der zuvor angezeigten Seite.
 
 Die alternative **Kompaktansicht** bündelt Flugnummer, kurzen ICAO-Flugzeugtyp,
-Entfernung, Höhe in Fuß mit direkt folgendem farbigem Steig-/Sinkdreieck und
-Fluggeschwindigkeit,
-Blickrichtung mit
+Entfernung, Höhe in Fuß mit direkt folgendem farbigem Steig-/Sinkdreieck,
+Fluggeschwindigkeit, Blickrichtung mit absolutem Azimut (Norden = 0°) und
 Richtungspfeil sowie Route und CPA auf einer Seite. Entfernt sich das Flugzeug
 nach dem CPA, erscheint bei ausreichendem Platz `entfernt sich`, andernfalls
 die Kurzform `geht`.

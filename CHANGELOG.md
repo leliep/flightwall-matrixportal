@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.3.1 – 2026-10-11
+
+- absolute Blickrichtung vom Standort zum Flugzeug in Grad auf beiden
+  Kompaktseiten ergänzt; Norden entspricht 0°
+- Lookup-Ergänzungen für TES, RCH, LUA und JDI
+
 ## 3.3.0 – 2026-10-11
 
 - Squawk-Codes 7500, 7600 und 7700 werden direkt aus readsb/dump1090 gelesen
