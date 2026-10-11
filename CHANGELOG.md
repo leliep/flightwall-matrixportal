@@ -1,5 +1,19 @@
 # Changelog
 
+## 3.3.0 – 2026-10-11
+
+- Squawk-Codes 7500, 7600 und 7700 werden direkt aus readsb/dump1090 gelesen
+  und als Transponder-Notfälle klassifiziert
+- Notfallflugzeuge umgehen Radius-, Höhen- und Kleinflugzeugfilter und erhalten
+  höchste Auswahlpriorität
+- zusätzliche, nicht abschaltbare Matrixseite mit Code und Bedeutung
+  `Hijack`, `Radio` oder `Emergency`
+- stabile Rotation mehrerer gleichzeitiger Notfallflugzeuge nach jeweils einem
+  vollständigen konfigurierten Seitenzyklus
+- Web-Display, Statusseite und JSON-APIs um Squawk, Notfallstatus und
+  Rotationsposition erweitert
+- zeitlich begrenzter Webtest mit einem bis drei simulierten Notfallflugzeugen
+
 ## 3.0.0 – 2026-10-08
 
 - Airline-Code und Callsign-Präfix `NRW` als Polizeifliegerstaffel NRW bzw.

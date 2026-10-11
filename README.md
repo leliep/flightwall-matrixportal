@@ -12,7 +12,7 @@ Ein separater FlightMatrixServer ist nicht mehr erforderlich.
 *Die montierte 128×32-Pixel-Matrix mit Flugnummer, Flugzeugtyp, Airline und
 aktuellen Flugdaten.*
 
-## Version 3.2.5
+## Version 3.3.0
 
 - direkte readsb-/dump1090-Datenquelle (`aircraft.json`)
 - lokale Flugzeugauswahl mit CPA, Kleinflugzeug- und Höhenfilter
@@ -28,6 +28,30 @@ aktuellen Flugdaten.*
 - Bedienung über die UP- und DOWN-Tasten
 - dauerhaft gespeicherte Einstellungen
 - Diagnose für WLAN, DNS und HTTP
+- Transponder-Notfallcodes 7500, 7600 und 7700 mit höchster Priorität,
+  eigener Alarmseite und Rotation mehrerer betroffener Flugzeuge
+
+### Transponder-Notfälle
+
+Die Firmware erkennt die Squawk-Codes `7700` (Emergency), `7600` (Radio) und
+`7500` (Hijack) bereits beim Einlesen der ADS-B-Daten. Betroffene Flugzeuge
+haben Vorrang vor allen normalen Zielen und umgehen Anzeigeradius,
+Special-Type-Radius, Maximalhöhe sowie Kleinflugzeugfilter. Die Reichweite ist
+damit nur noch durch die aktive ADS-B-Quelle begrenzt.
+
+Vor den konfigurierten Flugzeugseiten erscheint automatisch eine zusätzliche,
+nicht abschaltbare Alarmseite mit Callsign beziehungsweise ICAO-Adresse,
+Transpondercode, Bedeutung sowie – sofern verfügbar – Entfernung und Höhe.
+Sind mehrere Notfallflugzeuge gleichzeitig aktuell, zeigt die Matrix für jedes
+Flugzeug zuerst die Alarmseite und danach einmal den konfigurierten
+Seitenzyklus; anschließend wird zum nächsten Flugzeug gewechselt.
+
+Die Konfigurationsseite enthält einen zeitlich begrenzten Notfalltest für einen
+bis drei simulierte Flugzeuge. Er verändert weder die ADS-B-Daten noch die
+gespeicherten Einstellungen. Notfallstatus, Squawk, Bedeutung und Position in
+der Wechselreihenfolge stehen außerdem im Web-Display, in der Statusseite sowie
+unter `/api/display` und `/api/status` bereit. Nachtruhe, ausgeschaltetes
+Display, Displaytest und OTA-Sicherheitszustände behalten ihren Vorrang.
 
 ## Installation
 

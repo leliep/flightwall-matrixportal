@@ -11,8 +11,10 @@ struct Aircraft {
   String description;
   String airline;
   String category;
+  String squawk;
   uint32_t dbFlags = 0;
 
+  bool hasPosition = false;
   double latitude = 0.0;
   double longitude = 0.0;
   float distanceKm = 0.0F;
@@ -35,6 +37,6 @@ struct Aircraft {
   String motion = "unknown";
 
   bool sportAircraft = false;
+  bool emergency = false;
   std::vector<String> specialTypes;
 };
-

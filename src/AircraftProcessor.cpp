@@ -108,22 +108,12 @@ bool readAltitude(JsonObjectConst raw, int& altitude) {
 
 }  // namespace
 
+bool isEmergencySquawk(const String& squawk) {
+  return squawk == "7500" || squawk == "7600" || squawk == "7700";
+}
+
 bool aircraftFromJson(JsonObjectConst raw, const ProcessingConfig& config,
                       Aircraft& aircraft) {
-  if (raw["lat"].isNull() || raw["lon"].isNull()) return false;
-  if (!raw["seen_pos"].isNull() &&
-      raw["seen_pos"].as<float>() > config.maxPositionAgeSeconds)
-    return false;
-
-  aircraft.latitude = raw["lat"].as<double>();
-  aircraft.longitude = raw["lon"].as<double>();
-  aircraft.distanceKm = distanceKm(config.latitude, config.longitude,
-                                   aircraft.latitude, aircraft.longitude);
-  if (aircraft.distanceKm > config.radiusKm * 2.0F) return false;
-
-  aircraft.bearing = bearingDegrees(config.latitude, config.longitude,
-                                    aircraft.latitude, aircraft.longitude);
-  aircraft.direction = compassDirection(aircraft.bearing);
   aircraft.hex = upperTrimmed(raw["hex"] | "");
   aircraft.flight = upperTrimmed(raw["flight"] | "");
   aircraft.registration = upperTrimmed(raw["r"] | "");
@@ -131,10 +121,33 @@ bool aircraftFromJson(JsonObjectConst raw, const ProcessingConfig& config,
   aircraft.description = String(raw["desc"] | "");
   aircraft.airline = String(raw["ownOp"] | "");
   aircraft.category = upperTrimmed(raw["category"] | "");
+  aircraft.squawk = upperTrimmed(raw["squawk"] | "");
+  aircraft.emergency = isEmergencySquawk(aircraft.squawk);
   aircraft.dbFlags = raw["dbFlags"] | 0U;
 
+  if (aircraft.emergency && !raw["seen"].isNull() &&
+      raw["seen"].as<float>() > config.maxPositionAgeSeconds)
+    return false;
+
+  const bool hasCoordinates = !raw["lat"].isNull() && !raw["lon"].isNull();
+  const bool positionFresh = raw["seen_pos"].isNull() ||
+      raw["seen_pos"].as<float>() <= config.maxPositionAgeSeconds;
+  aircraft.hasPosition = hasCoordinates && positionFresh;
+  if (!aircraft.emergency && !aircraft.hasPosition) return false;
+  if (aircraft.hasPosition) {
+    aircraft.latitude = raw["lat"].as<double>();
+    aircraft.longitude = raw["lon"].as<double>();
+    aircraft.distanceKm = distanceKm(config.latitude, config.longitude,
+                                     aircraft.latitude, aircraft.longitude);
+    aircraft.bearing = bearingDegrees(config.latitude, config.longitude,
+                                      aircraft.latitude, aircraft.longitude);
+    aircraft.direction = compassDirection(aircraft.bearing);
+    if (!aircraft.emergency &&
+        aircraft.distanceKm > config.radiusKm * 2.0F) return false;
+  }
+
   aircraft.hasAltitude = readAltitude(raw, aircraft.altitudeFt);
-  if (config.maximumAltitudeFt > 0 && aircraft.hasAltitude &&
+  if (!aircraft.emergency && config.maximumAltitudeFt > 0 && aircraft.hasAltitude &&
       aircraft.altitudeFt > config.maximumAltitudeFt)
     return false;
   if (!raw["gs"].isNull()) {
@@ -152,7 +165,7 @@ bool aircraftFromJson(JsonObjectConst raw, const ProcessingConfig& config,
                                    : raw["geom_rate"].as<int>();
   }
 
-  if (aircraft.hasSpeed && aircraft.hasTrack) {
+  if (aircraft.hasPosition && aircraft.hasSpeed && aircraft.hasTrack) {
     const CpaResult cpa = calculateCpa(
         config.latitude, config.longitude, aircraft.latitude,
         aircraft.longitude, aircraft.speedKn, aircraft.track);
@@ -169,9 +182,40 @@ bool aircraftFromJson(JsonObjectConst raw, const ProcessingConfig& config,
 }
 
 bool selectAircraft(const std::vector<Aircraft>& aircraft,
-                    const ProcessingConfig& config, Aircraft& selected) {
+                    const ProcessingConfig& config, Aircraft& selected,
+                    String& selectedEmergencyHex, bool advanceEmergency,
+                    size_t& emergencyCount, size_t& emergencyIndex) {
+  std::vector<const Aircraft*> emergencies;
+  for (const Aircraft& candidate : aircraft) {
+    if (candidate.emergency) emergencies.push_back(&candidate);
+  }
+  std::sort(emergencies.begin(), emergencies.end(),
+            [](const Aircraft* left, const Aircraft* right) {
+              const String leftKey = left->hex.length() ? left->hex : left->flight;
+              const String rightKey = right->hex.length() ? right->hex : right->flight;
+              return leftKey < rightKey;
+            });
+  emergencyCount = emergencies.size();
+  emergencyIndex = 0;
+  if (!emergencies.empty()) {
+    size_t index = 0;
+    for (size_t candidateIndex = 0; candidateIndex < emergencies.size(); ++candidateIndex) {
+      if (emergencies[candidateIndex]->hex == selectedEmergencyHex) {
+        index = candidateIndex;
+        if (advanceEmergency) index = (index + 1) % emergencies.size();
+        break;
+      }
+    }
+    selected = *emergencies[index];
+    selectedEmergencyHex = selected.hex;
+    emergencyIndex = index;
+    return true;
+  }
+
+  selectedEmergencyHex = "";
   const Aircraft* nearest = nullptr;
   for (const Aircraft& candidate : aircraft) {
+    if (!candidate.hasPosition) continue;
     if (config.hideSportAircraft && candidate.sportAircraft &&
         candidate.specialTypes.empty())
       continue;

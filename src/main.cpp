@@ -33,8 +33,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 2;
-constexpr char APP_VERSION[] = "3.2.5";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-10 17:44:37 CEST";
+constexpr char APP_VERSION[] = "3.3.0";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-11 09:24:08 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -43,6 +43,8 @@ constexpr uint32_t POLL_INTERVAL_MS = 5000;
 constexpr uint32_t DEFAULT_PAGE_INTERVAL_MS = 5000;
 constexpr uint32_t PAGE_TRANSITION_MS = 350;
 constexpr uint32_t STALE_AFTER_MS = 20000;
+constexpr uint32_t EMERGENCY_PAGE_DURATION_MS = 5000;
+constexpr uint32_t EMERGENCY_TEST_DURATION_MS = 120000;
 constexpr uint32_t BUTTON_DEBOUNCE_MS = 150;
 constexpr uint32_t BRIGHTNESS_MESSAGE_MS = 1200;
 constexpr uint32_t IDLE_BLINK_HALF_PERIOD_MS = 3000;
@@ -119,7 +121,11 @@ Adafruit_BME280 environmentSensor;
 
 struct FlightData {
   bool available = false;
+  bool emergency = false;
+  bool hasPosition = false;
+  String hex;
   String flight;
+  String squawk;
   String airline;
   String type;
   String specialType;
@@ -139,6 +145,8 @@ struct FlightData {
   float cpaMinutes = NAN;
   float verticalRateFpm = NAN;
   float relativeBearing = NAN;
+  uint8_t emergencyCount = 0;
+  uint8_t emergencyIndex = 0;
 };
 
 FlightData flight;
@@ -254,6 +262,11 @@ AdsbClient adsbClient("");
 RouteClient routeClient;
 String routedFlight;
 RouteResult currentRoute;
+String selectedEmergencyHex;
+volatile bool emergencyAdvanceRequested = false;
+String emergencyTestCode;
+uint8_t emergencyTestCount = 0;
+uint32_t emergencyTestUntil = 0;
 uint32_t lastRouteAttempt = 0;
 size_t lastReceivedAircraft = 0;
 size_t lastCandidateAircraft = 0;
@@ -274,6 +287,8 @@ uint32_t transitionStarted = 0;
 uint8_t transitionPercent = 100;
 enum class TransitionPhase { Normal, FadeOut, FadeIn };
 TransitionPhase transitionPhase = TransitionPhase::Normal;
+bool emergencyPagePending = false;
+String displayedEmergencyKey;
 
 constexpr uint8_t BUTTON_EVENT_UP = 0x01;
 constexpr uint8_t BUTTON_EVENT_DOWN = 0x02;
@@ -1328,7 +1343,33 @@ void drawStatus(const String &line1, const String &line2) {
 }
 
 
+String emergencyMeaning(const String &squawk) {
+  if (squawk == "7500") return "HIJACK";
+  if (squawk == "7600") return "RADIO";
+  return "EMERGENCY";
+}
+
+
+void drawEmergencyPage() {
+  matrix.fillScreen(0);
+  const String identity = flight.flight.length() ? flight.flight : flight.hex;
+  drawLine(0, 0, clipped(identity, 13), white);
+  drawLine(98, 0, flight.squawk, red);
+  const String meaning = emergencyMeaning(flight.squawk);
+  int16_t meaningX = (MATRIX_WIDTH - meaning.length() * 6) / 2;
+  if (meaningX < 0) meaningX = 0;
+  drawLine(meaningX, 11, meaning, flight.squawk == "7600" ? yellow : red);
+  String details;
+  if (flight.hasPosition && !isnan(flight.distanceKm))
+    details = String(flight.distanceKm, 1) + "km";
+  else details = "POSITION?";
+  if (!isnan(flight.altitudeFt)) details += " " + String(flight.altitudeFt, 0) + "ft";
+  drawLine(0, 22, clipped(details, 21), orange);
+}
+
+
 bool aircraftIsInsideDisplayRadius() {
+  if (flight.available && flight.emergency) return true;
   const float allowedRadius = flight.specialType.length()
                                   ? displayRadiusKm * 2.0f
                                   : displayRadiusKm;
@@ -1447,8 +1488,12 @@ bool selectEnabledPage() {
 
 
 void advancePage() {
+  const uint8_t previousSlot = currentPageSlot;
   currentPageSlot = (currentPageSlot + 1) % PAGE_COUNT;
   selectEnabledPage();
+  if (flight.emergency && flight.emergencyCount > 1 &&
+      currentPageSlot <= previousSlot)
+    emergencyAdvanceRequested = true;
 }
 
 
@@ -1639,9 +1684,30 @@ void drawDisplay() {
     return;
   }
 
+  if (flight.emergency && emergencyPagePending) {
+    const uint32_t now = millis();
+    activatePage(127, now);
+    if (now - currentPageStarted < EMERGENCY_PAGE_DURATION_MS) {
+      matrix.fillScreen(0);
+      drawEmergencyPage();
+      matrix.show();
+      return;
+    }
+    emergencyPagePending = false;
+    currentPageSlot = 0;
+    currentPageStarted = 0;
+    activeRenderedPage = -1;
+    transitionPhase = TransitionPhase::Normal;
+    setTransitionPercent(100);
+  }
+
   if (!selectEnabledPage()) {
     resetPageTransition();
     matrix.fillScreen(0);
+    if (flight.emergency) {
+      drawEmergencyPage();
+      if (flight.emergencyCount > 1) emergencyAdvanceRequested = true;
+    }
     matrix.show();
     return;
   }
@@ -1952,6 +2018,17 @@ void setNetworkError(const String &message) {
 
 void syncNetworkState() {
   if (xSemaphoreTake(flightMutex, 0) == pdTRUE) {
+    const String incomingEmergencyKey = networkFlight.emergency
+        ? networkFlight.hex + ":" + networkFlight.squawk : "";
+    if (incomingEmergencyKey != displayedEmergencyKey) {
+      displayedEmergencyKey = incomingEmergencyKey;
+      emergencyPagePending = networkFlight.emergency;
+      currentPageSlot = 0;
+      currentPageStarted = 0;
+      activeRenderedPage = -1;
+      transitionPhase = TransitionPhase::Normal;
+      setTransitionPercent(100);
+    }
     flight = networkFlight;
     lastSuccessfulPoll = networkLastSuccessfulPoll;
     lastError = networkLastError;
@@ -2048,6 +2125,38 @@ String verticalMotion(const Aircraft &aircraft) {
 }
 
 
+void appendEmergencyTestAircraft(AdsbResult &result) {
+  if (!emergencyTestCount ||
+      static_cast<int32_t>(emergencyTestUntil - millis()) <= 0) {
+    emergencyTestCount = 0;
+    emergencyTestCode = "";
+    return;
+  }
+  for (uint8_t index = 0; index < emergencyTestCount; ++index) {
+    Aircraft test;
+    test.hex = "TEST" + String(index + 1);
+    test.flight = "TEST" + String(index + 1);
+    test.type = "A320";
+    test.airline = "Notfalltest";
+    test.squawk = emergencyTestCode;
+    test.emergency = true;
+    test.hasPosition = true;
+    test.latitude = siteLatitude + 0.03 * (index + 1);
+    test.longitude = siteLongitude + 0.02 * (index + 1);
+    test.distanceKm = distanceKm(siteLatitude, siteLongitude,
+                                 test.latitude, test.longitude);
+    test.bearing = bearingDegrees(siteLatitude, siteLongitude,
+                                  test.latitude, test.longitude);
+    test.direction = compassDirection(test.bearing);
+    test.hasAltitude = true;
+    test.altitudeFt = 12000 + index * 1000;
+    test.hasSpeed = true;
+    test.speedKn = 320;
+    result.candidates.push_back(test);
+  }
+}
+
+
 bool fetchLocalFlight() {
   lastAdsbAttempt = millis();
   if (WiFi.status() != WL_CONNECTED) {
@@ -2067,33 +2176,54 @@ bool fetchLocalFlight() {
   adsbClient.setUrl(activeAdsbUrl());
   routeClient.configure(routesEnabled, routeUrl);
 
-  const AdsbResult result = adsbClient.fetch(config);
+  AdsbResult result = adsbClient.fetch(config);
   lastReceivedAircraft = result.receivedAircraft;
   lastCandidateAircraft = result.candidates.size();
   lastFeedTimestamp = result.feedTimestamp;
+  appendEmergencyTestAircraft(result);
+  if (!result.ok && emergencyTestCount) {
+    result.ok = true;
+    result.error = "";
+  }
   if (!result.ok) {
     lastAdsbError = result.error.length() ? result.error : "ADS-B FEHLER";
     setNetworkError(result.error.length() ? result.error : "ADS-B FEHLER");
     Serial.printf("ADS-B error: %s\n", result.error.c_str());
     return false;
   }
-
   FlightData next;
   Aircraft selected;
-  if (selectAircraft(result.candidates, config, selected)) {
+  size_t emergencyCount = 0;
+  size_t emergencyIndex = 0;
+  const bool advanceEmergency = emergencyAdvanceRequested;
+  emergencyAdvanceRequested = false;
+  if (selectAircraft(result.candidates, config, selected,
+                     selectedEmergencyHex, advanceEmergency,
+                     emergencyCount, emergencyIndex)) {
     const bool retryRoute = currentRoute.status == "unavailable" &&
                             millis() - lastRouteAttempt >= 60000;
     if (selected.flight != routedFlight || retryRoute) {
       routedFlight = selected.flight;
       lastRouteAttempt = millis();
-      currentRoute = routeClient.lookup(selected.flight, selected.latitude,
-                                        selected.longitude,
-                                        result.feedTimestamp);
+      if (selected.flight.startsWith("TEST")) currentRoute = {};
+      else currentRoute = routeClient.lookup(
+          selected.flight,
+          selected.hasPosition ? selected.latitude : siteLatitude,
+          selected.hasPosition ? selected.longitude : siteLongitude,
+          result.feedTimestamp);
       lastRouteError = routeClient.lastError();
     }
 
     next.available = true;
+    next.emergency = selected.emergency;
+    next.hasPosition = selected.hasPosition;
+    next.hex = selected.hex;
     next.flight = selected.flight.length() ? selected.flight : selected.hex;
+    next.squawk = selected.squawk;
+    next.emergencyCount = static_cast<uint8_t>(emergencyCount > 255 ? 255 : emergencyCount);
+    next.emergencyIndex = selected.emergency
+        ? static_cast<uint8_t>(emergencyIndex > 254 ? 255 : emergencyIndex + 1)
+        : 0;
     next.specialType = selected.specialTypes.empty()
                            ? "" : selected.specialTypes.front();
     const String callsignAirlineCode = airlineCode(selected.flight);
@@ -2134,7 +2264,7 @@ bool fetchLocalFlight() {
     next.routeNames = currentRoute.routeNames;
     next.originName = currentRoute.originName;
     next.destinationName = currentRoute.destinationName;
-    next.distanceKm = selected.distanceKm;
+    next.distanceKm = selected.hasPosition ? selected.distanceKm : NAN;
     next.altitudeFt = selected.hasAltitude ? selected.altitudeFt : NAN;
     next.speedKmh = selected.hasSpeed ? selected.speedKn * 1.852f : NAN;
     next.cpaKm = selected.hasCpa ? selected.cpaKm : NAN;
@@ -2142,7 +2272,9 @@ bool fetchLocalFlight() {
                           ? selected.cpaMinutes : NAN;
     next.verticalRateFpm = selected.hasVerticalRate
                                ? selected.verticalRateFpm : NAN;
-    next.relativeBearing = relativeBearing(selected.bearing, viewHeading);
+    next.relativeBearing = selected.hasPosition
+                               ? relativeBearing(selected.bearing, viewHeading)
+                               : NAN;
   } else {
     routedFlight = "";
     currentRoute = {};
@@ -2379,7 +2511,17 @@ String webPage() {
   html += htmlEscape(routeUrl);
   html += F("'></label><label>Test-Callsign<input type='text' name='routeTestCallsign' maxlength='10' value='DLH123'></label>"
             "<button type='submit' formaction='/test-route'>Routendienst testen</button> "
-            "<button type='submit' formaction='/test-adsb'>ADS-B-Verbindung testen</button></fieldset>");
+            "<button type='submit' formaction='/test-adsb'>ADS-B-Verbindung testen</button>"
+            "<hr><label>Notfalltest-Code<select name='emergencyTestCode'>"
+            "<option value='7700'>7700 Emergency</option>"
+            "<option value='7600'>7600 Radio</option>"
+            "<option value='7500'>7500 Hijack</option></select></label>"
+            "<label>Anzahl Testflugzeuge<select name='emergencyTestCount'>"
+            "<option value='1'>1</option><option value='2'>2</option>"
+            "<option value='3'>3</option></select></label>"
+            "<button type='submit' formaction='/test-emergency'>Notfallanzeige testen</button> "
+            "<button type='submit' formaction='/stop-emergency-test'>Test beenden</button>"
+            "<p class='muted'>Der Notfalltest läuft höchstens zwei Minuten und verändert keine ADS-B-Daten oder gespeicherten Einstellungen.</p></fieldset>");
   html += F("<fieldset><legend>MQTT-Wetter</legend><label><input type='checkbox' name='mqttWeather' value='1'");
   html += checked(mqttWeatherEnabled);
   html += F("> Wetterseite in der Ruheanzeige aktivieren</label><label>Mosquitto-Server<input type='text' name='mqttHost' maxlength='96' value='");
@@ -2441,6 +2583,8 @@ String webPage() {
   html += F("<fieldset><legend>Status <small class='muted' id='statusRefresh'>wird automatisch aktualisiert</small></legend><div id='statusData'><div class='healthbar'>");
   html += statusError.length() ? F("<span class='pill warn'>● System eingeschränkt</span>") : F("<span class='pill ok'>● System OK</span>");
   html += lastAdsbError.length() ? F("<span class='pill bad'>● ADS-B Fehler</span>") : F("<span class='pill ok'>● ADS-B OK</span>");
+  if (statusFlight.emergency)
+    html += F("<span class='pill bad'>● TRANSPONDER-NOTFALL</span>");
   html += !mqttWeatherEnabled ? F("<span class='pill off'>● MQTT aus</span>") :
           (mqttConnected ? F("<span class='pill ok'>● MQTT OK</span>") : F("<span class='pill warn'>● MQTT getrennt</span>"));
   html += environmentSensorAvailable && lightSensorAvailable
@@ -2462,6 +2606,16 @@ String webPage() {
   html += isnan(filteredLux) ? "-" : String(filteredLux, 1);
   html += F("</b></div></section><section class='statusCard'><h3>Aktuelles Flugzeug</h3><div class='status'><span>Flug</span><b>");
   html += statusFlight.available ? displayAscii(statusFlight.flight) : "keiner";
+  html += F("</b><span>Transponder</span><b>");
+  html += statusFlight.squawk.length()
+              ? htmlEscape(statusFlight.squawk + " " +
+                  (statusFlight.emergency ? emergencyMeaning(statusFlight.squawk) : ""))
+              : "-";
+  html += F("</b><span>Notfallauswahl</span><b>");
+  html += statusFlight.emergency
+              ? String(statusFlight.emergencyIndex) + " / " +
+                    String(statusFlight.emergencyCount)
+              : "keine";
   html += F("</b><span>Airline / Typ</span><b>");
   html += statusFlight.available
               ? htmlEscape(displayAscii(statusFlight.airline) + " / " +
@@ -2488,9 +2642,11 @@ String webPage() {
   html += statusFlight.specialType.length()
               ? htmlEscape(statusFlight.specialType) : "nein";
   html += F("</b><span>Radius normal / aktuell</span><b>");
-  html += String(displayRadiusKm, 1) + " / " +
-          String(statusFlight.specialType.length()
-                     ? displayRadiusKm * 2.0f : displayRadiusKm, 1) + " km";
+  html += statusFlight.emergency
+              ? String(displayRadiusKm, 1) + " km / unbegrenzt"
+              : String(displayRadiusKm, 1) + " / " +
+                    String(statusFlight.specialType.length()
+                               ? displayRadiusKm * 2.0f : displayRadiusKm, 1) + " km";
   html += F("</b></div></section><section class='statusCard'><h3>ADS-B und Route</h3><div class='status'><span>ADS-B</span><b>");
   html += statusError.length() ? displayAscii(statusError) : "OK";
   html += F("</b><span>ADS-B-Fehler</span><b>");
@@ -2802,6 +2958,32 @@ void handleAdsbTest() {
 }
 
 
+void handleEmergencyTest() {
+  String code = webServer.arg("emergencyTestCode");
+  if (!isEmergencySquawk(code)) code = "7700";
+  emergencyTestCode = code;
+  emergencyTestCount = constrain(webServer.arg("emergencyTestCount").toInt(), 1, 3);
+  emergencyTestUntil = millis() + EMERGENCY_TEST_DURATION_MS;
+  selectedEmergencyHex = "";
+  emergencyAdvanceRequested = false;
+  fetchLocalFlight();
+  webServer.sendHeader("Location", "/");
+  webServer.send(303, "text/plain; charset=utf-8", "Notfalltest gestartet");
+}
+
+
+void handleStopEmergencyTest() {
+  emergencyTestCount = 0;
+  emergencyTestCode = "";
+  emergencyTestUntil = 0;
+  selectedEmergencyHex = "";
+  emergencyAdvanceRequested = false;
+  fetchLocalFlight();
+  webServer.sendHeader("Location", "/");
+  webServer.send(303, "text/plain; charset=utf-8", "Notfalltest beendet");
+}
+
+
 void handleRouteTest() {
   String callsign = webServer.arg("routeTestCallsign");
   callsign.trim();
@@ -2885,7 +3067,15 @@ void handleDisplayApi() {
   }
   json += "],\"flight\":{";
   json += "\"available\":" + String(shown.available ? "true" : "false") +
+          ",\"emergency\":" + String(shown.emergency ? "true" : "false") +
+          ",\"has_position\":" + String(shown.hasPosition ? "true" : "false") +
+          ",\"hex\":\"" + jsonEscape(shown.hex) + "\"" +
           ",\"flight\":\"" + jsonEscape(shown.flight) + "\"" +
+          ",\"squawk\":\"" + jsonEscape(shown.squawk) + "\"" +
+          ",\"emergency_meaning\":\"" +
+              jsonEscape(shown.emergency ? emergencyMeaning(shown.squawk) : "") + "\"" +
+          ",\"emergency_count\":" + String(shown.emergencyCount) +
+          ",\"emergency_index\":" + String(shown.emergencyIndex) +
           ",\"airline\":\"" + jsonEscape(shown.airline) + "\"" +
           ",\"aircraft_type\":\"" + jsonEscape(shown.type) + "\"" +
           ",\"special_type\":\"" + jsonEscape(shown.specialType) + "\"" +
@@ -2933,7 +3123,8 @@ void handleStatusApi() {
     statusRain = rain24Mm;
     xSemaphoreGive(weatherMutex);
   }
-  const float effectiveRadiusKm = statusFlight.specialType.length()
+  const float effectiveRadiusKm = statusFlight.emergency ? NAN :
+                                  statusFlight.specialType.length()
                                       ? displayRadiusKm * 2.0f
                                       : displayRadiusKm;
   String json = "{\"version\":\"" + jsonEscape(APP_VERSION) +
@@ -2979,7 +3170,7 @@ void handleStatusApi() {
       ",\"site_longitude\":" + String(siteLongitude, 6) +
       ",\"view_heading\":" + String(viewHeading, 0) +
       ",\"display_radius_km\":" + String(displayRadiusKm, 1) +
-      ",\"effective_radius_km\":" + String(effectiveRadiusKm, 1) +
+      ",\"effective_radius_km\":" + jsonNumberOrNull(effectiveRadiusKm) +
       ",\"routes_enabled\":" + String(routesEnabled ? "true" : "false") +
       ",\"hide_sport_aircraft\":" + String(hideSportAircraft ? "true" : "false") +
       ",\"altitude_filter_enabled\":" + String(altitudeFilterEnabled ? "true" : "false") +
@@ -3001,7 +3192,19 @@ void handleStatusApi() {
       ",\"route_cache_write_pending\":" +
           String(routeClient.hasPendingWrites() ? "true" : "false") +
       ",\"flight_available\":" + String(statusFlight.available ? "true" : "false") +
+      ",\"emergency\":" + String(statusFlight.emergency ? "true" : "false") +
+      ",\"has_position\":" + String(statusFlight.hasPosition ? "true" : "false") +
+      ",\"hex\":\"" + jsonEscape(statusFlight.hex) + "\"" +
       ",\"flight\":\"" + jsonEscape(statusFlight.flight) + "\"" +
+      ",\"squawk\":\"" + jsonEscape(statusFlight.squawk) + "\"" +
+      ",\"emergency_meaning\":\"" +
+          jsonEscape(statusFlight.emergency ? emergencyMeaning(statusFlight.squawk) : "") + "\"" +
+      ",\"emergency_count\":" + String(statusFlight.emergencyCount) +
+      ",\"emergency_index\":" + String(statusFlight.emergencyIndex) +
+      ",\"emergency_test_active\":" +
+          String(emergencyTestCount &&
+                 static_cast<int32_t>(emergencyTestUntil - millis()) > 0
+                     ? "true" : "false") +
       ",\"airline\":\"" + jsonEscape(statusFlight.airline) + "\"" +
       ",\"aircraft_type\":\"" + jsonEscape(statusFlight.type) + "\"" +
       ",\"special_type\":\"" + jsonEscape(statusFlight.specialType) + "\"" +
@@ -3290,6 +3493,8 @@ void startWebServer() {
     webServer.on("/save", HTTP_POST, handleWebSave);
     webServer.on("/test-adsb", HTTP_POST, handleAdsbTest);
     webServer.on("/test-route", HTTP_POST, handleRouteTest);
+    webServer.on("/test-emergency", HTTP_POST, handleEmergencyTest);
+    webServer.on("/stop-emergency-test", HTTP_POST, handleStopEmergencyTest);
     webServer.on("/display-test", HTTP_POST, handleDisplayTest);
     webServer.on("/restart", HTTP_POST, handleRestart);
     webServer.on("/update", HTTP_GET, handleOtaPage);

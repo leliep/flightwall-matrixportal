@@ -29,7 +29,7 @@ AdsbResult AdsbClient::fetch(const ProcessingConfig& config) {
                           "desc",      "ownOp",     "category",  "dbFlags",
                           "lat",       "lon",       "alt_baro",  "alt_geom",
                           "gs",        "track",     "baro_rate", "geom_rate",
-                          "seen_pos"};
+                          "seen",      "seen_pos", "squawk"};
   for (const char* field : fields) filter["aircraft"][0][field] = true;
 
   JsonDocument document;
