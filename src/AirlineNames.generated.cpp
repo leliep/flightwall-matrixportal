@@ -148,6 +148,7 @@ const AirlineName names[] = {
   {"SDR", "Sundair"},
   {"SEH", "SKY express"},
   {"SIA", "Singapore Airlines"},
+  {"SJI", "Smart Jet International"},
   {"SK", "SAS Scandinavian Airlines"},
   {"SN", "Brussels Airlines"},
   {"SRN", "Sirair"},

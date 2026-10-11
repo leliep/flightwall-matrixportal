@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.3.2 – 2026-10-11
+
+- Gradzeichen der absoluten Blickrichtung in den Kompaktanzeigen korrekt
+  hochgestellt
+- Lookup-Ergänzung für SJI (Smart Jet International)
+
 ## 3.3.1 – 2026-10-11
 
 - absolute Blickrichtung vom Standort zum Flugzeug in Grad auf beiden

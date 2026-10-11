@@ -33,8 +33,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 2;
-constexpr char APP_VERSION[] = "3.3.1";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-11 12:28:47 CEST";
+constexpr char APP_VERSION[] = "3.3.2";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-11 14:22:45 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -1008,7 +1008,7 @@ void drawCompactDetails() {
            clipped(compactLookDirection(flight.relativeBearing), lookTextLength),
            cyan);
   drawLine(bearingX, 16, bearingText, cyan);
-  matrix.drawCircle(degreeX + 1, 22, 1, cyan);
+  matrix.drawCircle(degreeX + 1, 18, 1, cyan);
   drawLookArrowAt(flight.relativeBearing, 121, 16, yellow);
 }
 
