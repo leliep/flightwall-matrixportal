@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.3.3 – 2026-10-13
+
+- Airport-Lookups für SBZ (Sibiu), CBR (Canberra) und BNE (Brisbane) ergänzt
+- Airline-/Betreiber-Lookups für RHH, MOG, NFA, PIA, FRF, LSM, STL, BOO,
+  QAJ, JSD, VCJ, TAL, JEI, LEJ, SFG, PAC, JAR, NAT, QQE, LHA und PEX ergänzt
+
 ## 3.3.2 – 2026-10-11
 
 - Gradzeichen der absoluten Blickrichtung in den Kompaktanzeigen korrekt
