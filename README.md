@@ -12,7 +12,7 @@ Ein separater FlightMatrixServer ist nicht mehr erforderlich.
 *Die montierte 128×32-Pixel-Matrix mit Flugnummer, Flugzeugtyp, Airline und
 aktuellen Flugdaten.*
 
-## Version 3.3.3
+## Version 3.3.4
 
 - direkte readsb-/dump1090-Datenquelle (`aircraft.json`)
 - lokale Flugzeugauswahl mit CPA, Kleinflugzeug- und Höhenfilter

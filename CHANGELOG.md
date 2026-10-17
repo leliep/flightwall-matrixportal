@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.3.4 – 2026-10-17
+
+- Airport-Lookups für RZE, YHZ, GDL, DEB, CND, TGM, SDQ, SJO und TRN ergänzt
+- Airline-/Betreiber-Lookups für JOK, NJE, HAM, ADN, HKY, PAV, PLF, LXA,
+  MMF, HYP, BCP, GAC, JFA, RRR, RWL, PJJ, FJO, MJF, AOM, SVI, UKN, BTX,
+  HYS, LYF, EFD, TWI und TYW ergänzt
+
 ## 3.3.3 – 2026-10-13
 
 - Airport-Lookups für SBZ (Sibiu), CBR (Canberra) und BNE (Brisbane) ergänzt
