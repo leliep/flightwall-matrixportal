@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.4.0-ui-preview – 2026-10-18
+
+- dauerhaft gespeicherte Sprachwahl Deutsch/Englisch in der Konfiguration
+- zweisprachige Konfigurations-, Status-, Webdisplay-, Test-, Neustart- und
+  OTA-Oberflächen
+- sprachabhängige Matrixtexte, Blickrichtungen und Wetter-Himmelsrichtungen
+- aktive Sprache in den JSON-APIs ergänzt, bestehende Datenfelder bleiben
+  kompatibel
+
 ## 3.3.4 – 2026-10-17
 
 - Airport-Lookups für RZE, YHZ, GDL, DEB, CND, TGM, SDQ, SJO und TRN ergänzt

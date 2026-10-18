@@ -33,8 +33,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 2;
-constexpr char APP_VERSION[] = "3.3.4";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-17 14:30:03 CEST";
+constexpr char APP_VERSION[] = "3.4.0-ui-preview";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-18 22:14:23 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -51,8 +51,6 @@ constexpr uint32_t IDLE_BLINK_HALF_PERIOD_MS = 3000;
 constexpr uint32_t LIGHT_SENSOR_INTERVAL_MS = 2000;
 constexpr uint32_t LIGHT_SENSOR_RETRY_MS = 10000;
 constexpr uint8_t LIGHT_SENSOR_FAILURE_LIMIT = 3;
-constexpr char DEPARTING_LONG_TEXT[] = "entfernt sich";
-constexpr uint8_t DEPARTING_LONG_TEXT_LENGTH = sizeof(DEPARTING_LONG_TEXT) - 1;
 
 // BH1750 soldered connection: A1/GPIO 3 = SDA, A2/GPIO 9 = SCL.
 // STEMMA QT remains an alternative with SDA 16 and SCL 17.
@@ -216,6 +214,7 @@ String brightnessMessageTitle = "HELLIGKEIT";
 String brightnessMessageValue;
 volatile uint8_t pendingButtonEvents = 0;
 bool displayEnabled = true;
+bool uiEnglish = false;
 bool environmentIdleDisplayEnabled = true;
 bool mqttWeatherEnabled = true;
 String mqttHost = DEFAULT_MQTT_HOST;
@@ -258,6 +257,11 @@ float viewHeading = DEFAULT_VIEW_HEADING;
 bool routesEnabled = true;
 bool hideSportAircraft = true;
 bool altitudeFilterEnabled = false;
+
+
+const char *uiText(const char *german, const char *english) {
+  return uiEnglish ? english : german;
+}
 int maximumAltitudeFt = DEFAULT_MAXIMUM_ALTITUDE_FT;
 AdsbClient adsbClient("");
 RouteClient routeClient;
@@ -819,22 +823,22 @@ LookDirection lookDirection(float angle) {
 
 String compactLookDirection(float angle) {
   switch (lookDirection(angle)) {
-    case LookDirection::Above: return "oben";
-    case LookDirection::AboveFront: return "oben vorne";
-    case LookDirection::AboveRight: return "oben rechts";
-    case LookDirection::AboveBack: return "oben hinten";
-    case LookDirection::AboveLeft: return "oben links";
-    case LookDirection::Front: return "vorne";
-    case LookDirection::Right: return "rechts";
-    case LookDirection::RightShoulder: return "rechte Schulter";
-    case LookDirection::Back: return "hinten";
-    case LookDirection::LeftShoulder: return "linke Schulter";
-    case LookDirection::Left: return "links";
-    case LookDirection::FarFront: return "weit vorne";
-    case LookDirection::FarRight: return "weit rechts";
-    case LookDirection::FarBack: return "weit hinten";
-    case LookDirection::FarLeft: return "weit links";
-    default: return "richtung ?";
+    case LookDirection::Above: return uiText("oben", "above");
+    case LookDirection::AboveFront: return uiText("oben vorne", "above front");
+    case LookDirection::AboveRight: return uiText("oben rechts", "above right");
+    case LookDirection::AboveBack: return uiText("oben hinten", "above rear");
+    case LookDirection::AboveLeft: return uiText("oben links", "above left");
+    case LookDirection::Front: return uiText("vorne", "front");
+    case LookDirection::Right: return uiText("rechts", "right");
+    case LookDirection::RightShoulder: return uiText("rechte Schulter", "right rear");
+    case LookDirection::Back: return uiText("hinten", "rear");
+    case LookDirection::LeftShoulder: return uiText("linke Schulter", "left rear");
+    case LookDirection::Left: return uiText("links", "left");
+    case LookDirection::FarFront: return uiText("weit vorne", "far front");
+    case LookDirection::FarRight: return uiText("weit rechts", "far right");
+    case LookDirection::FarBack: return uiText("weit hinten", "far rear");
+    case LookDirection::FarLeft: return uiText("weit links", "far left");
+    default: return uiText("richtung ?", "direction ?");
   }
 }
 
@@ -901,7 +905,7 @@ String displayedAirline() {
   airline.trim();
   String comparison = airline;
   comparison.toUpperCase();
-  return comparison == "UNKNOWN" ? "Airline N/A" : airline;
+  return comparison == "UNKNOWN" ? uiText("Airline unbekannt", "Airline N/A") : airline;
 }
 
 
@@ -924,10 +928,11 @@ void drawCpaPage() {
   cpa += isnan(flight.cpaKm) ? "?" : String(flight.cpaKm, 1) + "km";
   const bool departing = flight.motion == "departing";
   if (departing) {
-    if (cpa.length() + 1 + DEPARTING_LONG_TEXT_LENGTH <= 21) {
-      cpa += " entfernt sich";
+    const String departingText = uiText("entfernt sich", "departing");
+    if (cpa.length() + 1 + departingText.length() <= 21) {
+      cpa += " " + departingText;
     } else {
-      cpa += " geht";
+      cpa += uiText(" geht", " away");
     }
   } else if (!isnan(flight.cpaMinutes)) {
     cpa += " in " + String(static_cast<int>(round(flight.cpaMinutes))) + "min";
@@ -1015,7 +1020,7 @@ void drawCompactDetails() {
 
 void drawCompactTop() {
   const String flightNumber = clipped(
-      flight.flight.length() ? flight.flight : "Flug ?", 10);
+      flight.flight.length() ? flight.flight : uiText("Flug ?", "Flight ?"), 10);
   drawLine(0, 0, flightNumber, red);
   drawCompactTypeHeader();
 
@@ -1031,8 +1036,9 @@ void drawCompactPage() {
   String cpa;
   if (departing) {
     const uint8_t separatorLength = bottom.length() ? 1 : 0;
-    cpa = bottom.length() + separatorLength + DEPARTING_LONG_TEXT_LENGTH <= 21 ?
-        DEPARTING_LONG_TEXT : "geht";
+    const String departingText = uiText("entfernt sich", "departing");
+    cpa = bottom.length() + separatorLength + departingText.length() <= 21 ?
+        departingText : uiText("geht", "away");
   } else if (!isnan(flight.cpaKm)) {
     cpa = "CPA " + String(flight.cpaKm, 1);
     if (!isnan(flight.cpaMinutes)) {
@@ -1265,7 +1271,7 @@ bool flightHasMultiHopRoute() {
 
 
 void drawAirportNamesPage() {
-  drawLine(0, 0, "Flughaefen", cyan);
+  drawLine(0, 0, uiText("Flughaefen", "Airports"), cyan);
   const uint32_t elapsed = millis() - currentPageStarted;
   if (flightHasMultiHopRoute()) {
     String codes = displayAscii(flight.routeCodes);
@@ -1276,9 +1282,9 @@ void drawAirportNamesPage() {
     return;
   }
   String originText = "S " + (flight.originName.length() ?
-      flight.originName : (flight.origin.length() ? flight.origin : "unbekannt"));
+      flight.originName : (flight.origin.length() ? flight.origin : uiText("unbekannt", "unknown")));
   String destinationText = "Z " + (flight.destinationName.length() ?
-      flight.destinationName : (flight.destination.length() ? flight.destination : "unbekannt"));
+      flight.destinationName : (flight.destination.length() ? flight.destination : uiText("unbekannt", "unknown")));
   originText = displayAscii(originText);
   destinationText = displayAscii(destinationText);
   drawLine(scrollingTextX(originText, elapsed), 11, originText, white);
@@ -1396,12 +1402,16 @@ bool weatherValueFresh(uint32_t updated) {
 
 
 String weatherCompassDirection(float degrees) {
-  static const char *directions[] = {
+  static const char *directionsDe[] = {
       "N", "NNO", "NO", "ONO", "O", "OSO", "SO", "SSO",
+      "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"};
+  static const char *directionsEn[] = {
+      "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
       "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"};
   while (degrees < 0.0f) degrees += 360.0f;
   while (degrees >= 360.0f) degrees -= 360.0f;
-  return directions[static_cast<uint8_t>((degrees + 11.25f) / 22.5f) % 16];
+  const uint8_t index = static_cast<uint8_t>((degrees + 11.25f) / 22.5f) % 16;
+  return uiEnglish ? directionsEn[index] : directionsDe[index];
 }
 
 
@@ -1653,7 +1663,7 @@ bool quietHoursAreActive() {
 void drawDisplay() {
   if (otaPreparing) {
     setTransitionPercent(100);
-    drawStatus("OTA UPDATE", "BITTE WARTEN");
+    drawStatus("OTA UPDATE", uiText("BITTE WARTEN", "PLEASE WAIT"));
     return;
   }
   if (otaInProgress) {
@@ -1692,7 +1702,7 @@ void drawDisplay() {
   }
   if (lastSuccessfulPoll == 0 || millis() - lastSuccessfulPoll > STALE_AFTER_MS) {
     resetPageTransition();
-    drawStatus("DATEN VERALTET", lastError);
+    drawStatus(uiText("DATEN VERALTET", "STALE DATA"), lastError);
     return;
   }
 
@@ -1777,7 +1787,9 @@ void applyBrightnessIndex(uint8_t newIndex, bool showMessage) {
     updateColors();
   }
   if (showMessage) {
-    brightnessMessageTitle = automaticBrightnessEnabled ? "AUTO LICHT" : "HELLIGKEIT";
+    brightnessMessageTitle = automaticBrightnessEnabled
+                                 ? uiText("AUTO LICHT", "AUTO LIGHT")
+                                 : uiText("HELLIGKEIT", "BRIGHTNESS");
     brightnessMessageValue = String(BRIGHTNESS_LEVELS[brightnessIndex]) + "%";
     brightnessMessageUntil = millis() + BRIGHTNESS_MESSAGE_MS;
   }
@@ -1985,11 +1997,11 @@ void handleBrightnessButtons() {
     }
     if (lightSensorAvailable && !isnan(filteredLux)) {
       applyBrightnessIndex(automaticBrightnessIndex(filteredLux), false);
-      brightnessMessageTitle = "AUTO LICHT";
+      brightnessMessageTitle = uiText("AUTO LICHT", "AUTO LIGHT");
       brightnessMessageValue = "AKTIV";
     } else {
       applyBrightnessIndex(manualBrightnessIndex, false);
-      brightnessMessageTitle = "MANUELL";
+      brightnessMessageTitle = uiText("MANUELL", "MANUAL");
       brightnessMessageValue = "SENSOR FEHLT";
     }
     brightnessMessageUntil = now + BRIGHTNESS_MESSAGE_MS;
@@ -2349,28 +2361,29 @@ String htmlEscape(String value) {
 
 
 String pageName(uint8_t page) {
-  if (page == 0) return "Flugdaten";
-  if (page == 1) return "Airline und Route";
-  if (page == 2) return "CPA und Sondertyp";
-  if (page == 3) return "Flughafennamen";
-  if (page == 4) return "Freitext";
-  if (page == 5) return "Kompaktansicht";
-  return "Kompakt + Flughäfen";
+  if (page == 0) return uiText("Flugdaten", "Flight data");
+  if (page == 1) return uiText("Airline und Route", "Airline and route");
+  if (page == 2) return uiText("CPA und Sondertyp", "CPA and special type");
+  if (page == 3) return uiText("Flughafennamen", "Airport names");
+  if (page == 4) return uiText("Freitext", "Custom text");
+  if (page == 5) return uiText("Kompaktansicht", "Compact view");
+  return uiText("Kompakt + Flughäfen", "Compact + airports");
 }
 
 
 String resetReasonText() {
   switch (esp_reset_reason()) {
-    case ESP_RST_POWERON: return "Einschalten";
-    case ESP_RST_SW: return "Software-Neustart";
-    case ESP_RST_PANIC: return "Absturz/Panic";
+    case ESP_RST_POWERON: return uiText("Einschalten", "Power on");
+    case ESP_RST_SW: return uiText("Software-Neustart", "Software restart");
+    case ESP_RST_PANIC: return uiText("Absturz/Panic", "Crash/panic");
     case ESP_RST_INT_WDT: return "Interrupt-Watchdog";
     case ESP_RST_TASK_WDT: return "Task-Watchdog";
     case ESP_RST_WDT: return "Watchdog";
-    case ESP_RST_BROWNOUT: return "Unterspannung";
-    case ESP_RST_EXT: return "Externer Reset";
+    case ESP_RST_BROWNOUT: return uiText("Unterspannung", "Brownout");
+    case ESP_RST_EXT: return uiText("Externer Reset", "External reset");
     case ESP_RST_DEEPSLEEP: return "Deep-Sleep";
-    default: return "Unbekannt (" + String(static_cast<int>(esp_reset_reason())) + ")";
+    default: return String(uiText("Unbekannt", "Unknown")) + " (" +
+                    String(static_cast<int>(esp_reset_reason())) + ")";
   }
 }
 
@@ -2407,7 +2420,7 @@ String unknownCodesText(bool airports) {
     if (index) text += ", ";
     text += airports ? unknownAirportAt(index) : unknownAirlineAt(index);
   }
-  return text.length() ? text : "keine";
+  return text.length() ? text : uiText("keine", "none");
 }
 
 
@@ -2424,7 +2437,9 @@ String unknownCodesJson(bool airports) {
 
 
 String ageText(uint32_t timestamp) {
-  return timestamp ? String((millis() - timestamp) / 1000) + " s zuvor" : "nie";
+  return timestamp ? String((millis() - timestamp) / 1000) +
+                         uiText(" s zuvor", " s ago")
+                   : uiText("nie", "never");
 }
 
 
@@ -2441,6 +2456,98 @@ String jsonNumberOrNull(float value, uint8_t decimals = 1) {
   String text(value, static_cast<unsigned int>(decimals));
   text.trim();
   return text;
+}
+
+
+void translateWebPageToEnglish(String &html) {
+  if (!uiEnglish) return;
+  struct Translation { const char *de; const char *en; };
+  static const Translation translations[] = {
+    {"lang='de'", "lang='en'"},
+    {"lang=\"de\"", "lang=\"en\""},
+    {"Sprache / Language", "Language / Sprache"},
+    {"Deutsch", "German"},
+    {"Display eingeschaltet", "Display enabled"},
+    {"Wetterdaten anzeigen, wenn kein Flugzeug in der Nähe ist", "Show weather data when no aircraft is nearby"},
+    {"Anzeigeradius", "Display radius"},
+    {"Standorthöhe über NHN", "Site elevation above sea level"},
+    {"Ab dieser Entfernung \"weit\"", "Use \"far\" beyond this distance"},
+    {"Nachtruhe aktiv", "Night mode enabled"},
+    {"Display dunkel ab", "Display off from"},
+    {"Display wieder aktiv ab", "Display on again at"},
+    {"Die Nachtruhe darf über Mitternacht reichen. Gleiche Zeiten deaktivieren die Abdunklung.", "Night mode may span midnight. Equal times disable it."},
+    {"Displaytest beenden", "Stop display test"},
+    {"Displaytest starten", "Start display test"},
+    {"Etwa 23 Sekunden: Matrix-Prüfbilder und alle Typensymbole mit Bedeutung.", "About 23 seconds: matrix test patterns and all type symbols with their meaning."},
+    {"Flugzeugdaten", "Aircraft data"}, {"Aktive ADS-B-Quelle", "Active ADS-B source"},
+    {"Quelle 1", "Source 1"}, {"Quelle 2", "Source 2"},
+    {"ADS-B-Adresse Quelle", "ADS-B address source"},
+    {"Nur die ausgewählte Quelle wird abgefragt. Quelle 2 darf unkonfiguriert bleiben.", "Only the selected source is queried. Source 2 may remain unconfigured."},
+    {"Breitengrad", "Latitude"}, {"Längengrad", "Longitude"}, {"Blickrichtung (Grad)", "Viewing direction (degrees)"},
+    {"Sport- und Kleinflugzeuge ausblenden", "Hide sport and light aircraft"},
+    {"Flugzeuge oberhalb der Maximalhöhe ausblenden", "Hide aircraft above maximum altitude"},
+    {"Maximalhöhe", "Maximum altitude"}, {"Routen über adsb.im ergänzen", "Add routes via adsb.im"},
+    {"Routen-Dienst", "Route service"}, {"Routendienst testen", "Test route service"},
+    {"ADS-B-Verbindung testen", "Test ADS-B connection"}, {"Notfalltest-Code", "Emergency test code"},
+    {"Anzahl Testflugzeuge", "Number of test aircraft"}, {"Notfallanzeige testen", "Test emergency display"},
+    {"Test beenden", "Stop test"},
+    {"Der Notfalltest läuft höchstens zwei Minuten und verändert keine ADS-B-Daten oder gespeicherten Einstellungen.", "The emergency test runs for no more than two minutes and does not modify ADS-B data or saved settings."},
+    {"MQTT-Wetter", "MQTT weather"}, {"Wetterseite in der Ruheanzeige aktivieren", "Enable weather page while idle"},
+    {"Benutzer", "User"}, {"Passwort", "Password"}, {"unverändert lassen", "leave unchanged"},
+    {"Windrichtung", "Wind direction"}, {"Windgeschwindigkeit", "Wind speed"}, {"Windböen", "Wind gusts"},
+    {"Regen 24 h", "Rain 24 h"},
+    {"Regen wird für die Anzeige von cm in mm umgerechnet. Ein leeres Passwortfeld behält das gespeicherte Passwort bei.", "Rain is converted from cm to mm for display. An empty password field keeps the saved password."},
+    {"Anzeigeseiten", "Display pages"}, {"Sanfte Übergänge", "Smooth transitions"},
+    {"Freitext (maximal 128 Zeichen)", "Custom text (maximum 128 characters)"},
+    {"Freitext-Scrollgeschwindigkeit", "Custom text scroll speed"}, {">schnell<", ">fast<"},
+    {">mittel<", ">medium<"}, {">langsam<", ">slow<"},
+    {"Ein leerer Freitext überspringt die Seite automatisch.", "An empty custom text automatically skips the page."},
+    {"Dauer (Sekunden)", "Duration (seconds)"}, {"Reihenfolge:", "Order:"}, {"Position ", "Position "},
+    {"Helligkeit", "Brightness"}, {"Manuelle Stufe", "Manual level"}, {"Schwelle dunkel", "Dark threshold"},
+    {"Schwelle hell", "Bright threshold"}, {"Einstellungen speichern", "Save settings"},
+    {"wird automatisch aktualisiert", "updates automatically"}, {"System eingeschränkt", "System degraded"},
+    {"MQTT aus", "MQTT off"}, {"MQTT getrennt", "MQTT disconnected"}, {"Sensoren OK", "Sensors OK"},
+    {"Sensor prüfen", "Check sensor"}, {"Netzwerk", "Network"}, {"Adresse", "Address"},
+    {"WLAN-Neuverbindungen", "Wi-Fi reconnects"}, {"Webserver-Starts", "Web server starts"},
+    {"Letzte WLAN-Unterbrechung", "Last Wi-Fi interruption"}, {"Aktuelles Flugzeug", "Current aircraft"},
+    {"Flug", "Flight"}, {"Notfallauswahl", "Emergency selection"}, {"Entfernung / Höhe", "Distance / altitude"},
+    {"Vertikalbewegung", "Vertical motion"}, {"Routenstatus", "Route status"}, {"Letzter ADS-B-Erfolg", "Last ADS-B success"},
+    {"Konfiguration", "Configuration"}, {"Standort / Blickrichtung", "Location / viewing direction"},
+    {"Höhenfilter", "Altitude filter"}, {"Kleinflugzeugfilter", "Light aircraft filter"},
+    {"Wetteranzeige", "Weather display"}, {"Übersetzungstabellen", "Translation tables"},
+    {"Unbekannte Flughäfen", "Unknown airports"}, {"Unbekannte Airlines", "Unknown airlines"},
+    {"Diagnose", "Diagnostics"}, {"Letzter ADS-B-Versuch", "Last ADS-B attempt"},
+    {"Letzte Display-Aktualisierung", "Last display update"}, {"Empfangene Flugzeuge", "Received aircraft"},
+    {"Geeignete Flugzeuge", "Eligible aircraft"}, {"Wetter und Sensoren", "Weather and sensors"},
+    {"Umgebungstemperatur", "Ambient temperature"}, {"Relative Feuchte", "Relative humidity"},
+    {"Luftdruck auf Meereshöhe", "Sea-level pressure"}, {"Stationsdruck (BME280 roh)", "Station pressure (raw BME280)"},
+    {"Wetterdaten-Ruheanzeige", "Idle weather display"}, {"Letzte MQTT-Nachricht", "Last MQTT message"},
+    {"MQTT-Fehler", "MQTT error"}, {"Wind / Richtung", "Wind / direction"},
+    {"Blickgeometrie", "Viewing geometry"}, {"Lokale Zeit", "Local time"}, {"Nachtruhe", "Night mode"},
+    {"Task- und Resetdiagnose", "Task and reset diagnostics"}, {"Netz Core", "Network core"},
+    {"Stackreserve", "Stack reserve"}, {"Letzter Reset", "Last reset"},
+    {"ESP wirklich neu starten?", "Really restart the ESP?"}, {"ESP neu starten", "Restart ESP"},
+    {"Web-Display öffnen", "Open web display"}, {"Firmware drahtlos aktualisieren", "Update firmware wirelessly"},
+    {"UP/DOWN: manuell; beide Tasten: Automatik.", "UP/DOWN: manual; both buttons: automatic."},
+    {"Installierte Version", "Installed version"},
+    {"PlatformIO-Datei", "PlatformIO file"}, {"auswählen", "select"},
+    {"Während des Updates die Stromversorgung nicht trennen.", "Do not disconnect power during the update."},
+    {"Prüfen und installieren", "Verify and install"},
+    {"Bitte eine .bin-Firmware auswählen.", "Please select a .bin firmware file."},
+    {"Ungültige ESP32-Firmware: Dateikopf fehlt.", "Invalid ESP32 firmware: missing image header."},
+    {"wirklich installieren?", "really install?"},
+    {"Netzwerkfehler während des Uploads.", "Network error during upload."},
+    {"Ungültige Antwort des ESP.", "Invalid response from the ESP."},
+    {"Upload läuft…", "Upload in progress…"}, {"Warte auf Neustart…", "Waiting for restart…"},
+    {"ESP nicht wieder erreichbar.", "ESP did not become reachable again."},
+    {"Update abgeschlossen. Version vorher:", "Update complete. Previous version:"}, {", danach:", ", new version:"},
+    {"Zurück", "Back"},
+    {"aktualisiert ", "updated "}, {"Aktualisierung fehlgeschlagen", "Update failed"},
+    {"verbunden", "connected"}, {"nicht gefunden", "not found"}, {"getrennt", "disconnected"},
+    {"keiner", "none"}, {"keine", "none"}, {"aktiv", "enabled"}, {"inaktiv", "inactive"},
+    {"Automatik", "automatic"}, {"manuell", "manual"}, {"aus", "off"}, {"warte auf NTP", "waiting for NTP"}
+  };
+  for (const auto &translation : translations) html.replace(translation.de, translation.en);
 }
 
 
@@ -2479,6 +2586,12 @@ String webPage() {
   html += F("<h1>FlightWall MatrixPortal ");
   html += APP_VERSION;
   html += F("</h1><form method='post' action='/save'>");
+  html += F("<fieldset><legend>Sprache / Language</legend><label><select name='uiLanguage'>"
+            "<option value='de'");
+  html += selected(!uiEnglish);
+  html += F(">Deutsch</option><option value='en'");
+  html += selected(uiEnglish);
+  html += F(">English</option></select></label></fieldset>");
   html += F("<fieldset><legend>Display</legend><label><input type='checkbox' name='display' value='1'");
   html += checked(displayEnabled);
   html += F("> Display eingeschaltet</label><label><input type='checkbox' name='environmentIdle' value='1'");
@@ -2790,6 +2903,7 @@ String webPage() {
             "if(note)note.textContent='aktualisiert '+new Date().toLocaleTimeString('de-DE');"
             "}catch(error){if(note)note.textContent='Aktualisierung fehlgeschlagen';}"
             "finally{statusBusy=false;}}setInterval(refreshStatus,5000);</script></body></html>");
+  translateWebPageToEnglish(html);
   return html;
 }
 
@@ -2808,6 +2922,7 @@ bool validFlightWallHost(const String &host) {
 
 void applyWebSettings() {
   if (xSemaphoreTake(preferencesMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+    uiEnglish = webServer.arg("uiLanguage") == "en";
     displayEnabled = webServer.hasArg("display");
     environmentIdleDisplayEnabled = webServer.hasArg("environmentIdle");
     mqttWeatherEnabled = webServer.hasArg("mqttWeather");
@@ -2904,6 +3019,7 @@ void applyWebSettings() {
       manualBrightnessIndex = requestedBrightness;
     }
     preferences.putBool("displayOn", displayEnabled);
+    preferences.putBool("uiEnglish", uiEnglish);
     preferences.putBool("envIdle", environmentIdleDisplayEnabled);
     preferences.putBool("mqttOn", mqttWeatherEnabled);
     preferences.putString("mqttHost", mqttHost);
@@ -2955,19 +3071,21 @@ void applyWebSettings() {
 void handleWebSave() {
   applyWebSettings();
   webServer.sendHeader("Location", "/");
-  webServer.send(303, "text/plain", "Gespeichert");
+  webServer.send(303, "text/plain", uiText("Gespeichert", "Saved"));
 }
 
 
 void handleAdsbTest() {
   applyWebSettings();
   const bool success = fetchLocalFlight();
-  const String message = success ? "Verbindung erfolgreich." :
-      "Verbindung fehlgeschlagen: " + networkLastError;
+  const String message = success ? uiText("Verbindung erfolgreich.", "Connection successful.") :
+      String(uiText("Verbindung fehlgeschlagen: ", "Connection failed: ")) + networkLastError;
   webServer.send(success ? 200 : 502, "text/html; charset=utf-8",
-      "<!doctype html><html lang='de'><meta name='viewport' content='width=device-width'>"
+      String("<!doctype html><html lang='") + (uiEnglish ? "en" : "de") +
+      "'><meta name='viewport' content='width=device-width'>"
       "<body style='font:18px system-ui;max-width:600px;margin:40px auto'><h1>ADS-B-Test</h1><p>" +
-      htmlEscape(message) + "</p><p><a href='/'>Zurueck</a></p></body></html>");
+      htmlEscape(message) + "</p><p><a href='/'>" + uiText("Zurück", "Back") +
+      "</a></p></body></html>");
 }
 
 
@@ -2981,7 +3099,7 @@ void handleEmergencyTest() {
   emergencyAdvanceRequested = false;
   fetchLocalFlight();
   webServer.sendHeader("Location", "/");
-  webServer.send(303, "text/plain; charset=utf-8", "Notfalltest gestartet");
+  webServer.send(303, "text/plain; charset=utf-8", uiText("Notfalltest gestartet", "Emergency test started"));
 }
 
 
@@ -2993,7 +3111,7 @@ void handleStopEmergencyTest() {
   emergencyAdvanceRequested = false;
   fetchLocalFlight();
   webServer.sendHeader("Location", "/");
-  webServer.send(303, "text/plain; charset=utf-8", "Notfalltest beendet");
+  webServer.send(303, "text/plain; charset=utf-8", uiText("Notfalltest beendet", "Emergency test stopped"));
 }
 
 
@@ -3019,7 +3137,7 @@ void handleRouteTest() {
   const bool reachable = result.error.isEmpty();
   String detail;
   if (!reachable) {
-    detail = "Fehler: " + htmlEscape(result.error);
+    detail = String(uiText("Fehler: ", "Error: ")) + htmlEscape(result.error);
   } else if (result.found()) {
     detail = "Route: <b>" + htmlEscape(result.routeCodes) + "</b>";
     if (result.routeNames.length()) {
@@ -3029,20 +3147,23 @@ void handleRouteTest() {
       detail += "<br>Airline-Code: <b>" +
                 htmlEscape(result.airlineCode) + "</b>";
   } else {
-    detail = "Dienst erreichbar, aber keine Route für dieses Callsign gefunden.";
+    detail = uiText("Dienst erreichbar, aber keine Route für dieses Callsign gefunden.",
+                    "Service reachable, but no route found for this callsign.");
   }
   webServer.send(reachable ? 200 : 502, "text/html; charset=utf-8",
-      "<!doctype html><html lang='de'><meta name='viewport' content='width=device-width'>"
+      String("<!doctype html><html lang='") + (uiEnglish ? "en" : "de") +
+      "'><meta name='viewport' content='width=device-width'>"
       "<body style='font:18px system-ui;max-width:600px;margin:40px auto;padding:16px'>"
-      "<h1>Routendienst-Test</h1><p>Direkte Abfrage ohne Cache für <b>" +
+      "<h1>" + uiText("Routendienst-Test", "Route service test") + "</h1><p>" +
+      uiText("Direkte Abfrage ohne Cache für ", "Direct query without cache for ") + "<b>" +
       htmlEscape(callsign) + "</b>.</p><p>" + detail +
-      "</p><p><a href='/'>Zurück</a></p></body></html>");
+      "</p><p><a href='/'>" + uiText("Zurück", "Back") + "</a></p></body></html>");
 }
 
 
 void handleWebDisplay() {
   webServer.sendHeader("Cache-Control", "no-store");
-  webServer.send(200, "text/html; charset=utf-8", webDisplayPage());
+  webServer.send(200, "text/html; charset=utf-8", webDisplayPage(uiEnglish));
 }
 
 
@@ -3058,7 +3179,8 @@ void handleDisplayApi() {
   }
   String json;
   json.reserve(1800);
-  json = "{\"age_seconds\":" +
+  json = "{\"language\":\"" + String(uiEnglish ? "en" : "de") +
+         "\",\"age_seconds\":" +
          (updated ? String((millis() - updated) / 1000) : "null") +
          ",\"error\":\"" + jsonEscape(error) + "\"" +
          ",\"custom_text\":\"" + jsonEscape(customPageText) + "\"" +
@@ -3142,6 +3264,7 @@ void handleStatusApi() {
                                       ? displayRadiusKm * 2.0f
                                       : displayRadiusKm;
   String json = "{\"version\":\"" + jsonEscape(APP_VERSION) +
+      "\",\"language\":\"" + String(uiEnglish ? "en" : "de") +
       "\",\"build\":\"" + jsonEscape(BUILD_TIMESTAMP) +
       "\",\"uptime_seconds\":" + String(millis() / 1000) +
       ",\"free_heap\":" + String(ESP.getFreeHeap()) +
@@ -3251,9 +3374,11 @@ void handleStatusApi() {
 
 void handleRestart() {
   webServer.send(200, "text/html; charset=utf-8",
-      "<!doctype html><html lang='de'><meta name='viewport' content='width=device-width'>"
+      String("<!doctype html><html lang='") + (uiEnglish ? "en" : "de") +
+      "'><meta name='viewport' content='width=device-width'>"
       "<body style='font:18px system-ui;max-width:600px;margin:40px auto'>"
-      "<h1>Neustart</h1><p>Der ESP wird neu gestartet.</p></body></html>");
+      "<h1>" + uiText("Neustart", "Restart") + "</h1><p>" +
+      uiText("Der ESP wird neu gestartet.", "The ESP is restarting.") + "</p></body></html>");
   manualRebootAt = millis() + 750;
 }
 
@@ -3262,13 +3387,13 @@ void handleDisplayTest() {
   if (displayTestActive || displayTestCommand == 1) displayTestCommand = 2;
   else displayTestCommand = 1;
   webServer.sendHeader("Location", "/");
-  webServer.send(303, "text/plain; charset=utf-8", "Displaytest umgeschaltet");
+  webServer.send(303, "text/plain; charset=utf-8", uiText("Displaytest umgeschaltet", "Display test toggled"));
 }
 
 
 bool otaAuthenticated() {
   if (strlen(OTA_PASSWORD) < 8) {
-    webServer.send(503, "text/plain; charset=utf-8", "OTA ist nicht konfiguriert.");
+    webServer.send(503, "text/plain; charset=utf-8", uiText("OTA ist nicht konfiguriert.", "OTA is not configured."));
     return false;
   }
   if (!webServer.authenticate("admin", OTA_PASSWORD)) {
@@ -3300,6 +3425,7 @@ function pollVersion(){let tries=0;result.textContent+=' Warte auf Neustart…';
 </script><p><a href="/">Zurück</a></p></body></html>)HTML";
   html.replace("%VERSION%", APP_VERSION);
   html.replace("%VERSION%", APP_VERSION);
+  translateWebPageToEnglish(html);
   webServer.send(200, "text/html; charset=utf-8", html);
 }
 
@@ -3656,6 +3782,7 @@ void setup() {
   brightnessIndex = manualBrightnessIndex;
   automaticBrightnessEnabled = preferences.getBool("autoLight", true);
   displayEnabled = preferences.getBool("displayOn", true);
+  uiEnglish = preferences.getBool("uiEnglish", false);
   environmentIdleDisplayEnabled = preferences.getBool("envIdle", true);
   mqttWeatherEnabled = preferences.getBool("mqttOn", true);
   mqttHost = preferences.getString("mqttHost", DEFAULT_MQTT_HOST);
@@ -3749,11 +3876,11 @@ void setup() {
   findLightSensor();
   findEnvironmentSensor();
 
-  drawStatus("FLIGHTWALL", "VERBINDET...");
+  drawStatus("FLIGHTWALL", uiText("VERBINDET...", "CONNECTING..."));
   if (xTaskCreatePinnedToCore(
           networkTask, "network", 12288, nullptr, 1,
           &networkTaskHandle, 0) != pdPASS) {
-    drawStatus("NETZWERK", "TASK FEHLER");
+    drawStatus(uiText("NETZWERK", "NETWORK"), uiText("TASK FEHLER", "TASK ERROR"));
     while (true) delay(1000);
   }
 }

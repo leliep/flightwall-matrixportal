@@ -2,4 +2,4 @@
 
 #include <Arduino.h>
 
-const __FlashStringHelper* webDisplayPage();
+String webDisplayPage(bool english);

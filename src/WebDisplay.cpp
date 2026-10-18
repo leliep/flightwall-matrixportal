@@ -2,7 +2,7 @@
 
 namespace {
 const char page[] PROGMEM = R"HTML(<!doctype html>
-<html lang="de"><head><meta charset="utf-8">
+<html lang="%LANG%"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#071018"><title>FlightWall</title>
 <style>
@@ -30,4 +30,30 @@ setInterval(update,2000);update();
 </script></body></html>)HTML";
 }  // namespace
 
-const __FlashStringHelper* webDisplayPage() { return FPSTR(page); }
+String webDisplayPage(bool english) {
+  String html = FPSTR(page);
+  html.replace("%LANG%", english ? "en" : "de");
+  if (!english) return html;
+  struct Translation { const char *de; const char *en; };
+  static const Translation translations[] = {
+    {"verbinde…", "connecting…"}, {"Warte auf Flugzeugdaten…", "Waiting for aircraft data…"},
+    {"Einstellungen &amp; Diagnose", "Settings &amp; diagnostics"},
+    {"Richtung unbekannt", "Direction unknown"}, {"rechte Schulter", "right rear"},
+    {"linke Schulter", "left rear"}, {"vorne", "front"}, {"hinten", "rear"},
+    {"rechts", "right"}, {"links", "left"},
+    {"Im Moment ist kein Flugzeug im Anzeigeradius.", "There is currently no aircraft within the display radius."},
+    {"Route unbekannt", "Route unknown"}, {"Transponder-Notfall", "Transponder emergency"},
+    {"Aktuelles Flugzeug", "Current aircraft"}, {"Airline unbekannt", "Airline unknown"},
+    {"Entfernung", "Distance"}, {"Höhe", "Altitude"}, {"Geschwindigkeit", "Speed"},
+    {"Blickrichtung", "Viewing direction"}, {" relativ ", " relative "},
+    {"Flugverlauf", "Flight progress"}, {"Entfernt sich", "Departing"},
+    {"Nähert sich", "Approaching"}, {"Aktualisiert vor", "Updated"},
+    {"Verbindung unterbrochen", "Connection lost"}, {"unbekannt", "unknown"}
+  };
+  for (const auto &translation : translations) html.replace(translation.de, translation.en);
+  // Keep the language-neutral API values for compatibility, but render their
+  // English equivalents in the browser.
+  html.replace("esc(f.vertical_motion||'unknown')",
+               "esc(f.vertical_motion==='steigt'?'climbing':f.vertical_motion==='sinkt'?'descending':f.vertical_motion==='haelt'?'level':'unknown')");
+  return html;
+}
