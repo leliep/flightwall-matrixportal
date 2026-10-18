@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.4.0-ui-preview.2 – 2026-10-18
+
+- verbliebene deutsche Begriffe in der englischen Konfigurations- und
+  Statusseite übersetzt
+- dynamische Statuswerte wie verbunden, ja/nein, Höhenfilter und
+  Helligkeitsautomatik sprachabhängig dargestellt
+- Übersetzungsreihenfolge für zusammengesetzte Hilfetexte korrigiert
+
 ## 3.4.0-ui-preview – 2026-10-18
 
 - dauerhaft gespeicherte Sprachwahl Deutsch/Englisch in der Konfiguration

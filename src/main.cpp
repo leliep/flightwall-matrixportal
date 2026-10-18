@@ -33,8 +33,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 2;
-constexpr char APP_VERSION[] = "3.4.0-ui-preview";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-18 22:14:23 CEST";
+constexpr char APP_VERSION[] = "3.4.0-ui-preview.2";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-18 22:32:00 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -2465,6 +2465,9 @@ void translateWebPageToEnglish(String &html) {
   static const Translation translations[] = {
     {"lang='de'", "lang='en'"},
     {"lang=\"de\"", "lang=\"en\""},
+    {"ADS-B-Adresse Quelle", "ADS-B address source"},
+    {"Nur die ausgewählte Quelle wird abgefragt. Quelle 2 darf unkonfiguriert bleiben.", "Only the selected source is queried. Source 2 may remain unconfigured."},
+    {"Regen wird für die Anzeige von cm in mm umgerechnet. Ein leeres Passwortfeld behält das gespeicherte Passwort bei.", "Rain is converted from cm to mm for display. An empty password field keeps the saved password."},
     {"Sprache / Language", "Language / Sprache"},
     {"Deutsch", "German"},
     {"Display eingeschaltet", "Display enabled"},
@@ -2481,8 +2484,6 @@ void translateWebPageToEnglish(String &html) {
     {"Etwa 23 Sekunden: Matrix-Prüfbilder und alle Typensymbole mit Bedeutung.", "About 23 seconds: matrix test patterns and all type symbols with their meaning."},
     {"Flugzeugdaten", "Aircraft data"}, {"Aktive ADS-B-Quelle", "Active ADS-B source"},
     {"Quelle 1", "Source 1"}, {"Quelle 2", "Source 2"},
-    {"ADS-B-Adresse Quelle", "ADS-B address source"},
-    {"Nur die ausgewählte Quelle wird abgefragt. Quelle 2 darf unkonfiguriert bleiben.", "Only the selected source is queried. Source 2 may remain unconfigured."},
     {"Breitengrad", "Latitude"}, {"Längengrad", "Longitude"}, {"Blickrichtung (Grad)", "Viewing direction (degrees)"},
     {"Sport- und Kleinflugzeuge ausblenden", "Hide sport and light aircraft"},
     {"Flugzeuge oberhalb der Maximalhöhe ausblenden", "Hide aircraft above maximum altitude"},
@@ -2496,34 +2497,45 @@ void translateWebPageToEnglish(String &html) {
     {"Benutzer", "User"}, {"Passwort", "Password"}, {"unverändert lassen", "leave unchanged"},
     {"Windrichtung", "Wind direction"}, {"Windgeschwindigkeit", "Wind speed"}, {"Windböen", "Wind gusts"},
     {"Regen 24 h", "Rain 24 h"},
-    {"Regen wird für die Anzeige von cm in mm umgerechnet. Ein leeres Passwortfeld behält das gespeicherte Passwort bei.", "Rain is converted from cm to mm for display. An empty password field keeps the saved password."},
     {"Anzeigeseiten", "Display pages"}, {"Sanfte Übergänge", "Smooth transitions"},
     {"Freitext (maximal 128 Zeichen)", "Custom text (maximum 128 characters)"},
     {"Freitext-Scrollgeschwindigkeit", "Custom text scroll speed"}, {">schnell<", ">fast<"},
     {">mittel<", ">medium<"}, {">langsam<", ">slow<"},
     {"Ein leerer Freitext überspringt die Seite automatisch.", "An empty custom text automatically skips the page."},
     {"Dauer (Sekunden)", "Duration (seconds)"}, {"Reihenfolge:", "Order:"}, {"Position ", "Position "},
-    {"Helligkeit", "Brightness"}, {"Manuelle Stufe", "Manual level"}, {"Schwelle dunkel", "Dark threshold"},
+    {"Helligkeit", "Brightness"}, {"BH1750-Automatik", "BH1750 automatic mode"},
+    {"Manuelle Stufe", "Manual level"}, {"Schwelle dunkel", "Dark threshold"},
     {"Schwelle hell", "Bright threshold"}, {"Einstellungen speichern", "Save settings"},
     {"wird automatisch aktualisiert", "updates automatically"}, {"System eingeschränkt", "System degraded"},
     {"MQTT aus", "MQTT off"}, {"MQTT getrennt", "MQTT disconnected"}, {"Sensoren OK", "Sensors OK"},
     {"Sensor prüfen", "Check sensor"}, {"Netzwerk", "Network"}, {"Adresse", "Address"},
     {"WLAN-Neuverbindungen", "Wi-Fi reconnects"}, {"Webserver-Starts", "Web server starts"},
     {"Letzte WLAN-Unterbrechung", "Last Wi-Fi interruption"}, {"Aktuelles Flugzeug", "Current aircraft"},
-    {"<span>Flug</span>", "<span>Flight</span>"}, {"Notfallauswahl", "Emergency selection"}, {"Entfernung / Höhe", "Distance / altitude"},
+    {"<span>Flug</span>", "<span>Flight</span>"}, {"Notfallauswahl", "Emergency selection"},
+    {"Airline / Typ", "Airline / type"}, {"Entfernung / Höhe", "Distance / altitude"},
+    {"Radius normal / aktuell", "Normal / current radius"},
+    {"ADS-B und Route", "ADS-B and route"}, {"ADS-B-Fehler", "ADS-B error"},
+    {"Routenfehler", "Route error"}, {"Routencache wartet auf Flash", "Route cache pending flash write"},
+    {"Empfangen / Kandidaten", "Received / candidates"}, {"Letzter Erfolg", "Last success"},
     {"Vertikalbewegung", "Vertical motion"}, {"Routenstatus", "Route status"}, {"Letzter ADS-B-Erfolg", "Last ADS-B success"},
     {"Konfiguration", "Configuration"}, {"Standort / Blickrichtung", "Location / viewing direction"},
     {"Höhenfilter", "Altitude filter"}, {"Kleinflugzeugfilter", "Light aircraft filter"},
     {"Wetteranzeige", "Weather display"}, {"Übersetzungstabellen", "Translation tables"},
     {"Unbekannte Flughäfen", "Unknown airports"}, {"Unbekannte Airlines", "Unknown airlines"},
-    {"Diagnose", "Diagnostics"}, {"Letzter ADS-B-Versuch", "Last ADS-B attempt"},
+    {"Technische Diagnose", "Technical diagnostics"}, {"Diagnose", "Diagnostics"},
+    {"ADS-B-Quelle", "ADS-B source"}, {"Letzter ADS-B-Versuch", "Last ADS-B attempt"},
+    {"Letzter Versuch", "Last attempt"}, {"Anzeige aktualisiert", "Display updated"},
+    {"ADS-B-Zeitstempel", "ADS-B timestamp"}, {"Erstellt", "Built"},
+    {"Laufzeit", "Uptime"}, {"Freier RAM", "Free RAM"},
+    {"ESP32-S3-Chiptemperatur", "ESP32-S3 chip temperature"},
     {"Letzte Display-Aktualisierung", "Last display update"}, {"Empfangene Flugzeuge", "Received aircraft"},
     {"Geeignete Flugzeuge", "Eligible aircraft"}, {"Wetter und Sensoren", "Weather and sensors"},
     {"Umgebungstemperatur", "Ambient temperature"}, {"Relative Feuchte", "Relative humidity"},
     {"Luftdruck auf Meereshöhe", "Sea-level pressure"}, {"Stationsdruck (BME280 roh)", "Station pressure (raw BME280)"},
     {"Wetterdaten-Ruheanzeige", "Idle weather display"}, {"Letzte MQTT-Nachricht", "Last MQTT message"},
-    {"MQTT-Fehler", "MQTT error"}, {"Wind / Richtung", "Wind / direction"},
-    {"Blickgeometrie", "Viewing geometry"}, {"Lokale Zeit", "Local time"}, {"Nachtruhe", "Night mode"},
+    {"MQTT-Server", "MQTT server"}, {"MQTT-Fehler", "MQTT error"}, {"Wind / Richtung", "Wind / direction"},
+    {"Matrix-Farbtiefe", "Matrix color depth"}, {"Blickgeometrie", "Viewing geometry"},
+    {"Lokale Zeit", "Local time"}, {"Nachtruhe", "Night mode"},
     {"Task- und Resetdiagnose", "Task and reset diagnostics"}, {"Netz Core", "Network core"},
     {"Stackreserve", "Stack reserve"}, {"Letzter Reset", "Last reset"},
     {"ESP wirklich neu starten?", "Really restart the ESP?"}, {"ESP neu starten", "Restart ESP"},
@@ -2543,10 +2555,15 @@ void translateWebPageToEnglish(String &html) {
     {"Update abgeschlossen. Version vorher:", "Update complete. Previous version:"}, {", danach:", ", new version:"},
     {"Zurück", "Back"},
     {"aktualisiert ", "updated "}, {"Aktualisierung fehlgeschlagen", "Update failed"},
-    {">verbunden<", ">connected<"}, {">nicht gefunden<", ">not found<"}, {">getrennt<", ">disconnected<"},
+    {">verbunden /", ">connected /"}, {">verbunden<", ">connected<"},
+    {">nicht gefunden<", ">not found<"}, {">getrennt<", ">disconnected<"},
     {">keiner<", ">none<"}, {">keine<", ">none<"}, {">aktiv<", ">enabled<"}, {">inaktiv<", ">inactive<"},
-    {">Automatik<", ">automatic<"}, {">manuell<", ">manual<"}, {">aus<", ">off<"},
-    {">warte auf NTP<", ">waiting for NTP<"}, {" / aktiv", " / enabled"}, {" / inaktiv", " / inactive"}
+    {">ja<", ">yes<"}, {">nein<", ">no<"}, {">bis ", ">up to "},
+    {"% / Automatik", "% / automatic"}, {">Automatik<", ">automatic<"},
+    {">manuell<", ">manual<"}, {">aus<", ">off<"}, {">warte auf NTP<", ">waiting for NTP<"},
+    {" m NHN / weit ab ", " m ASL / far beyond "}, {"Netz Core 0 / Display Core 1", "Network core 0 / display core 1"},
+    {" / aktiv", " / enabled"}, {" / inaktiv", " / inactive"},
+    {"toLocaleTimeString('de-DE')", "toLocaleTimeString('en-GB')"}
   };
   for (const auto &translation : translations) html.replace(translation.de, translation.en);
 }
