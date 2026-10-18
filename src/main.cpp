@@ -2510,7 +2510,7 @@ void translateWebPageToEnglish(String &html) {
     {"Sensor prüfen", "Check sensor"}, {"Netzwerk", "Network"}, {"Adresse", "Address"},
     {"WLAN-Neuverbindungen", "Wi-Fi reconnects"}, {"Webserver-Starts", "Web server starts"},
     {"Letzte WLAN-Unterbrechung", "Last Wi-Fi interruption"}, {"Aktuelles Flugzeug", "Current aircraft"},
-    {"Flug", "Flight"}, {"Notfallauswahl", "Emergency selection"}, {"Entfernung / Höhe", "Distance / altitude"},
+    {"<span>Flug</span>", "<span>Flight</span>"}, {"Notfallauswahl", "Emergency selection"}, {"Entfernung / Höhe", "Distance / altitude"},
     {"Vertikalbewegung", "Vertical motion"}, {"Routenstatus", "Route status"}, {"Letzter ADS-B-Erfolg", "Last ADS-B success"},
     {"Konfiguration", "Configuration"}, {"Standort / Blickrichtung", "Location / viewing direction"},
     {"Höhenfilter", "Altitude filter"}, {"Kleinflugzeugfilter", "Light aircraft filter"},
@@ -2543,9 +2543,10 @@ void translateWebPageToEnglish(String &html) {
     {"Update abgeschlossen. Version vorher:", "Update complete. Previous version:"}, {", danach:", ", new version:"},
     {"Zurück", "Back"},
     {"aktualisiert ", "updated "}, {"Aktualisierung fehlgeschlagen", "Update failed"},
-    {"verbunden", "connected"}, {"nicht gefunden", "not found"}, {"getrennt", "disconnected"},
-    {"keiner", "none"}, {"keine", "none"}, {"aktiv", "enabled"}, {"inaktiv", "inactive"},
-    {"Automatik", "automatic"}, {"manuell", "manual"}, {"aus", "off"}, {"warte auf NTP", "waiting for NTP"}
+    {">verbunden<", ">connected<"}, {">nicht gefunden<", ">not found<"}, {">getrennt<", ">disconnected<"},
+    {">keiner<", ">none<"}, {">keine<", ">none<"}, {">aktiv<", ">enabled<"}, {">inaktiv<", ">inactive<"},
+    {">Automatik<", ">automatic<"}, {">manuell<", ">manual<"}, {">aus<", ">off<"},
+    {">warte auf NTP<", ">waiting for NTP<"}, {" / aktiv", " / enabled"}, {" / inaktiv", " / inactive"}
   };
   for (const auto &translation : translations) html.replace(translation.de, translation.en);
 }
