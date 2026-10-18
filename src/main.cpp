@@ -34,7 +34,7 @@
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 2;
 constexpr char APP_VERSION[] = "3.4.0-ui-preview.2";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-18 22:32:00 CEST";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-18 22:30:30 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
