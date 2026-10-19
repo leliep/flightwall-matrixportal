@@ -37,7 +37,8 @@ void detectSpecialTypes(Aircraft& aircraft) {
   text.toUpperCase();
 
   const bool germanAirforce = aircraft.flight.startsWith("GAF") ||
-                           aircraft.flight.startsWith("VAD");
+                           aircraft.flight.startsWith("VAD") ||
+                           aircraft.flight.startsWith("SHO");
   if (germanAirforce)
     aircraft.specialTypes.push_back("German Airforce");
   const bool federalPolice = aircraft.flight.startsWith("BPO") ||

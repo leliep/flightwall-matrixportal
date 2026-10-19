@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.4.0-3bit-exp.8 – 2026-10-19
+
+- Militärisches Callsign-Präfix `SHO` (beispielsweise `SHOCK11`) als German
+  Airforce aufgenommen; die Kennzeichnung und das Military-Special-Icon
+  funktionieren damit unabhängig von gelieferten ADS-B-Operator-Daten
+
 ## 3.4.0-3bit-exp.7 – 2026-10-19
 
 - Militärische Callsigns mit Präfix `VAD` (zum Beispiel `Vader21`) werden wie
