@@ -183,6 +183,7 @@ const AirlineName names[] = {
   {"RWL", "RWL German Flight Academy"},
   {"RXI", "Riyadh Air"},
   {"RYR", "Ryanair"},
+  {"SAB", "Schmiedel Air Service Tchad"},
   {"SAR", "Sprintair"},
   {"SAS", "Scandinavian Airlines System"},
   {"SDR", "Sundair"},

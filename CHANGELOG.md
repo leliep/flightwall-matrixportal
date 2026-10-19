@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.4.0-ui-preview.3 – 2026-10-19
+
+- Böenwert der Matrix-Wetterseite in der englischen Oberfläche mit `G` für
+  *gusts* statt mit dem deutschen `B` gekennzeichnet
+- Airline-Lookup für SAB (Schmiedel Air Service Tchad) ergänzt
+
 ## 3.4.0-ui-preview.2 – 2026-10-18
 
 - verbliebene deutsche Begriffe in der englischen Konfigurations- und

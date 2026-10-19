@@ -368,8 +368,8 @@ die Anzeige in Millimeter umgerechnet.
 
 Wenn kein Flugzeug angezeigt wird, erscheinen sämtliche Klima- und Wetterwerte
 ruhig auf einer gemeinsamen Kompaktseite. Die obere Zeile zeigt Temperatur,
-Feuchte und Luftdruck, die untere Windrichtung, Windgeschwindigkeit, Böen (`B`)
-und Regenmenge (`R`). Wind und Böen werden platzsparend als ganze km/h
+Feuchte und Luftdruck, die untere Windrichtung, Windgeschwindigkeit, Böen
+(`B` auf Deutsch, `G` für *gusts* auf Englisch) und Regenmenge (`R`). Wind und Böen werden platzsparend als ganze km/h
 dargestellt. Feuchte und Böenwert teilen sich eine gemeinsame Spaltenmitte;
 Luftdruck und Regenmenge sind am rechten Rand bündig ausgerichtet. Eine
 numerische Windrichtung wird automatisch in eine von 16 deutschen

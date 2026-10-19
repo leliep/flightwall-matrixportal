@@ -33,8 +33,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 2;
-constexpr char APP_VERSION[] = "3.4.0-ui-preview.2";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-18 22:30:30 CEST";
+constexpr char APP_VERSION[] = "3.4.0-ui-preview.3";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-19 10:34:29 CEST";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -1465,7 +1465,7 @@ void drawCompactClimateDisplay(bool bmeAvailable, bool mqttAvailable) {
   const String gustText = isfinite(gust) ? String(gust, 0) : "--";
   const int16_t gustX = middleColumnCenterX -
       static_cast<int16_t>(gustText.length() * 3);
-  drawLine(gustX - 12, 18, "B", orange);
+  drawLine(gustX - 12, 18, uiText("B", "G"), orange);
   drawLine(gustX, 18, gustText, orange);
   String rainText = "--mm";
   if (isfinite(rain))
