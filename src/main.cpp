@@ -33,7 +33,7 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.4.0-3bit-exp.1";
+constexpr char APP_VERSION[] = "3.4.0-3bit-exp.2";
 constexpr char BUILD_TIMESTAMP[] = "2026-10-19 3-bit experiment";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
@@ -3955,19 +3955,17 @@ void setup() {
 
 void serviceMatrixDiagnostics(uint32_t now) {
   static uint32_t lastSample = 0;
-  static uint32_t lastFrameCount = 0;
   if (lastSample == 0) {
     lastSample = now;
-    lastFrameCount = matrix.getFrameCount();
+    matrix.getFrameCount();
     return;
   }
   const uint32_t elapsed = now - lastSample;
   if (elapsed < 1000) return;
   const uint32_t frameCount = matrix.getFrameCount();
   matrixRefreshHz = static_cast<uint32_t>(
-      (static_cast<uint64_t>(frameCount - lastFrameCount) * 1000ULL) /
+      (static_cast<uint64_t>(frameCount) * 1000ULL) /
       elapsed);
-  lastFrameCount = frameCount;
   lastSample = now;
 }
 

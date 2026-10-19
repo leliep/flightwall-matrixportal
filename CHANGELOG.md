@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.4.0-3bit-exp.2 – 2026-10-19
+
+- Berechnung der von Protomatter seit dem letzten Messintervall gemeldeten
+  Matrix-Refresh-Rate korrigiert
+
 ## 3.4.0-3bit-exp.1 – 2026-10-19
 
 - experimentelle Matrix-Farbtiefe von 2 auf 3 Bit erhöht
