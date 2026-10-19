@@ -33,7 +33,7 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.4.0-3bit-exp.2";
+constexpr char APP_VERSION[] = "3.4.0-3bit-exp.3";
 constexpr char BUILD_TIMESTAMP[] = "2026-10-19 3-bit experiment";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
@@ -668,43 +668,23 @@ void drawCompactSpecialIcon(CompactIconKind kind, int16_t x, int16_t y,
 }
 
 
-void drawSpecialIcon(int16_t x = 96) {
+void drawCurrentSpecialIcon(int16_t x, int16_t y = 0) {
   if (!flight.specialType.length()) return;
-  String category = flight.specialType;
-  category.toUpperCase();
-  const uint16_t color = aircraftColor();
-  if (category.indexOf("HELICOPTER") >= 0 || category.indexOf("HUBSCHRAUBER") >= 0) {
-    matrix.drawFastHLine(x, 1, 7, color);
-    matrix.drawFastVLine(x + 3, 0, 7, color);
-    matrix.drawFastHLine(x + 1, 5, 5, color);
-  } else if (category.indexOf("A380") >= 0) {
-    matrix.drawPixel(x + 3, 0, color);
-    matrix.drawFastVLine(x + 3, 1, 6, color);
-    matrix.drawFastHLine(x, 3, 7, color);
-    matrix.drawFastHLine(x + 2, 6, 3, color);
-  } else if (category.indexOf("MILIT") >= 0 ||
-             category.indexOf("AIRFORCE") >= 0) {
-    matrix.drawPixel(x + 3, 0, color);
-    matrix.drawFastHLine(x + 2, 1, 3, color);
-    matrix.drawFastHLine(x + 1, 2, 5, color);
-    matrix.drawFastHLine(x + 2, 3, 3, color);
-    matrix.drawPixel(x + 3, 4, color);
-  } else {
-    matrix.drawFastHLine(x + 1, 0, 5, color);
-    matrix.drawFastVLine(x, 1, 5, color);
-    matrix.drawFastVLine(x + 6, 1, 5, color);
-    matrix.drawFastHLine(x + 1, 6, 5, color);
-    matrix.drawPixel(x + 3, 2, color);
-    matrix.drawPixel(x + 3, 4, color);
-  }
+  const CompactIconKind kind = compactIconKind(flight.specialType);
+  drawCompactSpecialIcon(kind, x, y, compactIconColor(kind));
 }
 
 
 void drawHeader() {
   String callsign = clipped(flight.flight.length() ? flight.flight : "UNBEKANNT", 8);
-  drawLine(0, 0, callsign, aircraftColor(), callsign.length() <= 8 ? 2 : 1);
-  drawSpecialIcon();
-  drawLine(104, 0, clipped(flight.type, 4), white);
+  const String aircraftType = clipped(flight.type, 4);
+  const int16_t typeX = MATRIX_WIDTH - aircraftType.length() * 6;
+  const bool hasSpecial = flight.specialType.length();
+  const int16_t iconX = typeX - 16;
+  drawLine(0, 0, callsign, aircraftColor(),
+           callsign.length() <= (hasSpecial ? 7 : 8) ? 2 : 1);
+  if (hasSpecial) drawCurrentSpecialIcon(iconX);
+  drawLine(typeX, 0, aircraftType, white);
 }
 
 
@@ -1287,6 +1267,7 @@ bool flightHasMultiHopRoute() {
 
 void drawAirportNamesPage() {
   drawLine(0, 0, uiText("Flughaefen", "Airports"), cyan);
+  drawCurrentSpecialIcon(MATRIX_WIDTH - 14);
   const uint32_t elapsed = millis() - currentPageStarted;
   if (flightHasMultiHopRoute()) {
     String codes = displayAscii(flight.routeCodes);
@@ -1365,6 +1346,7 @@ void drawCustomTextPage() {
   const int32_t finalX = -static_cast<int32_t>(textWidth);
   if (x < finalX) x = finalX;
   drawLine(static_cast<int16_t>(x), 13, customPageText, cyan);
+  drawCurrentSpecialIcon(MATRIX_WIDTH - 14);
 }
 
 
@@ -1387,6 +1369,7 @@ void drawEmergencyPage() {
   matrix.fillScreen(0);
   const String identity = flight.flight.length() ? flight.flight : flight.hex;
   drawLine(0, 0, clipped(identity, 13), white);
+  drawCurrentSpecialIcon(80);
   drawLine(98, 0, flight.squawk, red);
   const String meaning = emergencyMeaning(flight.squawk);
   int16_t meaningX = (MATRIX_WIDTH - meaning.length() * 6) / 2;

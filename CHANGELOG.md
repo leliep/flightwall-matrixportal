@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.4.0-3bit-exp.3 – 2026-10-19
+
+- einheitliche 14×7-Special-Type-Icons der Kompaktseiten auf Haupt-, Routen-,
+  CPA-, Flughafen-, Freitext- und Notfallseite übernommen
+- Kopfzeilenbreite für Special-Icon, Callsign und Flugzeugtyp dynamisch
+  aufgeteilt
+
 ## 3.4.0-3bit-exp.2 – 2026-10-19
 
 - Berechnung der von Protomatter seit dem letzten Messintervall gemeldeten
