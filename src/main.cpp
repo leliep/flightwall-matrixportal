@@ -33,7 +33,7 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.4.0-3bit-exp.6";
+constexpr char APP_VERSION[] = "3.4.0-3bit-exp.7";
 constexpr char BUILD_TIMESTAMP[] = "2026-10-19 3-bit experiment";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
@@ -2107,6 +2107,7 @@ const String &activeAdsbUrl() {
 
 String airlineCode(const String &callsign) {
   if (callsign.startsWith("GAF")) return "GAF";
+  if (callsign.startsWith("VAD")) return "VAD";
   if (callsign.startsWith("BPO")) return "BPO";
   if (callsign.length() < 4) return "";
   if (!isAlpha(callsign[0]) || !isAlpha(callsign[1]) ||
@@ -2264,7 +2265,8 @@ bool fetchLocalFlight() {
     providedAirlineComparison.toUpperCase();
     if (selected.flight.startsWith("BPO")) {
       next.airline = "Bundespolizei";
-    } else if (selected.flight.startsWith("GAF")) {
+    } else if (selected.flight.startsWith("GAF") ||
+               selected.flight.startsWith("VAD")) {
       next.airline = "German Airforce";
     } else {
       next.airline = providedAirline.length() &&

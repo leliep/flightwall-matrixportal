@@ -54,6 +54,7 @@ const AirportName names[] = {
   {"BOJ", "Burgas"},
   {"BOM", "Mumbai"},
   {"BOS", "Boston"},
+  {"BQN", "Aguadilla"},
   {"BRE", "Bremen"},
   {"BRI", "Bari"},
   {"BRQ", "Brünn"},

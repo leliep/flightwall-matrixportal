@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.4.0-3bit-exp.7 – 2026-10-19
+
+- Militärische Callsigns mit Präfix `VAD` (zum Beispiel `Vader21`) werden wie
+  `GAF…` eindeutig als German Airforce klassifiziert und erhalten das
+  Military-Special-Icon
+- Fehlende Codes aus dem Status übernommen: Flughafen `BQN` (Aguadilla) sowie
+  Operator `VJH` (VistaJet Germany)
+
 ## 3.4.0-3bit-exp.6 – 2026-10-19
 
 - Blickrichtungszusatz `weit` von einer festen Bodenentfernung auf den
