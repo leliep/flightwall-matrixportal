@@ -32,9 +32,9 @@
 #endif
 
 constexpr uint16_t MATRIX_WIDTH = 128;
-constexpr uint8_t BIT_DEPTH = 2;
-constexpr char APP_VERSION[] = "3.4.0-ui-preview.3";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-19 10:34:29 CEST";
+constexpr uint8_t BIT_DEPTH = 3;
+constexpr char APP_VERSION[] = "3.4.0-3bit-exp.1";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-19 3-bit experiment";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -96,10 +96,9 @@ constexpr int DEFAULT_MAXIMUM_ALTITUDE_FT = 15000;
 constexpr char LOCAL_TIME_ZONE[] = "CET-1CEST,M3.5.0,M10.5.0/3";
 constexpr char NTP_SERVER_PRIMARY[] = "pool.ntp.org";
 constexpr char NTP_SERVER_SECONDARY[] = "time.cloudflare.com";
-// At 2-bit color depth, three non-zero PWM levels are available. The reduced
-// color depth gives the Protomatter ISR more timing margin and is intended to
-// suppress occasional stray pixels on the panel.
-constexpr uint8_t BRIGHTNESS_LEVELS[] = {33, 66, 100};
+// Seven native non-zero PWM levels are available at 3-bit color depth.
+// Keeping the values aligned to those native steps avoids temporal dithering.
+constexpr uint8_t BRIGHTNESS_LEVELS[] = {14, 29, 43, 57, 71, 86, 100};
 constexpr uint8_t BRIGHTNESS_LEVEL_COUNT =
     sizeof(BRIGHTNESS_LEVELS) / sizeof(BRIGHTNESS_LEVELS[0]);
 
@@ -183,6 +182,9 @@ volatile bool otaInProgress = false;
 volatile bool otaPreparing = false;
 volatile bool routeCacheWritePreparing = false;
 volatile bool routeCacheWriteInProgress = false;
+volatile bool settingsWritePreparing = false;
+volatile bool settingsWriteInProgress = false;
+volatile bool buttonSettingsWritePending = false;
 volatile uint8_t displayTestCommand = 0;
 volatile bool displayTestActive = false;
 uint32_t displayTestStarted = 0;
@@ -294,6 +296,10 @@ enum class TransitionPhase { Normal, FadeOut, FadeIn };
 TransitionPhase transitionPhase = TransitionPhase::Normal;
 bool emergencyPagePending = false;
 String displayedEmergencyKey;
+uint32_t matrixRefreshHz = 0;
+uint32_t matrixShowCount = 0;
+uint32_t matrixShowMaxUs = 0;
+uint32_t matrixShowLastUs = 0;
 
 constexpr uint8_t BUTTON_EVENT_UP = 0x01;
 constexpr uint8_t BUTTON_EVENT_DOWN = 0x02;
@@ -385,10 +391,19 @@ void updateColors() {
   orange = matrix.color565(scaledChannel(255), scaledChannel(170), 0);
   cyan = matrix.color565(0, scaledChannel(255), scaledChannel(255));
   violet = matrix.color565(scaledChannel(180), 0, scaledChannel(255));
-  // Fixed first reliably visible 2-bit level, independent of automatic
+  // Fixed first reliably visible 3-bit level, independent of automatic
   // brightness. Lower values are rounded down to black by Protomatter.
-  idlePixel = matrix.color565(85, 85, 85);
-  idleErrorPixel = matrix.color565(85, 0, 0);
+  idlePixel = matrix.color565(36, 36, 36);
+  idleErrorPixel = matrix.color565(36, 0, 0);
+}
+
+
+void showMatrix() {
+  const uint32_t started = micros();
+  matrix.show();
+  matrixShowLastUs = micros() - started;
+  matrixShowMaxUs = max(matrixShowMaxUs, matrixShowLastUs);
+  ++matrixShowCount;
 }
 
 
@@ -1357,7 +1372,7 @@ void drawStatus(const String &line1, const String &line2) {
   matrix.fillScreen(0);
   drawLine(0, 8, clipped(line1, 21), yellow);
   drawLine(0, 18, clipped(line2, 21), blue);
-  matrix.show();
+  showMatrix();
 }
 
 
@@ -1489,7 +1504,7 @@ void drawIdleDisplay() {
   if ((millis() / IDLE_BLINK_HALF_PERIOD_MS) % 2 == 0) {
     matrix.drawPixel(0, 31, lastError.length() ? idleErrorPixel : idlePixel);
   }
-  matrix.show();
+  showMatrix();
 }
 
 
@@ -1536,9 +1551,9 @@ void clearMatrixBuffers() {
   // Protomatter uses two frame buffers. Clear and swap twice so neither one
   // can expose pixels left by the previously active page.
   matrix.fillScreen(0);
-  matrix.show();
+  showMatrix();
   matrix.fillScreen(0);
-  matrix.show();
+  showMatrix();
 }
 
 
@@ -1631,7 +1646,7 @@ bool serviceDisplayTest() {
     drawCompactSpecialIcon(kind, 0, 17, compactIconColor(kind));
     drawLine(20, 17, TEST_LABELS[iconIndex], compactIconColor(kind));
   }
-  matrix.show();
+  showMatrix();
   return true;
 }
 
@@ -1668,20 +1683,21 @@ void drawDisplay() {
   }
   if (otaInProgress) {
     matrix.fillScreen(0);
-    matrix.show();
+    showMatrix();
     return;
   }
-  if (routeCacheWritePreparing || routeCacheWriteInProgress) {
+  if (routeCacheWritePreparing || routeCacheWriteInProgress ||
+      settingsWritePreparing || settingsWriteInProgress) {
     resetPageTransition();
     matrix.fillScreen(0);
-    matrix.show();
+    showMatrix();
     return;
   }
   if (serviceDisplayTest()) return;
   if (quietHoursAreActive()) {
     resetPageTransition();
     matrix.fillScreen(0);
-    matrix.show();
+    showMatrix();
     return;
   }
   if (static_cast<int32_t>(brightnessMessageUntil - millis()) > 0) {
@@ -1692,7 +1708,7 @@ void drawDisplay() {
   if (!displayEnabled) {
     resetPageTransition();
     matrix.fillScreen(0);
-    matrix.show();
+    showMatrix();
     return;
   }
   if (!aircraftIsInsideDisplayRadius()) {
@@ -1712,7 +1728,7 @@ void drawDisplay() {
     if (now - currentPageStarted < EMERGENCY_PAGE_DURATION_MS) {
       matrix.fillScreen(0);
       drawEmergencyPage();
-      matrix.show();
+      showMatrix();
       return;
     }
     emergencyPagePending = false;
@@ -1730,7 +1746,7 @@ void drawDisplay() {
       drawEmergencyPage();
       if (flight.emergencyCount > 1) emergencyAdvanceRequested = true;
     }
-    matrix.show();
+    showMatrix();
     return;
   }
 
@@ -1776,7 +1792,7 @@ void drawDisplay() {
   activatePage(pageToDraw, now);
   matrix.fillScreen(0);
   drawConfiguredPage(pageToDraw);
-  matrix.show();
+  showMatrix();
 }
 
 
@@ -1991,10 +2007,7 @@ void handleBrightnessButtons() {
       digitalRead(BUTTON_DOWN_PIN) == LOW) {
     lastButtonEvent = now;
     automaticBrightnessEnabled = true;
-    if (xSemaphoreTake(preferencesMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-      preferences.putBool("autoLight", true);
-      xSemaphoreGive(preferencesMutex);
-    }
+    buttonSettingsWritePending = true;
     if (lightSensorAvailable && !isnan(filteredLux)) {
       applyBrightnessIndex(automaticBrightnessIndex(filteredLux), false);
       brightnessMessageTitle = uiText("AUTO LICHT", "AUTO LIGHT");
@@ -2013,10 +2026,7 @@ void handleBrightnessButtons() {
   if (automaticBrightnessEnabled) {
     automaticBrightnessEnabled = false;
     manualBrightnessIndex = brightnessIndex;
-    if (xSemaphoreTake(preferencesMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-      preferences.putBool("autoLight", false);
-      xSemaphoreGive(preferencesMutex);
-    }
+    buttonSettingsWritePending = true;
   }
   if ((events & BUTTON_EVENT_UP) &&
       manualBrightnessIndex + 1 < BRIGHTNESS_LEVEL_COUNT) {
@@ -2024,10 +2034,7 @@ void handleBrightnessButtons() {
   } else if ((events & BUTTON_EVENT_DOWN) && manualBrightnessIndex > 0) {
     --manualBrightnessIndex;
   }
-  if (xSemaphoreTake(preferencesMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-    preferences.putUChar("brightness", manualBrightnessIndex);
-    xSemaphoreGive(preferencesMutex);
-  }
+  buttonSettingsWritePending = true;
   applyBrightnessIndex(manualBrightnessIndex, true);
 }
 
@@ -2534,7 +2541,8 @@ void translateWebPageToEnglish(String &html) {
     {"Luftdruck auf Meereshöhe", "Sea-level pressure"}, {"Stationsdruck (BME280 roh)", "Station pressure (raw BME280)"},
     {"Wetterdaten-Ruheanzeige", "Idle weather display"}, {"Letzte MQTT-Nachricht", "Last MQTT message"},
     {"MQTT-Server", "MQTT server"}, {"MQTT-Fehler", "MQTT error"}, {"Wind / Richtung", "Wind / direction"},
-    {"Matrix-Farbtiefe", "Matrix color depth"}, {"Blickgeometrie", "Viewing geometry"},
+    {"Matrix-Farbtiefe", "Matrix color depth"}, {"Matrix-Refresh", "Matrix refresh"},
+    {"Bildübergabe", "Frame handoff"}, {"Blickgeometrie", "Viewing geometry"},
     {"Lokale Zeit", "Local time"}, {"Nachtruhe", "Night mode"},
     {"Task- und Resetdiagnose", "Task and reset diagnostics"}, {"Netz Core", "Network core"},
     {"Stackreserve", "Stack reserve"}, {"Letzter Reset", "Last reset"},
@@ -2880,6 +2888,11 @@ String webPage() {
           (automaticBrightnessEnabled ? "Automatik" : "manuell");
   html += F("</b><span>Matrix-Farbtiefe</span><b>");
   html += String(BIT_DEPTH) + " Bit";
+  html += F("</b><span>Matrix-Refresh</span><b>");
+  html += String(matrixRefreshHz) + " Hz";
+  html += F("</b><span>Bildübergabe</span><b>");
+  html += String(matrixShowLastUs) + " / max. " +
+          String(matrixShowMaxUs) + " µs";
   html += F("</b><span>Blickgeometrie</span><b>");
   html += String(observerElevationM, 0) + " m NHN / weit ab " +
           String(farDirectionDistanceKm, 1) + " km";
@@ -2939,6 +2952,10 @@ bool validFlightWallHost(const String &host) {
 
 
 void applyWebSettings() {
+  settingsWritePreparing = true;
+  vTaskDelay(pdMS_TO_TICKS(120));
+  settingsWritePreparing = false;
+  settingsWriteInProgress = true;
   if (xSemaphoreTake(preferencesMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
     uiEnglish = webServer.arg("uiLanguage") == "en";
     displayEnabled = webServer.hasArg("display");
@@ -3079,6 +3096,7 @@ void applyWebSettings() {
     }
     xSemaphoreGive(preferencesMutex);
   }
+  settingsWriteInProgress = false;
   if (mqttClient.connected()) mqttClient.disconnect();
   mqttConnected = false;
   lastMqttAttempt = 0;
@@ -3315,6 +3333,10 @@ void handleStatusApi() {
       ",\"lux\":" + (isnan(filteredLux) ? String("null") : String(filteredLux, 1)) +
       ",\"brightness_percent\":" + String(BRIGHTNESS_LEVELS[brightnessIndex]) +
       ",\"matrix_bit_depth\":" + String(BIT_DEPTH) +
+      ",\"matrix_refresh_hz\":" + String(matrixRefreshHz) +
+      ",\"matrix_show_count\":" + String(matrixShowCount) +
+      ",\"matrix_show_last_us\":" + String(matrixShowLastUs) +
+      ",\"matrix_show_max_us\":" + String(matrixShowMaxUs) +
       ",\"observer_elevation_m\":" + String(observerElevationM, 0) +
       ",\"far_direction_km\":" + String(farDirectionDistanceKm, 1) +
       ",\"adsb_url\":\"" + jsonEscape(activeAdsbUrl()) + "\"" +
@@ -3688,7 +3710,8 @@ void stopNetworkServices() {
 
 void flushDeferredRouteCacheIfIdle() {
   if (!routeClient.hasPendingWrites() || routeCacheWritePreparing ||
-      routeCacheWriteInProgress) return;
+      routeCacheWriteInProgress || settingsWritePreparing ||
+      settingsWriteInProgress) return;
   bool aircraftActive = true;
   if (xSemaphoreTake(flightMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
     aircraftActive = networkFlight.available;
@@ -3703,6 +3726,24 @@ void flushDeferredRouteCacheIfIdle() {
   routeCacheWriteInProgress = false;
   routeCacheWritePreparing = false;
   Serial.println("Deferred route cache written while display was blanked");
+}
+
+
+void flushDeferredButtonSettings() {
+  if (!buttonSettingsWritePending || settingsWritePreparing ||
+      settingsWriteInProgress || routeCacheWritePreparing ||
+      routeCacheWriteInProgress) return;
+  settingsWritePreparing = true;
+  vTaskDelay(pdMS_TO_TICKS(120));
+  settingsWritePreparing = false;
+  settingsWriteInProgress = true;
+  if (xSemaphoreTake(preferencesMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+    preferences.putBool("autoLight", automaticBrightnessEnabled);
+    preferences.putUChar("brightness", manualBrightnessIndex);
+    xSemaphoreGive(preferencesMutex);
+    buttonSettingsWritePending = false;
+  }
+  settingsWriteInProgress = false;
 }
 
 
@@ -3743,6 +3784,7 @@ void networkTask(void *) {
       lastPoll = now;
       fetchLocalFlight();
     }
+    flushDeferredButtonSettings();
     flushDeferredRouteCacheIfIdle();
     vTaskDelay(pdMS_TO_TICKS(5));
   }
@@ -3794,6 +3836,13 @@ void setup() {
     } else {
       manualBrightnessIndex = 2;
     }
+    preferences.putUChar("brightness", manualBrightnessIndex);
+  }
+  if (settingsVersion < 12) {
+    // Restore the closest native 3-bit levels from the stable 2-bit firmware.
+    const uint8_t migratedLevels[] = {1, 3, 6};
+    manualBrightnessIndex = manualBrightnessIndex < 3
+        ? migratedLevels[manualBrightnessIndex] : 3;
     preferences.putUChar("brightness", manualBrightnessIndex);
   }
   if (manualBrightnessIndex >= BRIGHTNESS_LEVEL_COUNT) manualBrightnessIndex = 1;
@@ -3857,7 +3906,7 @@ void setup() {
     pageOrder[page] = preferences.getUChar(
         ("order" + String(page)).c_str(), page);
   }
-  if (settingsVersion < 11) preferences.putUChar("settingsVer", 11);
+  if (settingsVersion < 12) preferences.putUChar("settingsVer", 12);
   displayRadiusKm = constrain(displayRadiusKm, 1.0f, 100.0f);
   siteLatitude = constrain(siteLatitude, -90.0, 90.0);
   siteLongitude = constrain(siteLongitude, -180.0, 180.0);
@@ -3904,18 +3953,59 @@ void setup() {
 }
 
 
+void serviceMatrixDiagnostics(uint32_t now) {
+  static uint32_t lastSample = 0;
+  static uint32_t lastFrameCount = 0;
+  if (lastSample == 0) {
+    lastSample = now;
+    lastFrameCount = matrix.getFrameCount();
+    return;
+  }
+  const uint32_t elapsed = now - lastSample;
+  if (elapsed < 1000) return;
+  const uint32_t frameCount = matrix.getFrameCount();
+  matrixRefreshHz = static_cast<uint32_t>(
+      (static_cast<uint64_t>(frameCount - lastFrameCount) * 1000ULL) /
+      elapsed);
+  lastFrameCount = frameCount;
+  lastSample = now;
+}
+
+
+uint32_t displayDrawIntervalMs() {
+  if (otaPreparing || otaInProgress || routeCacheWritePreparing ||
+      routeCacheWriteInProgress || settingsWritePreparing ||
+      settingsWriteInProgress || displayTestActive ||
+      transitionPhase != TransitionPhase::Normal ||
+      static_cast<int32_t>(brightnessMessageUntil - millis()) > 0) {
+    return 50;
+  }
+  if (!aircraftIsInsideDisplayRadius()) return 500;
+  if (currentPageSlot < PAGE_COUNT) {
+    const uint8_t page = pageOrder[currentPageSlot];
+    // Route-name and custom-text pages scroll pixel by pixel. The compact
+    // airport page can also contain scrolling multi-hop routes.
+    if (page == 3 || page == 4 || page == 6) return 50;
+  }
+  // Static pages only need a periodic deadline check; ADS-B changes and page
+  // changes are detected comfortably within a quarter second.
+  return 250;
+}
+
+
 void loop() {
   const uint32_t now = millis();
   syncNetworkState();
   handleBrightnessButtons();
   serviceLightSensor();
   serviceEnvironmentSensor();
+  serviceMatrixDiagnostics(now);
   if (!automaticBrightnessEnabled && brightnessIndex != manualBrightnessIndex) {
     applyBrightnessIndex(manualBrightnessIndex, false);
   }
 
   static uint32_t lastDraw = 0;
-  if (now - lastDraw >= 50) {
+  if (now - lastDraw >= displayDrawIntervalMs()) {
     lastDraw = now;
     drawDisplay();
   }

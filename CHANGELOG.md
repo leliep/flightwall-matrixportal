@@ -1,5 +1,19 @@
 # Changelog
 
+## 3.4.0-3bit-exp.1 – 2026-10-19
+
+- experimentelle Matrix-Farbtiefe von 2 auf 3 Bit erhöht
+- sieben native 3-Bit-Helligkeitsstufen und Migration der gespeicherten
+  2-Bit-Helligkeit ergänzt
+- Bildübergaben für statische Seiten und die Ruheanzeige deutlich reduziert;
+  Lauftexte und Übergänge behalten ihre flüssige Aktualisierung
+- Konfigurations- und Tastereinstellungen werden bei kontrolliert abgedunkelter
+  Matrix in den Flash geschrieben
+- Matrix-Refresh-Rate, Anzahl sowie aktuelle und maximale Dauer der
+  Bildübergaben in Statusseite und Status-API ergänzt
+- stabile 2-Bit-Version bleibt auf `main`; Experiment auf
+  `experiment/3bit-clean-display`
+
 ## 3.4.0-ui-preview.3 – 2026-10-19
 
 - Böenwert der Matrix-Wetterseite in der englischen Oberfläche mit `G` für
