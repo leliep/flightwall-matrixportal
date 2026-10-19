@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.4.0-3bit-exp.6 – 2026-10-19
+
+- Blickrichtungszusatz `weit` von einer festen Bodenentfernung auf den
+  vertikalen Elevationswinkel über dem Horizont umgestellt
+- Standardgrenze 30°, im Bereich 10–45° konfigurierbar und mit 2° Hysterese
+- Konfigurationsseite, Statusseite und Status-API auf die Winkelangabe
+  umgestellt; bestehende Installationen werden automatisch auf 30° migriert
+
 ## 3.4.0-3bit-exp.5 – 2026-10-19
 
 - Steig- und Sinkanzeige der Seite „Flugdaten“ an die Kompaktseiten

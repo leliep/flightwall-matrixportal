@@ -33,7 +33,7 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.4.0-3bit-exp.5";
+constexpr char APP_VERSION[] = "3.4.0-3bit-exp.6";
 constexpr char BUILD_TIMESTAMP[] = "2026-10-19 3-bit experiment";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
@@ -80,11 +80,11 @@ constexpr char DEFAULT_RAIN_TOPIC[] = "zons/weather/rain24_cm";
 // Only aircraft at or inside this distance are shown. Change this value to
 // adjust the local display radius without modifying the FlightWall server.
 constexpr float DEFAULT_DISPLAY_RADIUS_KM = 10.0f;
+constexpr float DEFAULT_FAR_ELEVATION_DEG = 30.0f;
 // Viewing-direction geometry. The zenith angle is measured from straight up.
 constexpr float DIRECTLY_ABOVE_ZENITH_DEG = 10.0f;
 constexpr float ABOVE_ZENITH_DEG = 30.0f;
 constexpr float ZENITH_HYSTERESIS_DEG = 2.0f;
-constexpr float FAR_DISTANCE_HYSTERESIS_KM = 0.3f;
 
 constexpr char DEFAULT_ADSB_URL[] =
     "http://t-eddl146.fritz.box:8080/data/aircraft.json";
@@ -245,7 +245,7 @@ uint16_t quietHoursStartMinutes = 23 * 60 + 55;
 uint16_t quietHoursEndMinutes = 5 * 60 + 55;
 float displayRadiusKm = DEFAULT_DISPLAY_RADIUS_KM;
 float observerElevationM = 0.0f;
-float farDirectionDistanceKm = 5.0f;
+float farDirectionElevationDeg = DEFAULT_FAR_ELEVATION_DEG;
 uint32_t pageIntervalMs = DEFAULT_PAGE_INTERVAL_MS;
 float lowLuxThreshold = 20.0f;
 float highLuxThreshold = 800.0f;
@@ -758,6 +758,12 @@ float zenithAngleDegrees() {
 }
 
 
+float elevationAngleDegrees() {
+  const float zenith = zenithAngleDegrees();
+  return isnan(zenith) ? NAN : 90.0f - zenith;
+}
+
+
 LookRange currentLookRange() {
   if (lastLookFlight != flight.flight) {
     lastLookFlight = flight.flight;
@@ -779,10 +785,11 @@ LookRange currentLookRange() {
   }
   lastDirectlyAbove = false;
 
-  if (!isnan(flight.distanceKm)) {
-    const float farLimit = farDirectionDistanceKm -
-        (lastLookRange == LookRange::Far ? FAR_DISTANCE_HYSTERESIS_KM : 0.0f);
-    if (flight.distanceKm >= max(0.0f, farLimit)) {
+  const float elevation = elevationAngleDegrees();
+  if (!isnan(elevation)) {
+    const float farLimit = farDirectionElevationDeg +
+        (lastLookRange == LookRange::Far ? ZENITH_HYSTERESIS_DEG : 0.0f);
+    if (elevation <= farLimit) {
       lastLookRange = LookRange::Far;
       return lastLookRange;
     }
@@ -2464,7 +2471,7 @@ void translateWebPageToEnglish(String &html) {
     {"Wetterdaten anzeigen, wenn kein Flugzeug in der Nähe ist", "Show weather data when no aircraft is nearby"},
     {"Anzeigeradius", "Display radius"},
     {"Standorthöhe über NHN", "Site elevation above sea level"},
-    {"Ab dieser Entfernung \"weit\"", "Use \"far\" beyond this distance"},
+    {"Unter diesem Blickwinkel \"weit\"", "Use \"far\" below this elevation angle"},
     {"Nachtruhe aktiv", "Night mode enabled"},
     {"Display dunkel ab", "Display off from"},
     {"Display wieder aktiv ab", "Display on again at"},
@@ -2552,7 +2559,7 @@ void translateWebPageToEnglish(String &html) {
     {">ja<", ">yes<"}, {">nein<", ">no<"}, {">bis ", ">up to "},
     {"% / Automatik", "% / automatic"}, {">Automatik<", ">automatic<"},
     {">manuell<", ">manual<"}, {">aus<", ">off<"}, {">warte auf NTP<", ">waiting for NTP<"},
-    {" m NHN / weit ab ", " m ASL / far beyond "}, {"Netz Core 0 / Display Core 1", "Network core 0 / display core 1"},
+    {" m NHN / weit unter ", " m ASL / far below "}, {"Netz Core 0 / Display Core 1", "Network core 0 / display core 1"},
     {" / aktiv", " / enabled"}, {" / inaktiv", " / inactive"},
     {"toLocaleTimeString('de-DE')", "toLocaleTimeString('en-GB')"}
   };
@@ -2609,8 +2616,8 @@ String webPage() {
   html += String(displayRadiusKm, 1);
   html += F("'></label><label>Standorthöhe über NHN (m)<input type='number' name='observerElevation' min='-500' max='9000' step='1' value='");
   html += String(observerElevationM, 0);
-  html += F("'></label><label>Ab dieser Entfernung \"weit\" (km)<input type='number' name='farDistance' min='0.5' max='100' step='0.1' value='");
-  html += String(farDirectionDistanceKm, 1);
+  html += F("'></label><label>Unter diesem Blickwinkel \"weit\" (°)<input type='number' name='farElevation' min='10' max='45' step='1' value='");
+  html += String(farDirectionElevationDeg, 0);
   html += F("'></label><label><input type='checkbox' name='quietHours' value='1'");
   html += checked(quietHoursEnabled);
   html += F("> Nachtruhe aktiv</label><label>Display dunkel ab<input type='time' name='quietStart' value='");
@@ -2877,8 +2884,8 @@ String webPage() {
   html += String(matrixShowLastUs) + " / max. " +
           String(matrixShowMaxUs) + " µs";
   html += F("</b><span>Blickgeometrie</span><b>");
-  html += String(observerElevationM, 0) + " m NHN / weit ab " +
-          String(farDirectionDistanceKm, 1) + " km";
+  html += String(observerElevationM, 0) + " m NHN / weit unter " +
+          String(farDirectionElevationDeg, 0) + "°";
   struct tm localClock;
   html += F("</b><span>Lokale Zeit</span><b>");
   if (readLocalClock(localClock)) {
@@ -2956,8 +2963,8 @@ void applyWebSettings() {
     displayRadiusKm = constrain(webServer.arg("radius").toFloat(), 1.0f, 100.0f);
     observerElevationM = constrain(
         webServer.arg("observerElevation").toFloat(), -500.0f, 9000.0f);
-    farDirectionDistanceKm = constrain(
-        webServer.arg("farDistance").toFloat(), 0.5f, 100.0f);
+    farDirectionElevationDeg = constrain(
+        webServer.arg("farElevation").toFloat(), 10.0f, 45.0f);
     lowLuxThreshold = constrain(webServer.arg("lowLux").toFloat(), 1.0f, 500.0f);
     highLuxThreshold = constrain(webServer.arg("highLux").toFloat(), 50.0f, 50000.0f);
     if (highLuxThreshold <= lowLuxThreshold) highLuxThreshold = lowLuxThreshold + 50.0f;
@@ -3055,7 +3062,7 @@ void applyWebSettings() {
     preferences.putUChar("brightness", manualBrightnessIndex);
     preferences.putFloat("radiusKm", displayRadiusKm);
     preferences.putFloat("observerElevM", observerElevationM);
-    preferences.putFloat("farKm", farDirectionDistanceKm);
+    preferences.putFloat("farAngle", farDirectionElevationDeg);
     preferences.putFloat("lowLux", lowLuxThreshold);
     preferences.putFloat("highLux", highLuxThreshold);
     preferences.putString("adsbUrl", adsbUrl1);
@@ -3321,7 +3328,7 @@ void handleStatusApi() {
       ",\"matrix_show_last_us\":" + String(matrixShowLastUs) +
       ",\"matrix_show_max_us\":" + String(matrixShowMaxUs) +
       ",\"observer_elevation_m\":" + String(observerElevationM, 0) +
-      ",\"far_direction_km\":" + String(farDirectionDistanceKm, 1) +
+      ",\"far_elevation_angle_deg\":" + String(farDirectionElevationDeg, 0) +
       ",\"adsb_url\":\"" + jsonEscape(activeAdsbUrl()) + "\"" +
       ",\"adsb_url_1\":\"" + jsonEscape(adsbUrl1) + "\"" +
       ",\"adsb_url_2\":\"" + jsonEscape(adsbUrl2) + "\"" +
@@ -3828,6 +3835,9 @@ void setup() {
         ? migratedLevels[manualBrightnessIndex] : 3;
     preferences.putUChar("brightness", manualBrightnessIndex);
   }
+  if (settingsVersion < 13) {
+    preferences.putFloat("farAngle", DEFAULT_FAR_ELEVATION_DEG);
+  }
   if (manualBrightnessIndex >= BRIGHTNESS_LEVEL_COUNT) manualBrightnessIndex = 1;
   brightnessIndex = manualBrightnessIndex;
   automaticBrightnessEnabled = preferences.getBool("autoLight", true);
@@ -3856,8 +3866,9 @@ void setup() {
   displayRadiusKm = preferences.getFloat("radiusKm", DEFAULT_DISPLAY_RADIUS_KM);
   observerElevationM = constrain(
       preferences.getFloat("observerElevM", 0.0f), -500.0f, 9000.0f);
-  farDirectionDistanceKm = constrain(
-      preferences.getFloat("farKm", 5.0f), 0.5f, 100.0f);
+  farDirectionElevationDeg = constrain(
+      preferences.getFloat("farAngle", DEFAULT_FAR_ELEVATION_DEG),
+      10.0f, 45.0f);
   pageIntervalMs = preferences.getUInt("pageMs", DEFAULT_PAGE_INTERVAL_MS);
   lowLuxThreshold = preferences.getFloat("lowLux", 20.0f);
   highLuxThreshold = preferences.getFloat("highLux", 800.0f);
@@ -3889,7 +3900,7 @@ void setup() {
     pageOrder[page] = preferences.getUChar(
         ("order" + String(page)).c_str(), page);
   }
-  if (settingsVersion < 12) preferences.putUChar("settingsVer", 12);
+  if (settingsVersion < 13) preferences.putUChar("settingsVer", 13);
   displayRadiusKm = constrain(displayRadiusKm, 1.0f, 100.0f);
   siteLatitude = constrain(siteLatitude, -90.0, 90.0);
   siteLongitude = constrain(siteLongitude, -180.0, 180.0);

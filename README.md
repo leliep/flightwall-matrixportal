@@ -203,8 +203,8 @@ aktuelles Flugzeug, ADS-B und Route, Konfiguration, Übersetzungstabellen,
 Wetter/Sensoren und Display gegliedert. Lange URLs, Speicher-, Task- und
 Resetinformationen bleiben in standardmäßig geschlossenen Diagnosebereichen;
 auf dem iPhone ordnen sich alle Karten automatisch einspaltig an.
-Für die Blickrichtung werden außerdem die Standorthöhe über NHN und die
-Entfernungsgrenze für `weit` gespeichert.
+Für die Blickrichtung werden außerdem die Standorthöhe über NHN und der
+konfigurierbare Elevationswinkel für `weit` gespeichert.
 Routen mit Zwischenlandungen bleiben vollständig erhalten, beispielsweise
 `CGN-BER-CGN`. Matrix, Web-Display, Status-API und Routentest zeigen dabei alle
 Flughäfen in der korrekten Reihenfolge; Start und Endziel werden zusätzlich
@@ -280,15 +280,14 @@ Lauftext pausiert kurz am vollständig gescrollten Ende, läuft anschließend mi
 vierfacher Geschwindigkeit zum Anfang zurück und pausiert dort nochmals kurz,
 bevor ein Seitenwechsel erfolgen kann.
 
-Die Matrix berechnet den Zenitwinkel selbst aus horizontaler Entfernung,
-Flugzeughöhe und konfigurierter Standorthöhe. Bis 10° vom Zenit erscheint
-`oben`, bis 30° `oben vorne/rechts/hinten/links`. Unterhalb dieses Bereichs
-gelten `vorne`, `links`, `rechts`, `hinten` und die beiden Schulterangaben;
-ab der konfigurierten Entfernung werden die vier groben Richtungen mit `weit`
-gekennzeichnet. Eine Winkel- und Entfernungshysterese verhindert springende
-Texte an den Grenzen.
+Die Matrix berechnet den vertikalen Blickwinkel selbst aus horizontaler
+Entfernung, Flugzeughöhe und konfigurierter Standorthöhe. Unterhalb des
+konfigurierten Elevationswinkels, standardmäßig 30° über dem Horizont, werden
+die vier groben Richtungen mit `weit` gekennzeichnet. Ab 60° Elevation erscheint
+`oben vorne/rechts/hinten/links`, ab 80° `oben`. Eine Winkelhysterese verhindert
+springende Texte an den Grenzen.
 
-Special Types erhalten ein kleines farbiges Symbol neben der Flugzeugkennung.
+Special Types erhalten auf allen Flugzeugseiten ein farbiges 14×7-Symbol.
 Vor einem OTA-Flashvorgang erscheint kurz `OTA UPDATE / BITTE WARTEN`; danach
 bleibt das Display bis zum Neustart schwarz.
 
