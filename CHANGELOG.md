@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.4.0-3bit-dmasync.1 – 2026-10-19
+
+- Experimenteller ESP32-S3-DMA-Fix aus Adafruit Protomatter übernommen:
+  Vor Latch/OE-Änderungen wird jetzt der vollständige Abschluss der laufenden
+  Zeilenübertragung abgewartet
+- Farbtiefe und HUB75-Pixeltakt bleiben für einen klaren Vergleich zunächst
+  unverändert bei 3 Bit beziehungsweise rund 17,8 MHz
+- Fehlende Operator-Codes aus dem Controllerstatus ergänzt: `BLX` (TUIfly
+  Nordic) und `UNI` (Unicair)
+
 ## 3.4.0-3bit-exp.8 – 2026-10-19
 
 - Militärisches Callsign-Präfix `SHO` (beispielsweise `SHOCK11`) als German
