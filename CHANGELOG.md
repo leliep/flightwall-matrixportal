@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.4.0-3bit-exp.4 – 2026-10-19
+
+- schnelle Freitext-Laufgeschwindigkeit von 50 auf 25 ms pro Pixel verdoppelt
+- Zeichenintervall der schnellen Freitextstufe für einen flüssigen Lauf auf
+  25 ms verkürzt; mittlere und langsame Stufe bleiben unverändert
+
 ## 3.4.0-3bit-exp.3 – 2026-10-19
 
 - einheitliche 14×7-Special-Type-Icons der Kompaktseiten auf Haupt-, Routen-,

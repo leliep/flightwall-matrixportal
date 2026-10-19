@@ -33,7 +33,7 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.4.0-3bit-exp.3";
+constexpr char APP_VERSION[] = "3.4.0-3bit-exp.4";
 constexpr char BUILD_TIMESTAMP[] = "2026-10-19 3-bit experiment";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
@@ -1311,7 +1311,7 @@ uint32_t airportNamesPageDuration() {
 
 
 constexpr uint32_t CUSTOM_SCROLL_PAUSE_MS = 500;
-constexpr uint16_t CUSTOM_SCROLL_PIXEL_MS[] = {120, 80, 50};
+constexpr uint16_t CUSTOM_SCROLL_PIXEL_MS[] = {120, 80, 25};
 
 
 uint16_t customScrollPixelMs() {
@@ -3966,6 +3966,7 @@ uint32_t displayDrawIntervalMs() {
     const uint8_t page = pageOrder[currentPageSlot];
     // Route-name and custom-text pages scroll pixel by pixel. The compact
     // airport page can also contain scrolling multi-hop routes.
+    if (page == 4 && customScrollSpeed == 2) return 25;
     if (page == 3 || page == 4 || page == 6) return 50;
   }
   // Static pages only need a periodic deadline check; ADS-B changes and page
