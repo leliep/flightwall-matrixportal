@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.4.0-3bit-exp.5 – 2026-10-19
+
+- Steig- und Sinkanzeige der Seite „Flugdaten“ an die Kompaktseiten
+  angeglichen: grünes Aufwärts- beziehungsweise oranges Abwärtsdreieck statt
+  diagonaler Richtungspfeile
+
 ## 3.4.0-3bit-exp.4 – 2026-10-19
 
 - schnelle Freitext-Laufgeschwindigkeit von 50 auf 25 ms pro Pixel verdoppelt

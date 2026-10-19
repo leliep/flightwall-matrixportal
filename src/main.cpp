@@ -33,7 +33,7 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.4.0-3bit-exp.4";
+constexpr char APP_VERSION[] = "3.4.0-3bit-exp.5";
 constexpr char BUILD_TIMESTAMP[] = "2026-10-19 3-bit experiment";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
@@ -874,7 +874,7 @@ void drawMainPage() {
   }
   const String shownMetrics = clipped(metrics, 19);
   drawLine(0, 16, shownMetrics, white);
-  drawAltitudeArrowAt(121, 16);
+  drawCompactAltitudeIndicatorAt(121, 16);
 
   drawLookArrowAt(flight.relativeBearing, 0, 24, yellow);
   drawLine(10, 24, compactLookDirection(flight.relativeBearing), yellow);
