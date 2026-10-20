@@ -34,8 +34,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.4.0-3bit-dmasync.4";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-20 mold risk and SONIC callsign";
+constexpr char APP_VERSION[] = "3.4.0-3bit-dmasync.5";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-20 weather status layout fix";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -2727,7 +2727,7 @@ String webPage() {
   html += F("h1{font-size:1.5rem}fieldset{border:1px solid #445;border-radius:10px;margin:14px 0;padding:14px}");
   html += F("label{display:block;margin:12px 0}input[type=number],input[type=text],input[type=url],select{width:100%;box-sizing:border-box;padding:9px}");
   html += F("button{background:#00bcd4;color:#001018;border:0;border-radius:8px;padding:12px 18px;font-weight:bold}");
-  html += F(".status{display:grid;grid-template-columns:minmax(110px,auto) 1fr;gap:7px 14px}.status span{color:#aab}.status b{overflow-wrap:anywhere}.statusCards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.statusCard{background:#171c26;border:1px solid #343d50;border-radius:12px;padding:14px}.statusCard h3{margin:0 0 12px;font-size:1rem;color:#7ee7f0}.healthbar{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 14px}.pill{border-radius:999px;padding:7px 11px;font-size:.86rem;font-weight:700}.ok{background:#153b2b;color:#74e3aa}.warn{background:#493c16;color:#ffd166}.bad{background:#4a1f29;color:#ff8597}.off{background:#303541;color:#abb3c3}.wide{grid-column:1/-1}details summary{cursor:pointer;font-weight:700;color:#7ee7f0}details .status{margin-top:12px}@media(max-width:650px){body{padding:12px}.statusCards{grid-template-columns:1fr}.wide{grid-column:auto}.status{grid-template-columns:1fr}.status b{margin-bottom:7px}}.muted{color:#aab}</style></head><body>");
+  html += F(".status{display:grid;grid-template-columns:minmax(145px,42%) minmax(0,1fr);gap:7px 14px}.status span{color:#aab}.status b{overflow-wrap:anywhere}.statusNote{grid-column:1/-1;margin:2px 0 5px;line-height:1.35}.statusCards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.statusCard{background:#171c26;border:1px solid #343d50;border-radius:12px;padding:14px}.statusCard h3{margin:0 0 12px;font-size:1rem;color:#7ee7f0}.healthbar{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 14px}.pill{border-radius:999px;padding:7px 11px;font-size:.86rem;font-weight:700}.ok{background:#153b2b;color:#74e3aa}.warn{background:#493c16;color:#ffd166}.bad{background:#4a1f29;color:#ff8597}.off{background:#303541;color:#abb3c3}.wide{grid-column:1/-1}details summary{cursor:pointer;font-weight:700;color:#7ee7f0}details .status{margin-top:12px}@media(max-width:650px){body{padding:12px}.statusCards{grid-template-columns:1fr}.wide{grid-column:auto}.status{grid-template-columns:1fr}.status b{margin-bottom:7px}}.muted{color:#aab}</style></head><body>");
   html += F("<h1>FlightWall MatrixPortal ");
   html += APP_VERSION;
   html += F("</h1><form method='post' action='/save'>");
@@ -2992,8 +2992,7 @@ String webPage() {
   html += numberOrDash(moldCriticalSurfaceTemperatureC) + " °C";
   html += F("</b><span>Dauer erhöhter Feuchte</span><b>");
   html += elevatedHumidityDurationText();
-  html += F("</b><span class='muted'>Oberflächen unterhalb dieses Werts können 80 % relative Feuchte erreichen.</span><b></b>");
-  html += F("</b><span>Luftdruck auf Meereshöhe</span><b>");
+  html += F("</b><p class='statusNote muted'>Oberflächen unterhalb dieses Werts können 80 % relative Feuchte erreichen.</p><span>Luftdruck auf Meereshöhe</span><b>");
   html += numberOrDash(airPressureHpa) + " hPa";
   html += F("</b><span>Stationsdruck (BME280 roh)</span><b>");
   html += numberOrDash(stationPressureHpa) + " hPa";

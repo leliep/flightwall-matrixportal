@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.4.0-3bit-dmasync.5 – 2026-10-20
+
+- Spaltenbreiten der Statuskarten begrenzt, damit lange Beschreibungen die
+  Messwertspalte nicht mehr auf wenige Zeichen zusammendrücken
+- Erläuterung zur kritischen Oberflächentemperatur als zweispaltige Notiz
+  dargestellt und fehlerhafte HTML-Verschachtelung im Wetterstatus korrigiert
+
 ## 3.4.0-3bit-dmasync.4 – 2026-10-20
 
 - Rufzeichen nach dem Muster `SONIC…` werden vorrangig als militärische Flüge
