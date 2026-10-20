@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.4.0-3bit-dmasync.6 – 2026-10-20
+
+- MQTT-Feld und Wetterstatus von „Regen 24 h“ auf „Regen heute“ umbenannt,
+  passend zur Bedeutung des gelieferten MQTT-Werts
+- Englische Oberfläche entsprechend auf „Rain today“ angepasst
+
 ## 3.4.0-3bit-dmasync.5 – 2026-10-20
 
 - Spaltenbreiten der Statuskarten begrenzt, damit lange Beschreibungen die

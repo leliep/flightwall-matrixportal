@@ -34,8 +34,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.4.0-3bit-dmasync.5";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-20 weather status layout fix";
+constexpr char APP_VERSION[] = "3.4.0-3bit-dmasync.6";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-20 rain-today label";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -2618,7 +2618,7 @@ void translateWebPageToEnglish(String &html) {
     {"MQTT-Wetter", "MQTT weather"}, {"Wetterseite in der Ruheanzeige aktivieren", "Enable weather page while idle"},
     {"Benutzer", "User"}, {"Passwort", "Password"}, {"unverändert lassen", "leave unchanged"},
     {"Windrichtung", "Wind direction"}, {"Windgeschwindigkeit", "Wind speed"}, {"Windböen", "Wind gusts"},
-    {"Regen 24 h", "Rain 24 h"},
+    {"Regen heute", "Rain today"},
     {"Anzeigeseiten", "Display pages"}, {"Sanfte Übergänge", "Smooth transitions"},
     {"Freitext (maximal 128 Zeichen)", "Custom text (maximum 128 characters)"},
     {"Freitext-Scrollgeschwindigkeit", "Custom text scroll speed"}, {">schnell<", ">fast<"},
@@ -2808,7 +2808,7 @@ String webPage() {
   html += htmlEscape(windSpeedTopic);
   html += F("'></label><label>Windböen (km/h)<input type='text' name='windGustTopic' maxlength='128' value='");
   html += htmlEscape(windGustTopic);
-  html += F("'></label><label>Regen 24 h (cm)<input type='text' name='rainTopic' maxlength='128' value='");
+  html += F("'></label><label>Regen heute (cm)<input type='text' name='rainTopic' maxlength='128' value='");
   html += htmlEscape(rainTopic);
   html += F("'></label><p class='muted'>Regen wird für die Anzeige von cm in mm umgerechnet. Ein leeres Passwortfeld behält das gespeicherte Passwort bei.</p></fieldset>");
   html += F("<fieldset><legend>Anzeigeseiten</legend><label><input type='checkbox' name='smooth' value='1'");
@@ -3011,7 +3011,7 @@ String webPage() {
           (statusWindDirection.length() ? htmlEscape(statusWindDirection) : "-");
   html += F("</b><span>Windböen</span><b>");
   html += numberOrDash(statusWindGust) + " km/h";
-  html += F("</b><span>Regen 24 h</span><b>");
+  html += F("</b><span>Regen heute</span><b>");
   html += numberOrDash(statusRain) + " mm";
   html += F("</b></div></section><section class='statusCard'><h3>Display</h3><div class='status'><span>Helligkeit</span><b>");
   html += String(BRIGHTNESS_LEVELS[brightnessIndex]) + "% / " +
