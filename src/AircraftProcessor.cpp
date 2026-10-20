@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "CallsignClassifier.hpp"
 #include "Geo.hpp"
 
 namespace {
@@ -36,9 +37,7 @@ void detectSpecialTypes(Aircraft& aircraft) {
                 aircraft.airline;
   text.toUpperCase();
 
-  const bool germanAirforce = aircraft.flight.startsWith("GAF") ||
-                           aircraft.flight.startsWith("VAD") ||
-                           aircraft.flight.startsWith("SHO");
+  const bool germanAirforce = isGermanAirforceCallsign(aircraft.flight);
   if (germanAirforce)
     aircraft.specialTypes.push_back("German Airforce");
   const bool federalPolice = aircraft.flight.startsWith("BPO") ||

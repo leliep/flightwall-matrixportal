@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.4.0-3bit-dmasync.2 – 2026-10-20
+
+- Taktische German-Airforce-Rufzeichen ergänzt: `BURRO`, `HAMMER`, `SMASH`,
+  `VADER`, `CONAN`, `FALCON`, `THOR` und `VIRUS`
+- Die vollständigen Codewörter werden gezielt erkannt, damit gleichlautende
+  zivile Drei-Buchstaben-Codes wie `HAM` und `BUR` korrekt bleiben
+- German-Airforce-Erkennung für Auswahl, Special-Klassifizierung,
+  Operatoranzeige und Unknown-Code-Erfassung zentral zusammengeführt
+- Neue Operator-Codes aus dem Controllerstatus ergänzt: `AEG` (Airest),
+  `AAN` (CTR Atmospherica Aviation), `GFA` (Gulf Air), `TMT` (Titan Airways
+  Malta) und `BUR` (Air Bucharest)
+
 ## 3.4.0-3bit-dmasync.1 – 2026-10-19
 
 - Experimenteller ESP32-S3-DMA-Fix aus Adafruit Protomatter übernommen:
