@@ -34,8 +34,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.4.0-3bit-dmasync.2";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-20 tactical callsigns";
+constexpr char APP_VERSION[] = "3.4.0-3bit-dmasync.4";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-20 mold risk and SONIC callsign";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -68,6 +68,11 @@ constexpr uint8_t BME280_ALTERNATE_ADDRESS = 0x77;
 constexpr uint32_t ENVIRONMENT_SENSOR_INTERVAL_MS = 5000;
 constexpr uint32_t ENVIRONMENT_SENSOR_RETRY_MS = 15000;
 constexpr uint8_t ENVIRONMENT_SENSOR_FAILURE_LIMIT = 3;
+constexpr float MOLD_HUMIDITY_ELEVATED_PERCENT = 60.0f;
+constexpr float MOLD_HUMIDITY_HIGH_PERCENT = 65.0f;
+constexpr float MOLD_HUMIDITY_ACUTE_PERCENT = 75.0f;
+constexpr uint32_t MOLD_HIGH_DELAY_MS = 30UL * 60UL * 1000UL;
+constexpr uint32_t MOLD_CLEAR_DELAY_MS = 15UL * 60UL * 1000UL;
 constexpr uint32_t MQTT_RETRY_MS = 15000;
 constexpr uint32_t MQTT_VALUE_STALE_MS = 15UL * 60UL * 1000UL;
 constexpr char DEFAULT_MQTT_HOST[] = "srv-mqtt.fritz.box";
@@ -209,6 +214,13 @@ float ambientTemperatureC = NAN;
 float relativeHumidityPercent = NAN;
 float stationPressureHpa = NAN;
 float airPressureHpa = NAN;
+float dewPointC = NAN;
+float moldCriticalSurfaceTemperatureC = NAN;
+enum class MoldRiskLevel : uint8_t { Unavailable, Normal, Elevated, High };
+MoldRiskLevel moldRiskLevel = MoldRiskLevel::Unavailable;
+uint32_t elevatedHumiditySince = 0;
+uint32_t highHumiditySince = 0;
+uint32_t lowHumiditySince = 0;
 uint32_t lastEnvironmentSensorRead = 0;
 uint32_t lastEnvironmentSensorProbe = 0;
 uint32_t lastButtonEvent = 0;
@@ -1463,7 +1475,12 @@ void drawCompactClimateDisplay(bool bmeAvailable, bool mqttAvailable) {
       static_cast<int16_t>(humidityText.length() * 3);
   const int16_t pressureX = MATRIX_WIDTH -
       static_cast<int16_t>(pressureText.length() * 6);
-  drawLine(humidityX, 5, humidityText, cyan);
+  const uint16_t humidityColor = moldRiskLevel == MoldRiskLevel::High
+                                     ? red
+                                     : moldRiskLevel == MoldRiskLevel::Elevated
+                                           ? yellow
+                                           : cyan;
+  drawLine(humidityX, 5, humidityText, humidityColor);
   drawLine(pressureX, 5, pressureText, blue);
 
   drawLine(0, 18, direction.length() ? direction : "--", cyan);
@@ -1872,6 +1889,79 @@ float pressureReducedToSeaLevel(float pressureHpa, float elevationM) {
 }
 
 
+void resetMoldRisk() {
+  dewPointC = NAN;
+  moldCriticalSurfaceTemperatureC = NAN;
+  moldRiskLevel = MoldRiskLevel::Unavailable;
+  elevatedHumiditySince = 0;
+  highHumiditySince = 0;
+  lowHumiditySince = 0;
+}
+
+
+float magnusTemperature(float gamma) {
+  constexpr float MAGNUS_A = 17.62f;
+  constexpr float MAGNUS_B_C = 243.12f;
+  if (!isfinite(gamma) || gamma >= MAGNUS_A) return NAN;
+  return MAGNUS_B_C * gamma / (MAGNUS_A - gamma);
+}
+
+
+void updateMoldRisk(float temperatureC, float humidityPercent,
+                    uint32_t now) {
+  if (!isfinite(temperatureC) || !isfinite(humidityPercent) ||
+      humidityPercent <= 0.0f || humidityPercent > 100.0f) {
+    resetMoldRisk();
+    return;
+  }
+
+  constexpr float MAGNUS_A = 17.62f;
+  constexpr float MAGNUS_B_C = 243.12f;
+  const float saturationTerm =
+      MAGNUS_A * temperatureC / (MAGNUS_B_C + temperatureC);
+  dewPointC = magnusTemperature(
+      logf(humidityPercent / 100.0f) + saturationTerm);
+  // Surface temperature at which the room-air water vapour reaches 80 % RH.
+  moldCriticalSurfaceTemperatureC = magnusTemperature(
+      logf((humidityPercent / 100.0f) / 0.80f) + saturationTerm);
+
+  if (humidityPercent >= MOLD_HUMIDITY_ELEVATED_PERCENT) {
+    if (!elevatedHumiditySince) elevatedHumiditySince = now;
+    lowHumiditySince = 0;
+  } else {
+    elevatedHumiditySince = 0;
+  }
+
+  if (humidityPercent >= MOLD_HUMIDITY_HIGH_PERCENT) {
+    if (!highHumiditySince) highHumiditySince = now;
+  } else {
+    highHumiditySince = 0;
+  }
+
+  const bool acute = humidityPercent >= MOLD_HUMIDITY_ACUTE_PERCENT;
+  const bool sustainedHigh = highHumiditySince &&
+      now - highHumiditySince >= MOLD_HIGH_DELAY_MS;
+  if (acute || sustainedHigh) {
+    moldRiskLevel = MoldRiskLevel::High;
+    return;
+  }
+
+  if (moldRiskLevel == MoldRiskLevel::High) {
+    if (humidityPercent < MOLD_HUMIDITY_ELEVATED_PERCENT) {
+      if (!lowHumiditySince) lowHumiditySince = now;
+      if (now - lowHumiditySince >= MOLD_CLEAR_DELAY_MS) {
+        moldRiskLevel = MoldRiskLevel::Normal;
+      }
+    }
+    return;
+  }
+
+  moldRiskLevel = humidityPercent >= MOLD_HUMIDITY_ELEVATED_PERCENT
+                      ? MoldRiskLevel::Elevated
+                      : MoldRiskLevel::Normal;
+}
+
+
 bool findEnvironmentSensor() {
   lastEnvironmentSensorProbe = millis();
   const uint8_t addresses[] = {
@@ -1888,6 +1978,7 @@ bool findEnvironmentSensor() {
   relativeHumidityPercent = NAN;
   stationPressureHpa = NAN;
   airPressureHpa = NAN;
+  resetMoldRisk();
   Serial.println("BME280 not found");
   return false;
 }
@@ -1914,6 +2005,7 @@ void serviceEnvironmentSensor() {
       relativeHumidityPercent = NAN;
       stationPressureHpa = NAN;
       airPressureHpa = NAN;
+      resetMoldRisk();
       Serial.println("BME280 stopped responding");
     }
     return;
@@ -1923,6 +2015,7 @@ void serviceEnvironmentSensor() {
   relativeHumidityPercent = humidity;
   stationPressureHpa = pressure;
   airPressureHpa = pressureReducedToSeaLevel(pressure, observerElevationM);
+  updateMoldRisk(temperature, humidity, now);
 }
 
 
@@ -2108,6 +2201,7 @@ const String &activeAdsbUrl() {
 
 String airlineCode(const String &callsign) {
   if (isGermanAirforceCallsign(callsign)) return "GAF";
+  if (isMilitaryCallsign(callsign)) return "";
   if (callsign.startsWith("BPO")) return "BPO";
   if (callsign.length() < 4) return "";
   if (!isAlpha(callsign[0]) || !isAlpha(callsign[1]) ||
@@ -2267,6 +2361,8 @@ bool fetchLocalFlight() {
       next.airline = "Bundespolizei";
     } else if (isGermanAirforceCallsign(selected.flight)) {
       next.airline = "German Airforce";
+    } else if (isMilitaryCallsign(selected.flight)) {
+      next.airline = "Military";
     } else {
       next.airline = providedAirline.length() &&
                              providedAirlineComparison != "UNKNOWN"
@@ -2457,6 +2553,34 @@ String jsonNumberOrNull(float value, uint8_t decimals = 1) {
 }
 
 
+const char *moldRiskText() {
+  switch (moldRiskLevel) {
+    case MoldRiskLevel::Normal: return uiText("unauffällig", "low");
+    case MoldRiskLevel::Elevated: return uiText("erhöht", "elevated");
+    case MoldRiskLevel::High: return uiText("hoch", "high");
+    default: return uiText("nicht verfügbar", "unavailable");
+  }
+}
+
+
+const char *moldRiskCssClass() {
+  switch (moldRiskLevel) {
+    case MoldRiskLevel::Normal: return "ok";
+    case MoldRiskLevel::Elevated: return "warn";
+    case MoldRiskLevel::High: return "bad";
+    default: return "off";
+  }
+}
+
+
+String elevatedHumidityDurationText() {
+  if (!elevatedHumiditySince) return uiText("keine", "none");
+  const uint32_t elapsedMinutes =
+      (millis() - elevatedHumiditySince) / 60000UL;
+  return String(elapsedMinutes) + " min";
+}
+
+
 void translateWebPageToEnglish(String &html) {
   if (!uiEnglish) return;
   struct Translation { const char *de; const char *en; };
@@ -2529,6 +2653,10 @@ void translateWebPageToEnglish(String &html) {
     {"Letzte Display-Aktualisierung", "Last display update"}, {"Empfangene Flugzeuge", "Received aircraft"},
     {"Geeignete Flugzeuge", "Eligible aircraft"}, {"Wetter und Sensoren", "Weather and sensors"},
     {"Umgebungstemperatur", "Ambient temperature"}, {"Relative Feuchte", "Relative humidity"},
+    {"Schimmelrisiko", "Mold risk"}, {"Taupunkt", "Dew point"},
+    {"Kritische Oberflächentemperatur", "Critical surface temperature"},
+    {"Dauer erhöhter Feuchte", "Elevated humidity duration"},
+    {"Oberflächen unterhalb dieses Werts können 80 % relative Feuchte erreichen.", "Surfaces below this value may reach 80% relative humidity."},
     {"Luftdruck auf Meereshöhe", "Sea-level pressure"}, {"Stationsdruck (BME280 roh)", "Station pressure (raw BME280)"},
     {"Wetterdaten-Ruheanzeige", "Idle weather display"}, {"Letzte MQTT-Nachricht", "Last MQTT message"},
     {"MQTT-Server", "MQTT server"}, {"MQTT-Fehler", "MQTT error"}, {"Wind / Richtung", "Wind / direction"},
@@ -2733,6 +2861,8 @@ String webPage() {
   html += environmentSensorAvailable && lightSensorAvailable
               ? F("<span class='pill ok'>● Sensoren OK</span>")
               : F("<span class='pill warn'>● Sensor prüfen</span>");
+  html += "<span class='pill " + String(moldRiskCssClass()) +
+          "'>● Schimmelrisiko: " + moldRiskText() + "</span>";
   html += F("</div><div class='statusCards'><section class='statusCard'><h3>Netzwerk</h3><div class='status'><span>Adresse</span><b>http://matrixportal.local</b><span>IP</span><b>");
   html += WiFi.localIP().toString();
   html += F("</b><span>WLAN</span><b>");
@@ -2853,6 +2983,16 @@ String webPage() {
   html += numberOrDash(ambientTemperatureC) + " °C";
   html += F("</b><span>Relative Feuchte</span><b>");
   html += numberOrDash(relativeHumidityPercent) + " %";
+  html += F("</b><span>Schimmelrisiko</span><b class='");
+  html += moldRiskCssClass();
+  html += "'>" + String(moldRiskText());
+  html += F("</b><span>Taupunkt</span><b>");
+  html += numberOrDash(dewPointC) + " °C";
+  html += F("</b><span>Kritische Oberflächentemperatur</span><b>");
+  html += numberOrDash(moldCriticalSurfaceTemperatureC) + " °C";
+  html += F("</b><span>Dauer erhöhter Feuchte</span><b>");
+  html += elevatedHumidityDurationText();
+  html += F("</b><span class='muted'>Oberflächen unterhalb dieses Werts können 80 % relative Feuchte erreichen.</span><b></b>");
   html += F("</b><span>Luftdruck auf Meereshöhe</span><b>");
   html += numberOrDash(airPressureHpa) + " hPa";
   html += F("</b><span>Stationsdruck (BME280 roh)</span><b>");
@@ -3301,6 +3441,17 @@ void handleStatusApi() {
           String(environmentIdleDisplayEnabled ? "true" : "false") +
       ",\"ambient_temperature_c\":" + jsonNumberOrNull(ambientTemperatureC) +
       ",\"relative_humidity_percent\":" + jsonNumberOrNull(relativeHumidityPercent) +
+      ",\"dew_point_c\":" + jsonNumberOrNull(dewPointC) +
+      ",\"mold_critical_surface_temperature_c\":" +
+          jsonNumberOrNull(moldCriticalSurfaceTemperatureC) +
+      ",\"mold_risk\":\"" + String(moldRiskLevel == MoldRiskLevel::High
+          ? "high" : moldRiskLevel == MoldRiskLevel::Elevated
+          ? "elevated" : moldRiskLevel == MoldRiskLevel::Normal
+          ? "low" : "unavailable") + "\"" +
+      ",\"elevated_humidity_duration_seconds\":" +
+          (elevatedHumiditySince
+               ? String((millis() - elevatedHumiditySince) / 1000UL)
+               : "0") +
       ",\"station_pressure_hpa\":" + jsonNumberOrNull(stationPressureHpa) +
       ",\"air_pressure_hpa\":" + jsonNumberOrNull(airPressureHpa) +
       ",\"mqtt_weather_enabled\":" + String(mqttWeatherEnabled ? "true" : "false") +

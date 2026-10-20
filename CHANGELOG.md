@@ -1,5 +1,26 @@
 # Changelog
 
+## 3.4.0-3bit-dmasync.4 – 2026-10-20
+
+- Rufzeichen nach dem Muster `SONIC…` werden vorrangig als militärische Flüge
+  klassifiziert und erhalten die Military-Anzeige
+- Der zivile ICAO-Operatorcode `SON` bleibt für andere Callsigns weiterhin als
+  ACASS Ireland verfügbar
+
+## 3.4.0-3bit-dmasync.3 – 2026-10-20
+
+- Schimmelrisiko aus BME280-Temperatur und -Luftfeuchte ergänzt, einschließlich
+  Taupunkt und kritischer Oberflächentemperatur für 80 % relative Feuchte
+- Zeitlich geglättete Warnstufen verhindern Fehlalarme durch kurze
+  Feuchtespitzen; hohe Feuchte wird erst nach 30 Minuten beziehungsweise ab
+  75 % unmittelbar als hohes Risiko gewertet
+- Konfigurationsstatus und Status-API um Risikostufe, Grenztemperatur und Dauer
+  erhöhter Feuchte erweitert
+- Luftfeuchte der Matrix-Wetterseite erscheint bei erhöhtem Risiko gelb und bei
+  hohem Risiko rot
+- Vor dem OTA-Update gesammelte Operator-Codes ergänzt: `AMQ` (AMC Aviation),
+  `SAH` (Smart Jet) und `SON` (ACASS Ireland)
+
 ## 3.4.0-3bit-dmasync.2 – 2026-10-20
 
 - Taktische German-Airforce-Rufzeichen ergänzt: `BURRO`, `HAMMER`, `SMASH`,

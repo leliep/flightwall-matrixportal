@@ -40,6 +40,7 @@ void detectSpecialTypes(Aircraft& aircraft) {
   const bool germanAirforce = isGermanAirforceCallsign(aircraft.flight);
   if (germanAirforce)
     aircraft.specialTypes.push_back("German Airforce");
+  const bool militaryCallsign = isMilitaryCallsign(aircraft.flight);
   const bool federalPolice = aircraft.flight.startsWith("BPO") ||
       containsAny(text, {"BUNDESPOLIZEI", "FEDERAL POLICE"});
   if (federalPolice) {
@@ -51,7 +52,7 @@ void detectSpecialTypes(Aircraft& aircraft) {
              aircraft.flight.startsWith("NRW")) {
     aircraft.specialTypes.push_back("police");
   }
-  if (!germanAirforce && ((aircraft.dbFlags & 1U) ||
+  if (!germanAirforce && (militaryCallsign || (aircraft.dbFlags & 1U) ||
       containsAny(text, {"MILITARY", "LUFTWAFFE", "AIR FORCE", "ARMY",
                          "NAVY", "MARINE", "HEER"})))
     aircraft.specialTypes.push_back("military");

@@ -19,3 +19,9 @@ inline bool isGermanAirforceCallsign(const String& callsign) {
   }
   return false;
 }
+
+inline bool isMilitaryCallsign(const String& callsign) {
+  // SONIC is a military mission callsign. Match the full codeword so the
+  // unrelated civil ICAO operator prefix SON remains available.
+  return isGermanAirforceCallsign(callsign) || callsign.startsWith("SONIC");
+}
