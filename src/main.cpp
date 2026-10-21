@@ -34,8 +34,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.4.0-3bit-dmasync.6";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-20 rain-today label";
+constexpr char APP_VERSION[] = "3.4.0-3bit-dmasync.7";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-21 task-watchdog diagnostics";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -175,6 +175,90 @@ SemaphoreHandle_t preferencesMutex;
 SemaphoreHandle_t weatherMutex;
 TaskHandle_t networkTaskHandle = nullptr;
 TaskHandle_t displayTaskHandle = nullptr;
+
+enum class NetworkPhase : uint8_t {
+  Unknown,
+  Idle,
+  Web,
+  Ota,
+  Mqtt,
+  Wifi,
+  Adsb,
+  Route,
+  Flash,
+  Count
+};
+
+constexpr uint32_t NETWORK_PHASE_RTC_MAGIC = 0x46574E50;  // "FWNP"
+RTC_DATA_ATTR uint32_t rtcNetworkPhaseMagic = 0;
+RTC_DATA_ATTR uint8_t rtcNetworkPhase =
+    static_cast<uint8_t>(NetworkPhase::Unknown);
+NetworkPhase activeNetworkPhase = NetworkPhase::Idle;
+NetworkPhase previousResetNetworkPhase = NetworkPhase::Unknown;
+uint32_t networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Count)] = {};
+
+const char *networkPhaseName(NetworkPhase phase) {
+  switch (phase) {
+    case NetworkPhase::Idle: return "Idle";
+    case NetworkPhase::Web: return "Webserver";
+    case NetworkPhase::Ota: return "OTA";
+    case NetworkPhase::Mqtt: return "MQTT";
+    case NetworkPhase::Wifi: return "WLAN";
+    case NetworkPhase::Adsb: return "ADS-B";
+    case NetworkPhase::Route: return "Route";
+    case NetworkPhase::Flash: return "Flash";
+    default: return "unbekannt";
+  }
+}
+
+class NetworkPhaseScope {
+ public:
+  explicit NetworkPhaseScope(NetworkPhase phase)
+      : phase_(phase), previous_(activeNetworkPhase), started_(millis()) {
+    activeNetworkPhase = phase_;
+    rtcNetworkPhaseMagic = NETWORK_PHASE_RTC_MAGIC;
+    rtcNetworkPhase = static_cast<uint8_t>(phase_);
+  }
+
+  ~NetworkPhaseScope() {
+    const uint32_t elapsed = millis() - started_;
+    const size_t index = static_cast<size_t>(phase_);
+    if (index < static_cast<size_t>(NetworkPhase::Count) &&
+        elapsed > networkPhaseMaxMs[index]) {
+      networkPhaseMaxMs[index] = elapsed;
+    }
+    activeNetworkPhase = previous_;
+    rtcNetworkPhase = static_cast<uint8_t>(previous_);
+  }
+
+ private:
+  NetworkPhase phase_;
+  NetworkPhase previous_;
+  uint32_t started_;
+};
+
+void initializeNetworkDiagnostics() {
+  if (esp_reset_reason() == ESP_RST_TASK_WDT &&
+      rtcNetworkPhaseMagic == NETWORK_PHASE_RTC_MAGIC &&
+      rtcNetworkPhase < static_cast<uint8_t>(NetworkPhase::Count)) {
+    previousResetNetworkPhase = static_cast<NetworkPhase>(rtcNetworkPhase);
+  }
+  rtcNetworkPhaseMagic = NETWORK_PHASE_RTC_MAGIC;
+  rtcNetworkPhase = static_cast<uint8_t>(NetworkPhase::Idle);
+  activeNetworkPhase = NetworkPhase::Idle;
+}
+
+String networkPhaseTimingText() {
+  String text;
+  for (uint8_t raw = static_cast<uint8_t>(NetworkPhase::Web);
+       raw < static_cast<uint8_t>(NetworkPhase::Count); ++raw) {
+    if (text.length()) text += " / ";
+    const NetworkPhase phase = static_cast<NetworkPhase>(raw);
+    text += String(networkPhaseName(phase)) + " " +
+            String(networkPhaseMaxMs[raw]) + " ms";
+  }
+  return text;
+}
 bool webServerStarted = false;
 bool webServerConfigured = false;
 bool otaStarted = false;
@@ -2292,7 +2376,11 @@ bool fetchLocalFlight() {
   adsbClient.setUrl(activeAdsbUrl());
   routeClient.configure(routesEnabled, routeUrl);
 
-  AdsbResult result = adsbClient.fetch(config);
+  AdsbResult result;
+  {
+    NetworkPhaseScope phase(NetworkPhase::Adsb);
+    result = adsbClient.fetch(config);
+  }
   lastReceivedAircraft = result.receivedAircraft;
   lastCandidateAircraft = result.candidates.size();
   lastFeedTimestamp = result.feedTimestamp;
@@ -2322,11 +2410,14 @@ bool fetchLocalFlight() {
       routedFlight = selected.flight;
       lastRouteAttempt = millis();
       if (selected.flight.startsWith("TEST")) currentRoute = {};
-      else currentRoute = routeClient.lookup(
-          selected.flight,
-          selected.hasPosition ? selected.latitude : siteLatitude,
-          selected.hasPosition ? selected.longitude : siteLongitude,
-          result.feedTimestamp);
+      else {
+        NetworkPhaseScope phase(NetworkPhase::Route);
+        currentRoute = routeClient.lookup(
+            selected.flight,
+            selected.hasPosition ? selected.latitude : siteLatitude,
+            selected.hasPosition ? selected.longitude : siteLongitude,
+            result.feedTimestamp);
+      }
       lastRouteError = routeClient.lastError();
     }
 
@@ -2689,6 +2780,8 @@ void translateWebPageToEnglish(String &html) {
     {"% / Automatik", "% / automatic"}, {">Automatik<", ">automatic<"},
     {">manuell<", ">manual<"}, {">aus<", ">off<"}, {">warte auf NTP<", ">waiting for NTP<"},
     {" m NHN / weit unter ", " m ASL / far below "}, {"Netz Core 0 / Display Core 1", "Network core 0 / display core 1"},
+    {"Netzphase beim Watchdog-Reset", "Network phase at watchdog reset"},
+    {"Maximale Netzlaufzeiten", "Maximum network phase durations"},
     {" / aktiv", " / enabled"}, {" / inaktiv", " / inactive"},
     {"toLocaleTimeString('de-DE')", "toLocaleTimeString('en-GB')"}
   };
@@ -2719,7 +2812,9 @@ String webPage() {
   }
 
   String html;
-  html.reserve(9000);
+  // The complete configuration page is currently about 18 KiB. Reserving its
+  // real size avoids several large heap reallocations while it is assembled.
+  html.reserve(19000);
   html += F("<!doctype html><html lang='de'><head><meta charset='utf-8'>");
   html += F("<meta name='viewport' content='width=device-width,initial-scale=1'>");
   html += F("<title>FlightWall MatrixPortal</title><style>");
@@ -3046,6 +3141,10 @@ String webPage() {
   html += displayTaskHandle ? String(uxTaskGetStackHighWaterMark(displayTaskHandle) * sizeof(StackType_t)) : "-";
   html += F(" Bytes</b><span>Letzter Reset</span><b>");
   html += resetReasonText();
+  html += F("</b><span>Netzphase beim Watchdog-Reset</span><b>");
+  html += networkPhaseName(previousResetNetworkPhase);
+  html += F("</b><span>Maximale Netzlaufzeiten</span><b>");
+  html += networkPhaseTimingText();
   html += F("</b></div></details></div></div><form method='post' action='/restart' onsubmit=\"return confirm('ESP wirklich neu starten?')\"><p><button type='submit'>ESP neu starten</button></p></form></fieldset>");
   html += F("<p><a href='/display'>Web-Display öffnen</a></p>");
   if (strlen(OTA_PASSWORD) >= 8) {
@@ -3057,15 +3156,31 @@ String webPage() {
             "const note=document.getElementById('statusRefresh');"
             "const current=document.getElementById('statusData');"
             "const openDetails=current?[...current.querySelectorAll('details[id][open]')].map(item=>item.id):[];"
-            "try{const response=await fetch('/',{cache:'no-store'});if(!response.ok)throw 0;"
-            "const page=new DOMParser().parseFromString(await response.text(),'text/html');"
-            "const fresh=page.getElementById('statusData');"
-            "if(fresh&&current){current.innerHTML=fresh.innerHTML;openDetails.forEach(id=>{const item=document.getElementById(id);if(item)item.open=true;});}"
+            "try{const response=await fetch('/api/status-fragment',{cache:'no-store'});if(!response.ok)throw 0;"
+            "const fresh=await response.text();"
+            "if(fresh&&current){current.innerHTML=fresh;openDetails.forEach(id=>{const item=document.getElementById(id);if(item)item.open=true;});}"
             "if(note)note.textContent='aktualisiert '+new Date().toLocaleTimeString('de-DE');"
             "}catch(error){if(note)note.textContent='Aktualisierung fehlgeschlagen';}"
-            "finally{statusBusy=false;}}setInterval(refreshStatus,5000);</script></body></html>");
+            "finally{statusBusy=false;}}setInterval(refreshStatus,10000);</script></body></html>");
   translateWebPageToEnglish(html);
   return html;
+}
+
+
+void handleStatusFragment() {
+  String page = webPage();
+  const String opening = "<div id='statusData'>";
+  const String closing = "</div><form method='post' action='/restart'";
+  const int start = page.indexOf(opening);
+  const int end = start >= 0 ? page.indexOf(closing, start) : -1;
+  if (start < 0 || end < 0) {
+    webServer.send(500, "text/plain; charset=utf-8", "Status nicht verfügbar");
+    return;
+  }
+  const String fragment = page.substring(start + opening.length(), end);
+  webServer.sendHeader("Cache-Control", "no-store");
+  webServer.sendHeader("Connection", "close");
+  webServer.send(200, "text/html; charset=utf-8", fragment);
 }
 
 
@@ -3296,8 +3411,11 @@ void handleRouteTest() {
   if (!testUrl.startsWith("http://") && !testUrl.startsWith("https://"))
     testUrl = routeUrl;
   routeClient.configure(true, testUrl);
-  const RouteResult result = routeClient.test(
-      callsign, siteLatitude, siteLongitude);
+  RouteResult result;
+  {
+    NetworkPhaseScope phase(NetworkPhase::Route);
+    result = routeClient.test(callsign, siteLatitude, siteLongitude);
+  }
   routeClient.configure(routesEnabled, routeUrl);
   lastRouteError = result.error;
   const bool reachable = result.error.isEmpty();
@@ -3548,7 +3666,19 @@ void handleStatusApi() {
       ",\"quiet_hours_enabled\":" + String(quietHoursEnabled ? "true" : "false") +
       ",\"quiet_hours_active\":" + String(quietHoursAreActive() ? "true" : "false") +
       ",\"display_test\":" + String(displayTestActive ? "true" : "false") +
-      ",\"reset_reason\":\"" + jsonEscape(resetReasonText()) + "\"}";
+      ",\"reset_reason\":\"" + jsonEscape(resetReasonText()) + "\"" +
+      ",\"previous_watchdog_network_phase\":\"" +
+          jsonEscape(networkPhaseName(previousResetNetworkPhase)) + "\"" +
+      ",\"network_phase_max_ms\":{" +
+          "\"web\":" + String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Web)]) +
+          ",\"ota\":" + String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Ota)]) +
+          ",\"mqtt\":" + String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Mqtt)]) +
+          ",\"wifi\":" + String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Wifi)]) +
+          ",\"adsb\":" + String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Adsb)]) +
+          ",\"route\":" + String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Route)]) +
+          ",\"flash\":" + String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Flash)]) + "}}";
+  webServer.sendHeader("Cache-Control", "no-store");
+  webServer.sendHeader("Connection", "close");
   webServer.send(200, "application/json; charset=utf-8", json);
 }
 
@@ -3812,6 +3942,7 @@ void startWebServer() {
     webServer.on("/display", HTTP_GET, handleWebDisplay);
     webServer.on("/api/display", HTTP_GET, handleDisplayApi);
     webServer.on("/api/status", HTTP_GET, handleStatusApi);
+    webServer.on("/api/status-fragment", HTTP_GET, handleStatusFragment);
     webServer.on("/save", HTTP_POST, handleWebSave);
     webServer.on("/test-adsb", HTTP_POST, handleAdsbTest);
     webServer.on("/test-route", HTTP_POST, handleRouteTest);
@@ -3890,7 +4021,12 @@ void flushDeferredButtonSettings() {
 
 void networkTask(void *) {
   lastWiFiAttempt = millis();
-  if (connectWiFi(20000)) {
+  bool initiallyConnected = false;
+  {
+    NetworkPhaseScope phase(NetworkPhase::Wifi);
+    initiallyConnected = connectWiFi(20000);
+  }
+  if (initiallyConnected) {
     wifiWasConnected = true;
     startWebServer();
     fetchLocalFlight();
@@ -3911,22 +4047,37 @@ void networkTask(void *) {
       Serial.println("Network services restarted after Wi-Fi reconnect");
     }
     if (wifiConnected) {
-      webServer.handleClient();
-      if (otaStarted) ArduinoOTA.handle();
-      serviceMqtt();
+      {
+        NetworkPhaseScope phase(NetworkPhase::Web);
+        webServer.handleClient();
+      }
+      vTaskDelay(pdMS_TO_TICKS(1));
+      if (otaStarted) {
+        NetworkPhaseScope phase(NetworkPhase::Ota);
+        ArduinoOTA.handle();
+      }
+      vTaskDelay(pdMS_TO_TICKS(1));
+      {
+        NetworkPhaseScope phase(NetworkPhase::Mqtt);
+        serviceMqtt();
+      }
     }
     if (otaRebootAt && static_cast<int32_t>(now - otaRebootAt) >= 0) ESP.restart();
     if (manualRebootAt && static_cast<int32_t>(now - manualRebootAt) >= 0) ESP.restart();
     if (!wifiConnected && now - lastWiFiAttempt >= WIFI_RETRY_MS) {
       lastWiFiAttempt = now;
+      NetworkPhaseScope phase(NetworkPhase::Wifi);
       connectWiFi(10000);
     }
     if (wifiConnected && now - lastPoll >= POLL_INTERVAL_MS) {
       lastPoll = now;
       fetchLocalFlight();
     }
-    flushDeferredButtonSettings();
-    flushDeferredRouteCacheIfIdle();
+    {
+      NetworkPhaseScope phase(NetworkPhase::Flash);
+      flushDeferredButtonSettings();
+      flushDeferredRouteCacheIfIdle();
+    }
     vTaskDelay(pdMS_TO_TICKS(5));
   }
 }
@@ -3935,6 +4086,7 @@ void networkTask(void *) {
 void setup() {
   Serial.begin(115200);
   delay(250);
+  initializeNetworkDiagnostics();
   displayTaskHandle = xTaskGetCurrentTaskHandle();
   flightMutex = xSemaphoreCreateMutex();
   preferencesMutex = xSemaphoreCreateMutex();
@@ -4090,7 +4242,7 @@ void setup() {
 
   drawStatus("FLIGHTWALL", uiText("VERBINDET...", "CONNECTING..."));
   if (xTaskCreatePinnedToCore(
-          networkTask, "network", 12288, nullptr, 1,
+          networkTask, "network", 12288, nullptr, tskIDLE_PRIORITY,
           &networkTaskHandle, 0) != pdPASS) {
     drawStatus(uiText("NETZWERK", "NETWORK"), uiText("TASK FEHLER", "TASK ERROR"));
     while (true) delay(1000);

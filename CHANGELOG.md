@@ -1,5 +1,23 @@
 # Changelog
 
+## 3.4.0-3bit-dmasync.7 – 2026-10-21
+
+- CPU-0-Netzwerk-Task auf Idle-Priorität umgestellt, damit synchrone HTTP-,
+  TLS- und Webserver-Pfade den vom Task-Watchdog überwachten Idle-Task nicht
+  mehr vollständig verdrängen können
+- kurze Scheduler-Pausen zwischen Webserver, OTA und MQTT ergänzt
+- Netzwerkphasen Webserver, OTA, MQTT, WLAN, ADS-B, Route und Flash mit ihren
+  maximalen Laufzeiten instrumentiert
+- aktive Netzwerkphase im RTC-Speicher gesichert; nach einem Task-Watchdog-
+  Neustart zeigt die Statusdiagnose den zuletzt aktiven Abschnitt
+- Statusaktualisierung der Konfigurationsseite von einem vollständigen
+  Seitenabruf auf ein kleineres Statusfragment umgestellt und auf zehn
+  Sekunden entzerrt
+- Heap-Neuzuweisungen beim Erzeugen der Konfigurationsseite durch eine zur
+  tatsächlichen Seitengröße passende Reservierung reduziert
+- Operator-Lookups `AOJ` (Avcon Jet) und `FHM` (Freebird Airlines Europe)
+  ergänzt
+
 ## 3.4.0-3bit-dmasync.6 – 2026-10-20
 
 - MQTT-Feld und Wetterstatus von „Regen 24 h“ auf „Regen heute“ umbenannt,
