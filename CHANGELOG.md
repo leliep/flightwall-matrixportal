@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.4.0-3bit-dmasync.8 – 2026-10-22
+
+- Rufzeichen nach dem Muster `FELON…` werden vorrangig als militärische Flüge
+  klassifiziert und erhalten die Military-Anzeige
+- Die vollständigen Codewörter werden erkannt, damit der zivile ICAO-Code
+  `FEL` nicht pauschal als militärisch gilt
+- Vor dem OTA-Update gesammelte Flughafencodes `STL`, `ABZ`, `PSR` und `JNH`
+  sowie Operator-Codes `MCK`, `GFD`, `BAF`, `SCR`, `MPH`, `DUK` und `JCB`
+  ergänzt
+
 ## 3.4.0-3bit-dmasync.7 – 2026-10-21
 
 - CPU-0-Netzwerk-Task auf Idle-Priorität umgestellt, damit synchrone HTTP-,

@@ -5,6 +5,7 @@ namespace {
 struct AirportName { const char* code; const char* name; };
 const AirportName names[] = {
   {"AAL", "Aalborg"},
+  {"ABZ", "Aberdeen"},
   {"ACE", "Lanzarote"},
   {"ACK", "Nantucket"},
   {"ADB", "Izmir"},
@@ -178,6 +179,7 @@ const AirportName names[] = {
   {"JED", "Jeddah"},
   {"JFK", "New York-JFK"},
   {"JMK", "Mykonos"},
+  {"JNH", "Jiaxing"},
   {"JSI", "Skiathos"},
   {"JTR", "Santorin"},
   {"KAO", "Kuusamo"},
@@ -287,6 +289,7 @@ const AirportName names[] = {
   {"PRG", "Prag"},
   {"PRN", "Pristina"},
   {"PSA", "Pisa"},
+  {"PSR", "Pescara"},
   {"PUJ", "Punta Cana"},
   {"PUY", "Pula"},
   {"PVG", "Shanghai-Pudong"},
@@ -329,6 +332,7 @@ const AirportName names[] = {
   {"SPC", "La Palma"},
   {"SPU", "Split"},
   {"SSH", "Sharm el-Sheikh"},
+  {"STL", "St. Louis"},
   {"STN", "London-Stansted"},
   {"STR", "Stuttgart"},
   {"SUF", "Lamezia Terme"},
