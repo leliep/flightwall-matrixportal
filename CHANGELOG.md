@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.4.0-3bit-dmasync.10 – 2026-10-22
+
+- Airline-/Betreibercodes `AAB`, `AWU`, `DCS`, `LUX`, `MAS`, `MMD` und `RES`
+  in die Übersetzungstabelle aufgenommen
+- Die generierte Firmwaretabelle aus den geprüften Quelldaten aktualisiert
+
 ## 3.4.0-3bit-dmasync.9 – 2026-10-22
 
 - Eindeutige Special-Flugzeuge seit dem letzten Neustart werden anhand ihrer
