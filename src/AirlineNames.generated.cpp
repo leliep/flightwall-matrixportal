@@ -97,6 +97,7 @@ const AirlineName names[] = {
   {"FRF", "Fleet Air International"},
   {"GAC", "GlobeAir"},
   {"GAF", "German Airforce"},
+  {"GDK", "Goldeck-Flug"},
   {"GEC", "Lufthansa Cargo"},
   {"GFA", "Gulf Air"},
   {"GFD", "GFD Flugzieldarstellung"},

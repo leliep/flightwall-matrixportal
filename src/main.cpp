@@ -34,8 +34,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.4.0-3bit-dmasync.8";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-22 FELON military callsigns";
+constexpr char APP_VERSION[] = "3.4.0-3bit-dmasync.9";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-22 special aircraft statistics";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -374,6 +374,35 @@ uint32_t emergencyTestUntil = 0;
 uint32_t lastRouteAttempt = 0;
 size_t lastReceivedAircraft = 0;
 size_t lastCandidateAircraft = 0;
+
+enum class SpecialStatisticCategory : uint8_t {
+  Emergency7500,
+  Emergency7600,
+  Emergency7700,
+  GermanAirforce,
+  Military,
+  FederalPolice,
+  Police,
+  Government,
+  Helicopter,
+  Airship,
+  A380,
+  Other,
+  Count
+};
+
+struct SeenSpecialAircraft {
+  uint64_t identity = 0;
+  SpecialStatisticCategory category = SpecialStatisticCategory::Other;
+};
+
+constexpr size_t SPECIAL_AIRCRAFT_TRACKING_LIMIT = 256;
+SeenSpecialAircraft seenSpecialAircraft[SPECIAL_AIRCRAFT_TRACKING_LIMIT];
+size_t seenSpecialAircraftCount = 0;
+uint32_t specialAircraftCounts[
+    static_cast<size_t>(SpecialStatisticCategory::Count)] = {};
+bool specialAircraftTrackingLimitReached = false;
+
 String customPageText;
 uint8_t customScrollSpeed = 1;
 bool pageEnabled[] = {true, true, true, true, true, true, true};
@@ -2325,6 +2354,140 @@ String verticalMotion(const Aircraft &aircraft) {
 }
 
 
+bool isEmergencyStatisticCategory(SpecialStatisticCategory category) {
+  return category == SpecialStatisticCategory::Emergency7500 ||
+         category == SpecialStatisticCategory::Emergency7600 ||
+         category == SpecialStatisticCategory::Emergency7700;
+}
+
+
+uint8_t specialStatisticPriority(SpecialStatisticCategory category) {
+  if (isEmergencyStatisticCategory(category)) return 0;
+  switch (category) {
+    case SpecialStatisticCategory::GermanAirforce: return 1;
+    case SpecialStatisticCategory::FederalPolice: return 2;
+    case SpecialStatisticCategory::Police: return 3;
+    case SpecialStatisticCategory::Military: return 4;
+    case SpecialStatisticCategory::Government: return 5;
+    case SpecialStatisticCategory::Helicopter: return 6;
+    case SpecialStatisticCategory::Airship: return 7;
+    case SpecialStatisticCategory::A380: return 8;
+    default: return 9;
+  }
+}
+
+
+bool specialStatisticCategory(const Aircraft &aircraft,
+                              SpecialStatisticCategory &category) {
+  if (aircraft.emergency) {
+    if (aircraft.squawk == "7500")
+      category = SpecialStatisticCategory::Emergency7500;
+    else if (aircraft.squawk == "7600")
+      category = SpecialStatisticCategory::Emergency7600;
+    else if (aircraft.squawk == "7700")
+      category = SpecialStatisticCategory::Emergency7700;
+    else
+      return false;
+    return true;
+  }
+  if (aircraft.specialTypes.empty()) return false;
+
+  String specialType = aircraft.specialTypes.front();
+  specialType.toUpperCase();
+  if (specialType.indexOf("AIRFORCE") >= 0)
+    category = SpecialStatisticCategory::GermanAirforce;
+  else if (specialType.indexOf("BUNDESPOLIZEI") >= 0)
+    category = SpecialStatisticCategory::FederalPolice;
+  else if (specialType.indexOf("POLICE") >= 0 ||
+           specialType.indexOf("POLIZEI") >= 0)
+    category = SpecialStatisticCategory::Police;
+  else if (specialType.indexOf("MILIT") >= 0)
+    category = SpecialStatisticCategory::Military;
+  else if (specialType.indexOf("GOVERNMENT") >= 0 ||
+           specialType.indexOf("REGIERUNG") >= 0)
+    category = SpecialStatisticCategory::Government;
+  else if (specialType.indexOf("HELICOPTER") >= 0 ||
+           specialType.indexOf("HUBSCHRAUBER") >= 0)
+    category = SpecialStatisticCategory::Helicopter;
+  else if (specialType.indexOf("AIRSHIP") >= 0 ||
+           specialType.indexOf("LUFTSCHIFF") >= 0 ||
+           specialType.indexOf("SHIP") >= 0)
+    category = SpecialStatisticCategory::Airship;
+  else if (specialType.indexOf("A380") >= 0)
+    category = SpecialStatisticCategory::A380;
+  else
+    category = SpecialStatisticCategory::Other;
+  return true;
+}
+
+
+uint64_t specialAircraftIdentity(const Aircraft &aircraft) {
+  const String *identifier = &aircraft.hex;
+  uint8_t identifierKind = 1;
+  if (!identifier->length()) {
+    identifier = &aircraft.registration;
+    identifierKind = 2;
+  }
+  if (!identifier->length()) {
+    identifier = &aircraft.flight;
+    identifierKind = 3;
+  }
+  if (!identifier->length()) return 0;
+
+  uint64_t hash = 1469598103934665603ULL;
+  hash ^= identifierKind;
+  hash *= 1099511628211ULL;
+  for (size_t index = 0; index < identifier->length(); ++index) {
+    hash ^= static_cast<uint8_t>((*identifier)[index]);
+    hash *= 1099511628211ULL;
+  }
+  return hash ? hash : 1;
+}
+
+
+void updateSpecialAircraftStatistics(const std::vector<Aircraft> &aircraft) {
+  for (const Aircraft &candidate : aircraft) {
+    SpecialStatisticCategory category;
+    if (!specialStatisticCategory(candidate, category)) continue;
+    const uint64_t identity = specialAircraftIdentity(candidate);
+    if (!identity) continue;
+
+    size_t index = 0;
+    for (; index < seenSpecialAircraftCount; ++index) {
+      if (seenSpecialAircraft[index].identity == identity) break;
+    }
+    if (index < seenSpecialAircraftCount) {
+      const SpecialStatisticCategory previous =
+          seenSpecialAircraft[index].category;
+      const bool emergencyChanged = isEmergencyStatisticCategory(category) &&
+                                    category != previous;
+      const bool moreSpecific = !isEmergencyStatisticCategory(previous) &&
+          specialStatisticPriority(category) < specialStatisticPriority(previous);
+      if (emergencyChanged || moreSpecific) {
+        --specialAircraftCounts[static_cast<size_t>(previous)];
+        ++specialAircraftCounts[static_cast<size_t>(category)];
+        seenSpecialAircraft[index].category = category;
+      }
+      continue;
+    }
+
+    if (seenSpecialAircraftCount >= SPECIAL_AIRCRAFT_TRACKING_LIMIT) {
+      specialAircraftTrackingLimitReached = true;
+      continue;
+    }
+    seenSpecialAircraft[seenSpecialAircraftCount].identity = identity;
+    seenSpecialAircraft[seenSpecialAircraftCount].category = category;
+    ++seenSpecialAircraftCount;
+    ++specialAircraftCounts[static_cast<size_t>(category)];
+  }
+}
+
+
+uint32_t specialAircraftCount(SpecialStatisticCategory category) {
+  return specialAircraftCounts[static_cast<size_t>(category)];
+}
+
+
 void appendEmergencyTestAircraft(AdsbResult &result) {
   if (!emergencyTestCount ||
       static_cast<int32_t>(emergencyTestUntil - millis()) <= 0) {
@@ -2384,6 +2547,7 @@ bool fetchLocalFlight() {
   lastReceivedAircraft = result.receivedAircraft;
   lastCandidateAircraft = result.candidates.size();
   lastFeedTimestamp = result.feedTimestamp;
+  if (result.ok) updateSpecialAircraftStatistics(result.candidates);
   appendEmergencyTestAircraft(result);
   if (!result.ok && emergencyTestCount) {
     result.ok = true;
@@ -2814,7 +2978,7 @@ String webPage() {
   String html;
   // The complete configuration page is currently about 18 KiB. Reserving its
   // real size avoids several large heap reallocations while it is assembled.
-  html.reserve(19000);
+  html.reserve(20500);
   html += F("<!doctype html><html lang='de'><head><meta charset='utf-8'>");
   html += F("<meta name='viewport' content='width=device-width,initial-scale=1'>");
   html += F("<title>FlightWall MatrixPortal</title><style>");
@@ -3015,6 +3179,54 @@ String webPage() {
               : String(displayRadiusKm, 1) + " / " +
                     String(statusFlight.specialType.length()
                                ? displayRadiusKm * 2.0f : displayRadiusKm, 1) + " km";
+  html += "</b></div></section><section class='statusCard wide'><h3>";
+  html += uiText("Specials seit Neustart", "Specials since restart");
+  html += "</h3><div class='status'><span>";
+  html += uiText("Gesamt", "Total");
+  html += "</span><b>" + String(seenSpecialAircraftCount);
+  html += F("</b><span>7500 · Hijack</span><b>");
+  html += String(specialAircraftCount(SpecialStatisticCategory::Emergency7500));
+  html += F("</b><span>7600 · Radio</span><b>");
+  html += String(specialAircraftCount(SpecialStatisticCategory::Emergency7600));
+  html += F("</b><span>7700 · Emergency</span><b>");
+  html += String(specialAircraftCount(SpecialStatisticCategory::Emergency7700));
+  html += F("</b><span>German Airforce</span><b>");
+  html += String(specialAircraftCount(SpecialStatisticCategory::GermanAirforce));
+  html += F("</b><span>Military</span><b>");
+  html += String(specialAircraftCount(SpecialStatisticCategory::Military));
+  html += "</b><span>";
+  html += uiText("Bundespolizei", "Federal Police");
+  html += "</span><b>" +
+          String(specialAircraftCount(SpecialStatisticCategory::FederalPolice));
+  html += "</b><span>";
+  html += uiText("Polizei", "Police");
+  html += "</span><b>" +
+          String(specialAircraftCount(SpecialStatisticCategory::Police));
+  html += "</b><span>";
+  html += uiText("Regierung", "Government");
+  html += "</span><b>" +
+          String(specialAircraftCount(SpecialStatisticCategory::Government));
+  html += "</b><span>";
+  html += uiText("Hubschrauber", "Helicopter");
+  html += "</span><b>" +
+          String(specialAircraftCount(SpecialStatisticCategory::Helicopter));
+  html += "</b><span>";
+  html += uiText("Luftschiff", "Airship");
+  html += "</span><b>" +
+          String(specialAircraftCount(SpecialStatisticCategory::Airship));
+  html += F("</b><span>A380</span><b>");
+  html += String(specialAircraftCount(SpecialStatisticCategory::A380));
+  html += "</b><span>";
+  html += uiText("Sonstige", "Other");
+  html += "</span><b>" +
+          String(specialAircraftCount(SpecialStatisticCategory::Other));
+  html += "</b><span>";
+  html += uiText("Erfassung", "Tracking");
+  html += "</span><b>";
+  html += specialAircraftTrackingLimitReached
+              ? uiText("Limit erreicht", "limit reached")
+              : String(seenSpecialAircraftCount) + " / " +
+                    String(SPECIAL_AIRCRAFT_TRACKING_LIMIT);
   html += F("</b></div></section><section class='statusCard'><h3>ADS-B und Route</h3><div class='status'><span>ADS-B</span><b>");
   html += statusError.length() ? displayAscii(statusError) : "OK";
   html += F("</b><span>ADS-B-Fehler</span><b>");
@@ -3661,6 +3873,35 @@ void handleStatusApi() {
       ",\"bearing\":" + jsonNumberOrNull(statusFlight.bearing, 0) +
       ",\"relative_bearing\":" +
           jsonNumberOrNull(statusFlight.relativeBearing) +
+      ",\"special_statistics\":{\"total\":" +
+          String(seenSpecialAircraftCount) +
+          ",\"tracking_limit\":" + String(SPECIAL_AIRCRAFT_TRACKING_LIMIT) +
+          ",\"tracking_limit_reached\":" +
+          String(specialAircraftTrackingLimitReached ? "true" : "false") +
+          ",\"categories\":{\"transponder_7500\":" +
+          String(specialAircraftCount(SpecialStatisticCategory::Emergency7500)) +
+          ",\"transponder_7600\":" +
+          String(specialAircraftCount(SpecialStatisticCategory::Emergency7600)) +
+          ",\"transponder_7700\":" +
+          String(specialAircraftCount(SpecialStatisticCategory::Emergency7700)) +
+          ",\"german_airforce\":" +
+          String(specialAircraftCount(SpecialStatisticCategory::GermanAirforce)) +
+          ",\"military\":" +
+          String(specialAircraftCount(SpecialStatisticCategory::Military)) +
+          ",\"federal_police\":" +
+          String(specialAircraftCount(SpecialStatisticCategory::FederalPolice)) +
+          ",\"police\":" +
+          String(specialAircraftCount(SpecialStatisticCategory::Police)) +
+          ",\"government\":" +
+          String(specialAircraftCount(SpecialStatisticCategory::Government)) +
+          ",\"helicopter\":" +
+          String(specialAircraftCount(SpecialStatisticCategory::Helicopter)) +
+          ",\"airship\":" +
+          String(specialAircraftCount(SpecialStatisticCategory::Airship)) +
+          ",\"a380\":" +
+          String(specialAircraftCount(SpecialStatisticCategory::A380)) +
+          ",\"other\":" +
+          String(specialAircraftCount(SpecialStatisticCategory::Other)) + "}}" +
       ",\"unknown_airports\":" + unknownCodesJson(true) +
       ",\"unknown_airlines\":" + unknownCodesJson(false) +
       ",\"quiet_hours_enabled\":" + String(quietHoursEnabled ? "true" : "false") +

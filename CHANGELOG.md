@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.4.0-3bit-dmasync.9 – 2026-10-22
+
+- Eindeutige Special-Flugzeuge seit dem letzten Neustart werden anhand ihrer
+  ICAO-Hexadresse gezählt und nach der tatsächlich angezeigten Hauptkategorie
+  aufgeschlüsselt
+- Transpondernotfälle sind als eigene Kategorien `7500` (Hijack), `7600`
+  (Radio) und `7700` (Emergency) enthalten und haben Vorrang vor sonstigen
+  Special-Klassifizierungen
+- Eingebaute Notfall-Testflugzeuge werden nicht gezählt; die Statistik steht
+  in der regelmäßig aktualisierten Statusanzeige und in `/api/status` bereit
+- Vor dem OTA-Update neu aufgelaufene Flughafencodes `DOV` und `HHN` sowie
+  Operator-Code `GDK` ergänzt
+
 ## 3.4.0-3bit-dmasync.8 – 2026-10-22
 
 - Rufzeichen nach dem Muster `FELON…` werden vorrangig als militärische Flüge
