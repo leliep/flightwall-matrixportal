@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.4.0-3bit-dmasync.15-looproutes – 2026-10-25
+
+- geschlossene Multi-Hop-Routen werden auf den Kompaktseiten ohne das
+  redundante Endziel dargestellt, beispielsweise `DUS<>BUD` statt
+  `DUS>BUD>DUS` beziehungsweise `Duesseldorf > Duesseldorf`
+- die Seite „Kompakt + Flughäfen“ scrollt bei solchen Umläufen die sinnvolle
+  Namensfolge, beispielsweise `Duesseldorf <> Budapest`
+- die ausführliche Flughafenseite behält sämtliche Stationen und scrollt
+  weiterhin die vollständige Route `DUS>BUD>DUS` samt aller Flughafennamen
+
 ## 3.4.0-3bit-dmasync.14-routecache – 2026-10-25
 
 - Routencache-Verwaltung in der Konfigurationsseite mit Callsign, Route, Alter,

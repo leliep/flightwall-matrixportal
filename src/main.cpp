@@ -34,8 +34,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.4.0-3bit-dmasync.14-routecache";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-25 route cache management";
+constexpr char APP_VERSION[] = "3.4.0-3bit-dmasync.15-looproutes";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-25 compact loop routes";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -1015,11 +1015,53 @@ void drawMainPage() {
 }
 
 
+bool flightHasClosedLoopRoute() {
+  String codes = flight.routeCodes;
+  codes.trim();
+  const int firstSeparator = codes.indexOf('-');
+  const int lastSeparator = codes.lastIndexOf('-');
+  if (firstSeparator <= 0 || lastSeparator <= firstSeparator ||
+      lastSeparator >= static_cast<int>(codes.length()) - 1) {
+    return false;
+  }
+
+  String first = codes.substring(0, firstSeparator);
+  String last = codes.substring(lastSeparator + 1);
+  first.trim();
+  last.trim();
+  first.toUpperCase();
+  last.toUpperCase();
+  return first.length() && first == last;
+}
+
+
+String compactLoopRouteCodes() {
+  String route = flight.routeCodes;
+  if (flightHasClosedLoopRoute()) {
+    route.remove(route.lastIndexOf('-'));
+    route.replace("-", "<>");
+  } else {
+    route.replace("-", ">");
+  }
+  return route;
+}
+
+
+String compactLoopRouteNames() {
+  String names = displayAscii(flight.routeNames);
+  if (names.isEmpty()) return compactLoopRouteCodes();
+  if (!flightHasClosedLoopRoute()) return names;
+
+  const int finalSeparator = names.lastIndexOf(" > ");
+  if (finalSeparator > 0) names.remove(finalSeparator);
+  names.replace(" > ", " <> ");
+  return names;
+}
+
+
 String compactRoute() {
   if (flight.routeCodes.length()) {
-    String route = clipped(flight.routeCodes, 21);
-    route.replace("-", ">");
-    return route;
+    return clipped(compactLoopRouteCodes(), 21);
   }
   const String origin = clipped(flight.origin, 4);
   const String destination = clipped(flight.destination, 4);
@@ -1223,6 +1265,12 @@ uint32_t airportScrollDuration(const String &text, int16_t regionWidth) {
 
 
 uint32_t compactAirportsNamePhaseDuration() {
+  if (flightHasClosedLoopRoute()) {
+    return max(airportScrollDuration(
+                   limitedAirportText(compactLoopRouteNames()), MATRIX_WIDTH),
+               AIRPORT_NAMES_MINIMUM_MS);
+  }
+
   const String origin = limitedAirportText(flight.originName);
   const String destination = limitedAirportText(flight.destinationName);
   const int16_t originWidth = origin.length() * 6;
@@ -1314,6 +1362,13 @@ void drawCompactAirportsPage() {
                     airportTextX(airline, airlineRegionWidth, elapsed), red);
   drawCompactTypeHeader();
   drawCompactDetails();
+
+  if (flightHasClosedLoopRoute()) {
+    const String route = limitedAirportText(compactLoopRouteNames());
+    drawAirportRegion(route, 0, 24, MATRIX_WIDTH,
+                      airportTextX(route, MATRIX_WIDTH, elapsed), white);
+    return;
+  }
 
   const String origin = limitedAirportText(flight.originName);
   const String destination = limitedAirportText(flight.destinationName);

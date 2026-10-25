@@ -246,11 +246,13 @@ zusammen mit ihrer Bedeutung. Nach etwa 23 Sekunden endet er automatisch;
 über denselben Schalter kann er vorher beendet werden.
 
 Die Seite **Flughafennamen** zeigt – sofern eine Route ermittelt wurde –
-die Langnamen des Start- und Zielflughafens. Namen, die breiter als das Display
-sind, werden vollständig horizontal gescrollt; dafür verlängert die Firmware
-die konfigurierte Seitendauer bei Bedarf automatisch. Fehlt ein Langname, wird
-der Flughafencode angezeigt. Sind Start und Ziel beide unbekannt, wird die
-gesamte Seite automatisch übersprungen.
+bei direkten Flügen die Langnamen des Start- und Zielflughafens. Bei
+Multi-Hop-Flügen erscheinen sämtliche Codes und sämtliche Flughafennamen in
+der gelieferten Reihenfolge. Namen, die breiter als das Display sind, werden
+vollständig horizontal gescrollt; dafür verlängert die Firmware die
+konfigurierte Seitendauer bei Bedarf automatisch. Fehlt ein Langname, wird der
+Flughafencode angezeigt. Sind Start und Ziel beide unbekannt, wird die gesamte
+Seite automatisch übersprungen.
 
 Die Seite **Freitext** zeigt einen im Webinterface eingegebenen Text mit bis
 zu 128 darstellbaren Zeichen. Bei jedem Seitenaufruf läuft der Text genau
@@ -292,7 +294,11 @@ links- und rechtsbündig und das `>` mittig im freien Raum. Passt nur ein Name
 in weniger als eine halbe Zeile, bleibt er außen bündig stehen und das `>`
 rückt an ihn heran, während der lange Name im übrigen Bereich scrollt. Sind
 beide Namen länger, scrollen beide in getrennten Hälften mit festem `>` in der
-Mitte. Kurze Namen bleiben mindestens fünf Sekunden sichtbar; die konfigurierte
+Mitte. Bei geschlossenen Umläufen entfällt das redundante letzte Ziel: Aus
+`DUS-BUD-DUS` wird kompakt `DUS<>BUD`, die Namenszeile scrollt entsprechend
+`Duesseldorf <> Budapest`. Die ausführliche Flughafenseite zeigt dagegen
+weiterhin die vollständige Route. Kurze Namen bleiben mindestens fünf Sekunden
+sichtbar; die konfigurierte
 Seitendauer wird bei Bedarf bis zum Ende aller Lauftexte verlängert. Jeder
 Lauftext pausiert kurz am vollständig gescrollten Ende, läuft anschließend mit
 vierfacher Geschwindigkeit zum Anfang zurück und pausiert dort nochmals kurz,
