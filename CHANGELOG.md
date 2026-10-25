@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.4.0-3bit-dmasync.13-adsbfi – 2026-10-25
+
+- ADS-B-Abrufe auf HTTP/1.0 umgestellt, damit die von Cloudflare für adsb.fi
+  verwendete HTTP/1.1-Chunk-Kodierung nicht als JSON-Inhalt gelesen wird
+- erfolgreiche JSON-Antworten werden zusätzlich auf ein vorhandenes
+  `aircraft`- oder `ac`-Array geprüft; ungültige Strukturen erzeugen nun einen
+  sichtbaren Formatfehler statt eines Scheinerfolgs mit null Flugzeugen
+
 ## 3.4.0-3bit-dmasync.12-adsbfi – 2026-10-25
 
 - adsb.fi als dritte, separat auswählbare ADS-B-Quelle ergänzt; die beiden frei

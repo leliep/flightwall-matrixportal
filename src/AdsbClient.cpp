@@ -13,6 +13,11 @@ AdsbResult AdsbClient::fetch(const ProcessingConfig& config) {
   HTTPClient http;
   WiFiClient plainClient;
   WiFiClientSecure secureClient;
+  // ArduinoJson reads HTTPClient's underlying stream directly. HTTP/1.1
+  // chunk markers would otherwise be exposed to the JSON parser by services
+  // such as adsb.fi/Cloudflare. HTTP/1.0 requests a connection-delimited body
+  // without transfer-encoding chunks and keeps parsing memory-efficient.
+  http.useHTTP10(true);
   http.setConnectTimeout(4000);
   http.setTimeout(6000);
   const bool secure = url_.startsWith("https://");
@@ -61,6 +66,14 @@ AdsbResult AdsbClient::fetch(const ProcessingConfig& config) {
     return result;
   }
 
+  const bool hasReadsbAircraft = document["aircraft"].is<JsonArrayConst>();
+  const bool hasAdsbFiAircraft = document["ac"].is<JsonArrayConst>();
+  if (!hasReadsbAircraft && !hasAdsbFiAircraft) {
+    result.error = "ADS-B JSON: Format";
+    http.end();
+    return result;
+  }
+
   // readsb exposes `now` as a JSON floating-point Unix timestamp. Reading it
   // with an unsigned default can fail ArduinoJson's type check and yield zero.
   double feedTimestamp = document["now"].isNull()
@@ -69,7 +82,7 @@ AdsbResult AdsbClient::fetch(const ProcessingConfig& config) {
   // readsb uses seconds, while the adsb.fi v3 API uses milliseconds.
   if (feedTimestamp > 100000000000.0) feedTimestamp /= 1000.0;
   result.feedTimestamp = static_cast<uint32_t>(feedTimestamp);
-  JsonArrayConst rawAircraft = !document["aircraft"].isNull()
+  JsonArrayConst rawAircraft = hasReadsbAircraft
                                    ? document["aircraft"].as<JsonArrayConst>()
                                    : document["ac"].as<JsonArrayConst>();
   result.receivedAircraft = rawAircraft.size();
