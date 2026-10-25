@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.4.0-3bit-dmasync.11 – 2026-10-25
+
+- Flughafencodes `ALA`, `CIT`, `CKZ`, `CUN`, `KGF`, `MCT`, `PVR`, `TMP`,
+  `TSR` und `TXL` ergänzt
+- Betreiber-/Airline-Codes `AGR`, `ATJ`, `AUH`, `AWH`, `AXY`, `HGO`, `HOP`,
+  `LHB`, `OMA`, `OSY`, `PWF`, `ROT`, `RSX`, `TAH`, `VIR` und `VND` ergänzt
+- Generierte Firmwaretabellen aus den aktualisierten Quelldaten neu erstellt
+
 ## 3.4.0-3bit-dmasync.10 – 2026-10-22
 
 - Airline-/Betreibercodes `AAB`, `AWU`, `DCS`, `LUX`, `MAS`, `MMD` und `RES`

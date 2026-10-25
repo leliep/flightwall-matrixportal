@@ -34,8 +34,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.4.0-3bit-dmasync.10";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-22 airline lookup update";
+constexpr char APP_VERSION[] = "3.4.0-3bit-dmasync.11";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-25 lookup table update";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
