@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <vector>
 
 struct RouteResult {
   String routeCodes;
@@ -16,6 +17,17 @@ struct RouteResult {
   bool found() const { return !origin.isEmpty() || !destination.isEmpty(); }
 };
 
+struct RouteCacheEntryInfo {
+  String callsign;
+  String routeCodes;
+  uint32_t updated = 0;
+  bool found = false;
+  bool inMemory = false;
+  bool persistent = false;
+  bool pendingWrite = false;
+  bool expired = false;
+};
+
 class RouteClient {
  public:
   RouteClient() = default;
@@ -26,6 +38,9 @@ class RouteClient {
   const String& lastError() const { return lastError_; }
   bool hasPendingWrites() const;
   void flushPendingWrites();
+  std::vector<RouteCacheEntryInfo> cacheEntries(uint32_t now) const;
+  bool removeCacheEntry(const String& callsign);
+  void clearCache();
 
  private:
   struct MemoryCacheEntry {

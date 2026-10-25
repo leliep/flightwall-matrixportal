@@ -215,6 +215,13 @@ zwischengespeichert. Die persistente Speicherung erfolgt gesammelt, sobald
 kein Flugzeug angezeigt wird oder die Nachtruhe aktiv ist. Während des kurzen
 Flash-Schreibvorgangs wird die Matrix kontrolliert dunkel geschaltet, um
 zufällige Lichtpunkte durch Flashzugriffe des ESP32-S3 zu vermeiden.
+Die Konfigurationsseite listet den Routencache mit Callsign, Route, Alter,
+Speicherort und Ablaufzustand auf. Einträge können einzeln gelöscht oder sofort
+neu abgefragt werden; zusätzlich kann der gesamte Cache geleert werden.
+Standardrouten gelten sieben Tage, negative Ergebnisse eine Stunde und
+erkannte Einsatzrufzeichen 30 Minuten. Beim Lesen mehrfach vorhandener
+Alteinträge wird der jüngste gültige Eintrag verwendet; neue Schreibvorgänge
+entfernen Dubletten desselben Callsigns.
 Die beiden vollständigen lokalen ADS-B-URLs und der Routendienst lassen sich
 ändern. Für adsb.fi erzeugt die Firmware die URL aus dem gespeicherten Standort
 und einem in nautische Meilen umgerechneten Radius automatisch. Dieser umfasst

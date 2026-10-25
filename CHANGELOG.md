@@ -1,5 +1,19 @@
 # Changelog
 
+## 3.4.0-3bit-dmasync.14-routecache – 2026-10-25
+
+- Routencache-Verwaltung in der Konfigurationsseite mit Callsign, Route, Alter,
+  Speicherort und Zustand ergänzt
+- einzelne Einträge können gelöscht oder sofort neu abgefragt werden; zusätzlich
+  lässt sich der gesamte RAM- und Flash-Routencache mit Bestätigung leeren
+- gefundene Standardrouten gelten sieben Tage, negative Ergebnisse eine Stunde
+  und erkannte militärische beziehungsweise behördliche Einsatzrufzeichen
+  30 Minuten
+- Flash-Dubletten desselben Callsigns werden beim Schreiben entfernt; beim
+  Lesen gewinnt stets der jüngste gültige Eintrag
+- Cacheänderungen erfolgen mit kontrolliert dunkel geschalteter Matrix; die
+  automatische Statusaktualisierung liest die Flash-Cachetabelle nicht erneut
+
 ## 3.4.0-3bit-dmasync.13-adsbfi – 2026-10-25
 
 - ADS-B-Abrufe auf HTTP/1.0 umgestellt, damit die von Cloudflare für adsb.fi

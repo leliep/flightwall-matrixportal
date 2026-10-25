@@ -34,8 +34,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.4.0-3bit-dmasync.13-adsbfi";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-25 adsb.fi chunk fix";
+constexpr char APP_VERSION[] = "3.4.0-3bit-dmasync.14-routecache";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-25 route cache management";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -2918,6 +2918,17 @@ void translateWebPageToEnglish(String &html) {
     {"Routenfehler", "Route error"}, {"Routencache wartet auf Flash", "Route cache pending flash write"},
     {"Empfangen / Kandidaten", "Received / candidates"}, {"Letzter Erfolg", "Last success"},
     {"Vertikalbewegung", "Vertical motion"}, {"Routenstatus", "Route status"}, {"Letzter ADS-B-Erfolg", "Last ADS-B success"},
+    {"Gefundene Routen gelten sieben Tage, negative Ergebnisse eine Stunde und erkannte Einsatzrufzeichen 30 Minuten. Der jüngste Eintrag eines Callsigns wird verwendet. Eine sofortige Neuabfrage ist nur für das aktuell beobachtete Flugzeug möglich.", "Found routes are valid for seven days, negative results for one hour, and recognised operational callsigns for 30 minutes. The newest entry for a callsign is used. Immediate refresh is available only for the currently observed aircraft."},
+    {"Gesamten Routencache wirklich löschen?", "Really clear the entire route cache?"},
+    {"Diesen Cacheeintrag löschen?", "Delete this cache entry?"},
+    {"Aktuelle Route neu laden", "Refresh current route"},
+    {"Gesamten Cache löschen", "Clear entire cache"},
+    {"Der Routencache ist leer.", "The route cache is empty."},
+    {"Routencache", "Route cache"}, {"Callsign", "Callsign"},
+    {"Alter", "Age"}, {"Speicher", "Storage"}, {"Aktionen", "Actions"},
+    {"Neu laden", "Refresh"}, {"Löschen", "Delete"},
+    {"nicht gefunden", "not found"}, {"gefunden", "found"},
+    {"wartet", "pending"}, {"abgelaufen", "expired"},
     {"Konfiguration", "Configuration"}, {"Standort / Blickrichtung", "Location / viewing direction"},
     {"Höhenfilter", "Altitude filter"}, {"Kleinflugzeugfilter", "Light aircraft filter"},
     {"Wetteranzeige", "Weather display"}, {"Übersetzungstabellen", "Translation tables"},
@@ -2976,7 +2987,7 @@ void translateWebPageToEnglish(String &html) {
 }
 
 
-String webPage() {
+String webPage(bool includeRouteCache = true) {
   FlightData statusFlight;
   String statusError;
   uint32_t statusUpdated = 0;
@@ -3001,14 +3012,14 @@ String webPage() {
   String html;
   // The complete configuration page is currently about 18 KiB. Reserving its
   // real size avoids several large heap reallocations while it is assembled.
-  html.reserve(20500);
+  html.reserve(includeRouteCache ? 28000 : 20500);
   html += F("<!doctype html><html lang='de'><head><meta charset='utf-8'>");
   html += F("<meta name='viewport' content='width=device-width,initial-scale=1'>");
   html += F("<title>FlightWall MatrixPortal</title><style>");
   html += F("body{font:16px system-ui;background:#10131a;color:#eef2ff;margin:auto;max-width:920px;padding:20px}");
   html += F("h1{font-size:1.5rem}fieldset{border:1px solid #445;border-radius:10px;margin:14px 0;padding:14px}");
   html += F("label{display:block;margin:12px 0}input[type=number],input[type=text],input[type=url],select{width:100%;box-sizing:border-box;padding:9px}");
-  html += F("button{background:#00bcd4;color:#001018;border:0;border-radius:8px;padding:12px 18px;font-weight:bold}");
+  html += F("button{background:#00bcd4;color:#001018;border:0;border-radius:8px;padding:12px 18px;font-weight:bold}.danger{background:#ff8597;color:#24050b}.smallButton{padding:7px 10px;font-size:.82rem}.inlineForm{display:inline;margin:0 4px 0 0}.cacheTable{width:100%;border-collapse:collapse}.cacheTable th,.cacheTable td{text-align:left;padding:8px 6px;border-bottom:1px solid #343d50;vertical-align:top}.cacheTable th{color:#aab;font-size:.8rem}.cacheActions{white-space:nowrap}");
   html += F(".status{display:grid;grid-template-columns:minmax(145px,42%) minmax(0,1fr);gap:7px 14px}.status span{color:#aab}.status b{overflow-wrap:anywhere}.statusNote{grid-column:1/-1;margin:2px 0 5px;line-height:1.35}.statusCards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.statusCard{background:#171c26;border:1px solid #343d50;border-radius:12px;padding:14px}.statusCard h3{margin:0 0 12px;font-size:1rem;color:#7ee7f0}.healthbar{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 14px}.pill{border-radius:999px;padding:7px 11px;font-size:.86rem;font-weight:700}.ok{background:#153b2b;color:#74e3aa}.warn{background:#493c16;color:#ffd166}.bad{background:#4a1f29;color:#ff8597}.off{background:#303541;color:#abb3c3}.wide{grid-column:1/-1}details summary{cursor:pointer;font-weight:700;color:#7ee7f0}details .status{margin-top:12px}@media(max-width:650px){body{padding:12px}.statusCards{grid-template-columns:1fr}.wide{grid-column:auto}.status{grid-template-columns:1fr}.status b{margin-bottom:7px}}.muted{color:#aab}</style></head><body>");
   html += F("<h1>FlightWall MatrixPortal ");
   html += APP_VERSION;
@@ -3385,6 +3396,61 @@ String webPage() {
   html += F("</b><span>Maximale Netzlaufzeiten</span><b>");
   html += networkPhaseTimingText();
   html += F("</b></div></details></div></div><form method='post' action='/restart' onsubmit=\"return confirm('ESP wirklich neu starten?')\"><p><button type='submit'>ESP neu starten</button></p></form></fieldset>");
+  if (includeRouteCache) {
+    const std::vector<RouteCacheEntryInfo> cacheEntries =
+        routeClient.cacheEntries(lastFeedTimestamp);
+    html += F("<fieldset id='routeCache'><legend>Routencache</legend><p class='muted'>Gefundene Routen gelten sieben Tage, negative Ergebnisse eine Stunde und erkannte Einsatzrufzeichen 30 Minuten. Der jüngste Eintrag eines Callsigns wird verwendet. Eine sofortige Neuabfrage ist nur für das aktuell beobachtete Flugzeug möglich.</p>");
+    if (routedFlight.length()) {
+      html += F("<form class='inlineForm' method='post' action='/route-cache/refresh'><input type='hidden' name='callsign' value='");
+      html += htmlEscape(routedFlight);
+      html += F("'><button type='submit'>Aktuelle Route neu laden</button></form>");
+    }
+    html += F("<form class='inlineForm' method='post' action='/route-cache/clear' onsubmit=\"return confirm('Gesamten Routencache wirklich löschen?')\"><button class='danger' type='submit'>Gesamten Cache löschen</button></form>");
+    if (cacheEntries.empty()) {
+      html += F("<p>Der Routencache ist leer.</p>");
+    } else {
+      html += F("<div style='overflow-x:auto'><table class='cacheTable'><thead><tr><th>Callsign</th><th>Route</th><th>Alter</th><th>Speicher</th><th>Aktionen</th></tr></thead><tbody>");
+      for (const RouteCacheEntryInfo& entry : cacheEntries) {
+        String age = "-";
+        if (lastFeedTimestamp && entry.updated && lastFeedTimestamp >= entry.updated) {
+          const uint32_t seconds = lastFeedTimestamp - entry.updated;
+          if (seconds < 3600U) age = String(seconds / 60U) + " min";
+          else if (seconds < 86400U) age = String(seconds / 3600U) + " h";
+          else age = String(seconds / 86400U) + " d";
+        }
+        String storage;
+        if (entry.inMemory) storage += "RAM";
+        if (entry.persistent) {
+          if (storage.length()) storage += " + ";
+          storage += "Flash";
+        }
+        if (entry.pendingWrite) storage += " / wartet";
+        if (entry.expired) storage += " / abgelaufen";
+        html += F("<tr><td><b>");
+        html += htmlEscape(entry.callsign);
+        html += F("</b></td><td>");
+        html += entry.found
+                    ? htmlEscape(entry.routeCodes.length()
+                                     ? entry.routeCodes : "gefunden")
+                    : "nicht gefunden";
+        html += F("</td><td>");
+        html += age;
+        html += F("</td><td>");
+        html += storage;
+        html += F("</td><td class='cacheActions'>");
+        if (entry.callsign == routedFlight) {
+          html += F("<form class='inlineForm' method='post' action='/route-cache/refresh'><input type='hidden' name='callsign' value='");
+          html += htmlEscape(entry.callsign);
+          html += F("'><button class='smallButton' type='submit'>Neu laden</button></form>");
+        }
+        html += F("<form class='inlineForm' method='post' action='/route-cache/delete' onsubmit=\"return confirm('Diesen Cacheeintrag löschen?')\"><input type='hidden' name='callsign' value='");
+        html += htmlEscape(entry.callsign);
+        html += F("'><button class='smallButton danger' type='submit'>Löschen</button></form></td></tr>");
+      }
+      html += F("</tbody></table></div>");
+    }
+    html += F("</fieldset>");
+  }
   html += F("<p><a href='/display'>Web-Display öffnen</a></p>");
   if (strlen(OTA_PASSWORD) >= 8) {
     html += F("<p><a href='/update'>Firmware drahtlos aktualisieren</a></p>");
@@ -3407,7 +3473,7 @@ String webPage() {
 
 
 void handleStatusFragment() {
-  String page = webPage();
+  String page = webPage(false);
   const String opening = "<div id='statusData'>";
   const String closing = "</div><form method='post' action='/restart'";
   const int start = page.indexOf(opening);
@@ -3592,6 +3658,88 @@ void handleWebSave() {
   applyWebSettings();
   webServer.sendHeader("Location", "/");
   webServer.send(303, "text/plain", uiText("Gespeichert", "Saved"));
+}
+
+
+String requestedRouteCacheCallsign() {
+  String callsign = webServer.arg("callsign");
+  callsign.trim();
+  callsign.toUpperCase();
+  if (callsign.isEmpty() || callsign.length() > 12) return "";
+  for (size_t index = 0; index < callsign.length(); ++index) {
+    if (!isAlphaNumeric(callsign[index])) return "";
+  }
+  return callsign;
+}
+
+
+void beginRouteCacheMutation() {
+  routeCacheWritePreparing = true;
+  vTaskDelay(pdMS_TO_TICKS(120));
+  routeCacheWriteInProgress = true;
+}
+
+
+void endRouteCacheMutation() {
+  routeCacheWriteInProgress = false;
+  routeCacheWritePreparing = false;
+}
+
+
+void redirectToRouteCache() {
+  webServer.sendHeader("Location", "/#routeCache");
+  webServer.send(303, "text/plain; charset=utf-8",
+                 uiText("Routencache aktualisiert", "Route cache updated"));
+}
+
+
+void handleRouteCacheDelete() {
+  const String callsign = requestedRouteCacheCallsign();
+  if (callsign.isEmpty()) {
+    webServer.send(400, "text/plain; charset=utf-8",
+                   uiText("Ungültiges Callsign", "Invalid callsign"));
+    return;
+  }
+  beginRouteCacheMutation();
+  routeClient.removeCacheEntry(callsign);
+  endRouteCacheMutation();
+  if (routedFlight == callsign) {
+    currentRoute = {};
+    currentRoute.status = "not_found";
+  }
+  redirectToRouteCache();
+}
+
+
+void handleRouteCacheRefresh() {
+  const String callsign = requestedRouteCacheCallsign();
+  if (callsign.isEmpty()) {
+    webServer.send(400, "text/plain; charset=utf-8",
+                   uiText("Ungültiges Callsign", "Invalid callsign"));
+    return;
+  }
+  if (routedFlight != callsign) {
+    webServer.send(409, "text/plain; charset=utf-8",
+                   uiText("Nur die aktuell beobachtete Route kann sofort neu geladen werden.",
+                          "Only the currently observed route can be refreshed immediately."));
+    return;
+  }
+  beginRouteCacheMutation();
+  routeClient.removeCacheEntry(callsign);
+  endRouteCacheMutation();
+  routedFlight = "";
+  currentRoute = {};
+  lastRouteAttempt = 0;
+  fetchLocalFlight();
+  redirectToRouteCache();
+}
+
+
+void handleRouteCacheClear() {
+  beginRouteCacheMutation();
+  routeClient.clearCache();
+  endRouteCacheMutation();
+  redirectToRouteCache();
 }
 
 
@@ -4216,6 +4364,9 @@ void startWebServer() {
     webServer.on("/save", HTTP_POST, handleWebSave);
     webServer.on("/test-adsb", HTTP_POST, handleAdsbTest);
     webServer.on("/test-route", HTTP_POST, handleRouteTest);
+    webServer.on("/route-cache/delete", HTTP_POST, handleRouteCacheDelete);
+    webServer.on("/route-cache/refresh", HTTP_POST, handleRouteCacheRefresh);
+    webServer.on("/route-cache/clear", HTTP_POST, handleRouteCacheClear);
     webServer.on("/test-emergency", HTTP_POST, handleEmergencyTest);
     webServer.on("/stop-emergency-test", HTTP_POST, handleStopEmergencyTest);
     webServer.on("/display-test", HTTP_POST, handleDisplayTest);

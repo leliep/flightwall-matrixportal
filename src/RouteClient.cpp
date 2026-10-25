@@ -5,13 +5,17 @@
 #include <Preferences.h>
 #include <WiFiClientSecure.h>
 
+#include <algorithm>
+
 #include "AirportNames.hpp"
+#include "CallsignClassifier.hpp"
 #include "UnknownCodes.hpp"
 
 namespace {
 constexpr size_t cacheSlots = 32;
-constexpr uint32_t positiveTtl = 30U * 24U * 60U * 60U;
-constexpr uint32_t negativeTtl = 6U * 60U * 60U;
+constexpr uint32_t positiveTtl = 7U * 24U * 60U * 60U;
+constexpr uint32_t negativeTtl = 60U * 60U;
+constexpr uint32_t specialTtl = 30U * 60U;
 
 String cacheKey(size_t slot) {
   char key[5];
@@ -35,6 +39,40 @@ String upperTrimmed(String value) {
   value.trim();
   value.toUpperCase();
   return value;
+}
+
+bool shortLivedCallsign(const String& callsign) {
+  return isGermanAirforceCallsign(callsign) ||
+         isMilitaryCallsign(callsign) || callsign.startsWith("BPO") ||
+         callsign.startsWith("POL") || callsign.startsWith("HBT") ||
+         callsign.startsWith("HUM") || callsign.startsWith("NRW") ||
+         callsign.startsWith("CHX");
+}
+
+uint32_t cacheTtl(const String& callsign, bool found) {
+  if (!found) return negativeTtl;
+  return shortLivedCallsign(callsign) ? specialTtl : positiveTtl;
+}
+
+bool cacheExpired(const String& callsign, bool found, uint32_t updated,
+                  uint32_t now) {
+  return !now || !updated || now - updated >= cacheTtl(callsign, found);
+}
+
+bool decodeCacheValue(const String& raw, String& callsign, uint32_t& updated,
+                      bool& found, RouteResult& route) {
+  const std::vector<String> fields = split(raw, '|');
+  if (fields.size() < 6 || fields[0].isEmpty()) return false;
+  callsign = fields[0];
+  updated = static_cast<uint32_t>(strtoul(fields[1].c_str(), nullptr, 10));
+  found = fields[2] == "1";
+  route.origin = fields[3];
+  route.destination = fields[4];
+  route.airlineCode = fields[5];
+  route.routeCodes = fields.size() >= 7
+                         ? fields[6]
+                         : route.origin + "-" + route.destination;
+  return true;
 }
 
 void fillNames(RouteResult& route) {
@@ -108,8 +146,10 @@ RouteResult RouteClient::readMemoryCache(const String& callsign,
                                          uint32_t now) {
   for (MemoryCacheEntry& entry : memoryCache_) {
     if (entry.callsign != callsign) continue;
-    const uint32_t ttl = entry.route.found() ? positiveTtl : negativeTtl;
-    if (now && entry.updated && now - entry.updated >= ttl) return {};
+    if (cacheExpired(callsign, entry.route.found(), entry.updated, now)) {
+      entry = {};
+      return {};
+    }
     RouteResult result = entry.route;
     result.status = result.found() ? "memory" : "not_found";
     return result;
@@ -151,45 +191,171 @@ void RouteClient::flushPendingWrites() {
   }
 }
 
-RouteResult RouteClient::readCache(const String& callsign, uint32_t now) {
+std::vector<RouteCacheEntryInfo> RouteClient::cacheEntries(uint32_t now) const {
+  std::vector<RouteCacheEntryInfo> entries;
+  entries.reserve(cacheSlots);
+
   Preferences preferences;
   preferences.begin("routecache", true);
   for (size_t slot = 0; slot < cacheSlots; ++slot) {
     const String raw = preferences.getString(cacheKey(slot).c_str(), "");
     if (raw.isEmpty()) continue;
-    const std::vector<String> fields = split(raw, '|');
-    if (fields.size() < 6 || fields[0] != callsign) continue;
-    const uint32_t updated = static_cast<uint32_t>(strtoul(fields[1].c_str(), nullptr, 10));
-    const bool found = fields[2] == "1";
-    const uint32_t ttl = found ? positiveTtl : negativeTtl;
-    if (!now || !updated || now - updated >= ttl) break;
-    RouteResult result;
-    result.origin = fields[3];
-    result.destination = fields[4];
-    result.airlineCode = fields[5];
-    result.routeCodes = fields.size() >= 7
-                            ? fields[6]
-                            : result.origin + "-" + result.destination;
-    result.status = found ? "cached" : "not_found";
-    fillNames(result);
-    preferences.end();
-    return result;
+    String callsign;
+    uint32_t updated = 0;
+    bool found = false;
+    RouteResult route;
+    if (!decodeCacheValue(raw, callsign, updated, found, route)) continue;
+    RouteCacheEntryInfo* target = nullptr;
+    for (RouteCacheEntryInfo& entry : entries) {
+      if (entry.callsign == callsign) {
+        target = &entry;
+        break;
+      }
+    }
+    if (target == nullptr) {
+      entries.push_back({});
+      target = &entries.back();
+      target->callsign = callsign;
+    }
+    target->persistent = true;
+    if (updated >= target->updated) {
+      target->updated = updated;
+      target->found = found;
+      target->routeCodes = route.routeCodes;
+      target->expired = cacheExpired(callsign, found, updated, now);
+    }
   }
   preferences.end();
-  return {};
+
+  for (const MemoryCacheEntry& memory : memoryCache_) {
+    if (memory.callsign.isEmpty()) continue;
+    RouteCacheEntryInfo* target = nullptr;
+    for (RouteCacheEntryInfo& entry : entries) {
+      if (entry.callsign == memory.callsign) {
+        target = &entry;
+        break;
+      }
+    }
+    if (target == nullptr) {
+      entries.push_back({});
+      target = &entries.back();
+      target->callsign = memory.callsign;
+    }
+    target->inMemory = true;
+    target->pendingWrite = target->pendingWrite || memory.pendingWrite;
+    if (memory.updated >= target->updated) {
+      target->updated = memory.updated;
+      target->found = memory.route.found();
+      target->routeCodes = memory.route.routeCodes;
+      target->expired = cacheExpired(memory.callsign, memory.route.found(),
+                                     memory.updated, now);
+    }
+  }
+
+  std::sort(entries.begin(), entries.end(),
+            [](const RouteCacheEntryInfo& left,
+               const RouteCacheEntryInfo& right) {
+              return left.updated > right.updated;
+            });
+  return entries;
+}
+
+bool RouteClient::removeCacheEntry(const String& rawCallsign) {
+  const String callsign = upperTrimmed(rawCallsign);
+  if (callsign.isEmpty()) return false;
+  bool removed = false;
+  for (MemoryCacheEntry& entry : memoryCache_) {
+    if (entry.callsign != callsign) continue;
+    entry = {};
+    removed = true;
+  }
+
+  Preferences preferences;
+  if (!preferences.begin("routecache", false)) return removed;
+  for (size_t slot = 0; slot < cacheSlots; ++slot) {
+    const String key = cacheKey(slot);
+    const String raw = preferences.getString(key.c_str(), "");
+    String storedCallsign;
+    uint32_t updated = 0;
+    bool found = false;
+    RouteResult route;
+    if (decodeCacheValue(raw, storedCallsign, updated, found, route) &&
+        storedCallsign == callsign) {
+      preferences.remove(key.c_str());
+      removed = true;
+    }
+  }
+  preferences.end();
+  return removed;
+}
+
+void RouteClient::clearCache() {
+  for (MemoryCacheEntry& entry : memoryCache_) entry = {};
+  nextMemorySlot_ = 0;
+  Preferences preferences;
+  if (!preferences.begin("routecache", false)) return;
+  preferences.clear();
+  preferences.end();
+}
+
+RouteResult RouteClient::readCache(const String& callsign, uint32_t now) {
+  Preferences preferences;
+  preferences.begin("routecache", true);
+  bool haveResult = false;
+  uint32_t newest = 0;
+  bool newestFound = false;
+  RouteResult newestRoute;
+  for (size_t slot = 0; slot < cacheSlots; ++slot) {
+    const String raw = preferences.getString(cacheKey(slot).c_str(), "");
+    if (raw.isEmpty()) continue;
+    String storedCallsign;
+    uint32_t updated = 0;
+    bool found = false;
+    RouteResult route;
+    if (!decodeCacheValue(raw, storedCallsign, updated, found, route) ||
+        storedCallsign != callsign ||
+        cacheExpired(callsign, found, updated, now) ||
+        (haveResult && updated <= newest))
+      continue;
+    haveResult = true;
+    newest = updated;
+    newestFound = found;
+    newestRoute = route;
+  }
+  preferences.end();
+  if (!haveResult) return {};
+  newestRoute.status = newestFound ? "cached" : "not_found";
+  fillNames(newestRoute);
+  return newestRoute;
 }
 
 void RouteClient::writeCache(const String& callsign, const RouteResult& route,
                              uint32_t now) {
   Preferences preferences;
   if (!preferences.begin("routecache", false)) return;
-  const uint8_t slot = preferences.getUChar("next", 0) % cacheSlots;
+  int targetSlot = -1;
+  for (size_t slot = 0; slot < cacheSlots; ++slot) {
+    const String key = cacheKey(slot);
+    const String raw = preferences.getString(key.c_str(), "");
+    String storedCallsign;
+    uint32_t updated = 0;
+    bool found = false;
+    RouteResult storedRoute;
+    if (!decodeCacheValue(raw, storedCallsign, updated, found, storedRoute) ||
+        storedCallsign != callsign)
+      continue;
+    if (targetSlot < 0) targetSlot = static_cast<int>(slot);
+    else preferences.remove(key.c_str());
+  }
+  if (targetSlot < 0) {
+    targetSlot = preferences.getUChar("next", 0) % cacheSlots;
+    preferences.putUChar("next", (targetSlot + 1) % cacheSlots);
+  }
   const String value = callsign + "|" + String(now) + "|" +
                        (route.found() ? "1" : "0") + "|" + route.origin +
                        "|" + route.destination + "|" + route.airlineCode +
                        "|" + route.routeCodes;
-  preferences.putString(cacheKey(slot).c_str(), value);
-  preferences.putUChar("next", (slot + 1) % cacheSlots);
+  preferences.putString(cacheKey(targetSlot).c_str(), value);
   preferences.end();
 }
 
