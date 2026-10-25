@@ -2,6 +2,8 @@
 
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
+#include <WiFiClient.h>
+#include <WiFiClientSecure.h>
 
 #include <algorithm>
 #include <utility>
@@ -9,12 +11,27 @@
 AdsbResult AdsbClient::fetch(const ProcessingConfig& config) {
   AdsbResult result;
   HTTPClient http;
+  WiFiClient plainClient;
+  WiFiClientSecure secureClient;
   http.setConnectTimeout(4000);
   http.setTimeout(6000);
-  if (!http.begin(url_)) {
+  const bool secure = url_.startsWith("https://");
+  if (secure) {
+    // The controller may not have a trusted wall clock before the first ADS-B
+    // response. The connection is encrypted, but the certificate cannot be
+    // validated reliably at that point.
+    secureClient.setInsecure();
+  }
+  const bool began = secure ? http.begin(secureClient, url_)
+                            : http.begin(plainClient, url_);
+  if (!began) {
     result.error = "Ungültige ADS-B-Adresse";
     return result;
   }
+
+  http.addHeader("Accept", "application/json");
+  http.addHeader("User-Agent",
+                 "FlightWall-MatrixPortal/3 (+https://github.com/leliep/flightwall-matrixportal)");
 
   const int status = http.GET();
   if (status != HTTP_CODE_OK) {
@@ -30,7 +47,10 @@ AdsbResult AdsbClient::fetch(const ProcessingConfig& config) {
                           "lat",       "lon",       "alt_baro",  "alt_geom",
                           "gs",        "track",     "baro_rate", "geom_rate",
                           "seen",      "seen_pos", "squawk"};
-  for (const char* field : fields) filter["aircraft"][0][field] = true;
+  for (const char* field : fields) {
+    filter["aircraft"][0][field] = true;
+    filter["ac"][0][field] = true;
+  }
 
   JsonDocument document;
   DeserializationError error = deserializeJson(
@@ -43,11 +63,15 @@ AdsbResult AdsbClient::fetch(const ProcessingConfig& config) {
 
   // readsb exposes `now` as a JSON floating-point Unix timestamp. Reading it
   // with an unsigned default can fail ArduinoJson's type check and yield zero.
-  result.feedTimestamp =
-      document["now"].isNull()
-          ? 0U
-          : static_cast<uint32_t>(document["now"].as<double>());
-  JsonArrayConst rawAircraft = document["aircraft"].as<JsonArrayConst>();
+  double feedTimestamp = document["now"].isNull()
+                             ? 0.0
+                             : document["now"].as<double>();
+  // readsb uses seconds, while the adsb.fi v3 API uses milliseconds.
+  if (feedTimestamp > 100000000000.0) feedTimestamp /= 1000.0;
+  result.feedTimestamp = static_cast<uint32_t>(feedTimestamp);
+  JsonArrayConst rawAircraft = !document["aircraft"].isNull()
+                                   ? document["aircraft"].as<JsonArrayConst>()
+                                   : document["ac"].as<JsonArrayConst>();
   result.receivedAircraft = rawAircraft.size();
   result.candidates.reserve(std::min<size_t>(rawAircraft.size(), 64));
   for (JsonObjectConst raw : rawAircraft) {

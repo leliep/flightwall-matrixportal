@@ -34,8 +34,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.4.0-3bit-dmasync.11";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-25 lookup table update";
+constexpr char APP_VERSION[] = "3.4.0-3bit-dmasync.12-adsbfi";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-25 adsb.fi source branch";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -94,6 +94,7 @@ constexpr float ZENITH_HYSTERESIS_DEG = 2.0f;
 
 constexpr char DEFAULT_ADSB_URL[] =
     "http://t-eddl146.fritz.box:8080/data/aircraft.json";
+constexpr char ADSB_FI_BASE_URL[] = "https://opendata.adsb.fi/api/v3";
 constexpr char DEFAULT_ROUTE_URL[] = "https://adsb.im/api/0/routeset";
 constexpr double DEFAULT_SITE_LATITUDE = 51.122500;
 constexpr double DEFAULT_SITE_LONGITUDE = 6.839444;
@@ -2307,8 +2308,28 @@ String httpFailureText(int status) {
 }
 
 
-const String &activeAdsbUrl() {
+String adsbFiUrl() {
+  // adsb.fi expects nautical miles. Fetch at least the complete doubled
+  // radius used for special aircraft, with the user's 10 NM example as the
+  // practical lower bound.
+  const float requiredKm = max(displayRadiusKm * 2.0F, 18.52F);
+  const uint16_t radiusNm = constrain(
+      static_cast<uint16_t>(ceilf(requiredKm / 1.852F)),
+      static_cast<uint16_t>(10), static_cast<uint16_t>(250));
+  return String(ADSB_FI_BASE_URL) + "/lat/" + String(siteLatitude, 6) +
+         "/lon/" + String(siteLongitude, 6) + "/dist/" + String(radiusNm);
+}
+
+
+String activeAdsbUrl() {
+  if (activeAdsbSource == 2) return adsbFiUrl();
   return activeAdsbSource == 1 ? adsbUrl2 : adsbUrl1;
+}
+
+
+String activeAdsbSourceName() {
+  if (activeAdsbSource == 2) return "adsb.fi";
+  return String(uiText("Quelle ", "Source ")) + String(activeAdsbSource + 1);
 }
 
 
@@ -2843,7 +2864,7 @@ void translateWebPageToEnglish(String &html) {
     {"lang='de'", "lang='en'"},
     {"lang=\"de\"", "lang=\"en\""},
     {"ADS-B-Adresse Quelle", "ADS-B address source"},
-    {"Nur die ausgewählte Quelle wird abgefragt. Quelle 2 darf unkonfiguriert bleiben.", "Only the selected source is queried. Source 2 may remain unconfigured."},
+    {"Nur die ausgewählte Quelle wird abgefragt. Quelle 2 darf unkonfiguriert bleiben. Der Radius von adsb.fi wird automatisch aus dem Anzeigeradius berechnet.", "Only the selected source is queried. Source 2 may remain unconfigured. The adsb.fi radius is calculated automatically from the display radius."},
     {"Regen wird für die Anzeige von cm in mm umgerechnet. Ein leeres Passwortfeld behält das gespeicherte Passwort bei.", "Rain is converted from cm to mm for display. An empty password field keeps the saved password."},
     {"Sprache / Language", "Language / Sprache"},
     {"Deutsch", "German"},
@@ -2861,6 +2882,8 @@ void translateWebPageToEnglish(String &html) {
     {"Etwa 23 Sekunden: Matrix-Prüfbilder und alle Typensymbole mit Bedeutung.", "About 23 seconds: matrix test patterns and all type symbols with their meaning."},
     {"Flugzeugdaten", "Aircraft data"}, {"Aktive ADS-B-Quelle", "Active ADS-B source"},
     {"Quelle 1", "Source 1"}, {"Quelle 2", "Source 2"},
+    {"Externe Quelle", "External source"},
+    {"adsb.fi (externe Quelle)", "adsb.fi (external source)"},
     {"Breitengrad", "Latitude"}, {"Längengrad", "Longitude"}, {"Blickrichtung (Grad)", "Viewing direction (degrees)"},
     {"Sport- und Kleinflugzeuge ausblenden", "Hide sport and light aircraft"},
     {"Flugzeuge oberhalb der Maximalhöhe ausblenden", "Hide aircraft above maximum altitude"},
@@ -3019,11 +3042,13 @@ String webPage() {
   html += selected(activeAdsbSource == 0);
   html += F(">Quelle 1</option><option value='2'");
   html += selected(activeAdsbSource == 1);
-  html += F(">Quelle 2</option></select></label><label>ADS-B-Adresse Quelle 1<input type='url' name='adsbUrl1' maxlength='180' value='");
+  html += F(">Quelle 2</option><option value='3'");
+  html += selected(activeAdsbSource == 2);
+  html += F(">adsb.fi (externe Quelle)</option></select></label><label>ADS-B-Adresse Quelle 1<input type='url' name='adsbUrl1' maxlength='180' value='");
   html += htmlEscape(adsbUrl1);
   html += F("'></label><label>ADS-B-Adresse Quelle 2<input type='url' name='adsbUrl2' maxlength='180' value='");
   html += htmlEscape(adsbUrl2);
-  html += F("' placeholder='http://zweiter-empfaenger/data/aircraft.json'></label><p class='muted'>Nur die ausgewählte Quelle wird abgefragt. Quelle 2 darf unkonfiguriert bleiben.</p><label>Breitengrad<input type='number' name='siteLat' min='-90' max='90' step='0.000001' value='");
+  html += F("' placeholder='http://zweiter-empfaenger/data/aircraft.json'></label><p class='muted'>Nur die ausgewählte Quelle wird abgefragt. Quelle 2 darf unkonfiguriert bleiben. Der Radius von adsb.fi wird automatisch aus dem Anzeigeradius berechnet. Daten: <a href='https://adsb.fi/' target='_blank' rel='noopener'>adsb.fi</a>.</p><label>Breitengrad<input type='number' name='siteLat' min='-90' max='90' step='0.000001' value='");
   html += String(siteLatitude, 6);
   html += F("'></label><label>Längengrad<input type='number' name='siteLon' min='-180' max='180' step='0.000001' value='");
   html += String(siteLongitude, 6);
@@ -3238,7 +3263,7 @@ String webPage() {
   html += F("</b><span>Routencache wartet auf Flash</span><b>");
   html += routeClient.hasPendingWrites() ? "ja" : "nein";
   html += F("</b><span>Aktive ADS-B-Quelle</span><b>");
-  html += "Quelle " + String(activeAdsbSource + 1);
+  html += activeAdsbSourceName();
   html += F("</b><span>Empfangen / Kandidaten</span><b>");
   html += String(lastReceivedAircraft) + " / " + String(lastCandidateAircraft);
   html += F("</b><span>Letzter Erfolg</span><b>");
@@ -3262,6 +3287,8 @@ String webPage() {
   html += htmlEscape(adsbUrl1);
   html += F("</b><span>ADS-B-Quelle 2</span><b>");
   html += adsbUrl2.length() ? htmlEscape(adsbUrl2) : "nicht konfiguriert";
+  html += F("</b><span>ADS-B-Quelle 3</span><b>");
+  html += htmlEscape(adsbFiUrl());
   html += F("</b><span>Letzter Versuch</span><b>");
   html += ageText(lastAdsbAttempt);
   html += F("</b><span>Anzeige aktualisiert</span><b>");
@@ -3452,10 +3479,10 @@ void applyWebSettings() {
     requestedAdsbUrl2.trim();
     if (requestedAdsbUrl2.isEmpty() || requestedAdsbUrl2.startsWith("http://") ||
         requestedAdsbUrl2.startsWith("https://")) adsbUrl2 = requestedAdsbUrl2;
-    const uint8_t requestedAdsbSource =
-        webServer.arg("activeAdsbSource").toInt() == 2 ? 1 : 0;
-    activeAdsbSource = requestedAdsbSource == 1 && adsbUrl2.length()
-                           ? 1 : 0;
+    const int requestedAdsbSource =
+        constrain(webServer.arg("activeAdsbSource").toInt(), 1, 3) - 1;
+    activeAdsbSource = requestedAdsbSource == 1 && !adsbUrl2.length()
+                           ? 0 : requestedAdsbSource;
     String requestedRouteUrl = webServer.arg("routeUrl");
     requestedRouteUrl.trim();
     if (requestedRouteUrl.startsWith("http://") ||
@@ -3813,6 +3840,8 @@ void handleStatusApi() {
       ",\"adsb_url\":\"" + jsonEscape(activeAdsbUrl()) + "\"" +
       ",\"adsb_url_1\":\"" + jsonEscape(adsbUrl1) + "\"" +
       ",\"adsb_url_2\":\"" + jsonEscape(adsbUrl2) + "\"" +
+      ",\"adsb_url_3\":\"" + jsonEscape(adsbFiUrl()) + "\"" +
+      ",\"adsb_source_name\":\"" + jsonEscape(activeAdsbSourceName()) + "\"" +
       ",\"active_adsb_source\":" + String(activeAdsbSource + 1) +
       ",\"site_latitude\":" + String(siteLatitude, 6) +
       ",\"site_longitude\":" + String(siteLongitude, 6) +
@@ -4419,7 +4448,7 @@ void setup() {
   adsbUrl1 = preferences.getString("adsbUrl", DEFAULT_ADSB_URL);
   adsbUrl2 = preferences.getString("adsbUrl2", "");
   activeAdsbSource = preferences.getUChar("adsbActive", 0);
-  if (activeAdsbSource > 1 || (activeAdsbSource == 1 && !adsbUrl2.length()))
+  if (activeAdsbSource > 2 || (activeAdsbSource == 1 && !adsbUrl2.length()))
     activeAdsbSource = 0;
   routeUrl = preferences.getString("routeUrl", DEFAULT_ROUTE_URL);
   siteLatitude = preferences.getDouble("siteLat", DEFAULT_SITE_LATITUDE);

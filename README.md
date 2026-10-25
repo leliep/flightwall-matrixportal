@@ -175,8 +175,9 @@ Geschwindigkeit, CPA, Steig-/Sinktendenz und Blickrichtung. Die Daten werden
 automatisch aktualisiert.
 
 Konfigurierbar sind Display ein/aus, automatische oder manuelle Helligkeit,
-Lux-Schwellen, lokaler Anzeigeradius, Standort, Blickrichtung, zwei ADS-B-Quellen
-mit Auswahl der aktiven Quelle,
+Lux-Schwellen, lokaler Anzeigeradius, Standort, Blickrichtung, zwei frei
+konfigurierbare lokale ADS-B-Quellen und die externe Quelle adsb.fi mit Auswahl
+der aktiven Quelle,
 Routendienst, Kleinflugzeug- und Höhenfilter sowie eine tägliche Nachtruhe. Der Zeitraum
 darf über Mitternacht reichen, beispielsweise von 23:55 bis 05:55. Während
 dieser Zeit bleibt die Matrix einschließlich Betriebs-Pixel vollständig dunkel;
@@ -214,12 +215,22 @@ zwischengespeichert. Die persistente Speicherung erfolgt gesammelt, sobald
 kein Flugzeug angezeigt wird oder die Nachtruhe aktiv ist. Während des kurzen
 Flash-Schreibvorgangs wird die Matrix kontrolliert dunkel geschaltet, um
 zufällige Lichtpunkte durch Flashzugriffe des ESP32-S3 zu vermeiden.
-Die beiden vollständigen ADS-B-URLs und der Routendienst lassen sich ändern.
-Nur die ausgewählte ADS-B-Quelle wird abgefragt und direkt getestet. Die sieben
+Die beiden vollständigen lokalen ADS-B-URLs und der Routendienst lassen sich
+ändern. Für adsb.fi erzeugt die Firmware die URL aus dem gespeicherten Standort
+und einem in nautische Meilen umgerechneten Radius automatisch. Dieser umfasst
+mindestens den doppelten Anzeigeradius für Special Types. Die Formate
+`aircraft`/Sekunden der lokalen readsb-Quellen und `ac`/Millisekunden der
+adsb.fi-v3-API werden intern vereinheitlicht. Nur die ausgewählte ADS-B-Quelle
+wird abgefragt und direkt getestet. Die sieben
 Anzeigeseiten können einzeln aktiviert, frei sortiert und mit einer eigenen
 Dauer versehen werden. Sanfte Übergänge sind optional. Das Webinterface ist
 für ein vertrauenswürdiges lokales WLAN gedacht und hat derzeit keine eigene
 Anmeldung.
+
+Die öffentliche [adsb.fi Open Data API](https://adsb.fi/) wird ausschließlich
+bei Auswahl der externen Quelle verwendet. Sie ist für persönliche,
+nichtkommerzielle Nutzung vorgesehen und auf eine Anfrage pro Sekunde begrenzt;
+FlightWall fragt regulär nur alle fünf Sekunden ab.
 
 Der Displaytest im Webinterface prüft die gesamte Matrix für jeweils kurze
 Zeit mit Rot, Grün, Blau, Weiß, einem Pixelraster, geometrischen Linien, Text

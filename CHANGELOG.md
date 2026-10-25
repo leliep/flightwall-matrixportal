@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.4.0-3bit-dmasync.12-adsbfi – 2026-10-25
+
+- adsb.fi als dritte, separat auswählbare ADS-B-Quelle ergänzt; die beiden frei
+  konfigurierbaren lokalen Empfängerplätze bleiben erhalten
+- HTTPS-Abruf mit eindeutiger FlightWall-Kennung und Unterstützung des
+  adsb.fi-v3-Formats (`ac`, Zeitstempel in Millisekunden) ergänzt
+- externe Abfrage-URL wird automatisch aus Standort und dem für Special Types
+  benötigten doppelten Anzeigeradius erzeugt
+- aktive Quelle und erzeugte adsb.fi-URL in Statusseite und Status-API ergänzt
+- erforderliche adsb.fi-Quellenangabe in Webinterface und README aufgenommen
+- Flughafencodes `DNZ` und `YYR` sowie Betreiber-Codes `AMB`, `DAG` und `PTN`
+  aus der Merkliste ergänzt
+
 ## 3.4.0-3bit-dmasync.11 – 2026-10-25
 
 - Flughafencodes `ALA`, `CIT`, `CKZ`, `CUN`, `KGF`, `MCT`, `PVR`, `TMP`,
