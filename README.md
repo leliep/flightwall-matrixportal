@@ -1,419 +1,533 @@
 # FlightWall MatrixPortal
 
-ESP32-S3-Firmware für zwei horizontal verkettete 64×32-HUB75-Panels. Das
-Adafruit MatrixPortal S3 liest ADS-B-Daten direkt ein, wählt das relevante
-Flugzeug aus, ergänzt Route und Namen und steuert die 128×32-Pixel-Anzeige.
-Ein separater FlightMatrixServer ist nicht mehr erforderlich.
-
-## Anzeige im Betrieb
+FlightWall MatrixPortal macht aus einem Adafruit MatrixPortal S3 und zwei
+HUB75-Panels eine eigenständige Flugzeuganzeige. Der ESP32-S3 liest ADS-B-Daten
+direkt ein, wählt das relevanteste Flugzeug aus, ergänzt Route sowie Klartexte
+und steuert eine 128×32-Pixel-RGB-Matrix. Ein Raspberry Pi oder separater
+FlightMatrixServer ist für den Betrieb nicht erforderlich.
 
 ![FlightWall MatrixPortal mit aktuellen Flugdaten](IMG_4482.png)
 
-*Die montierte 128×32-Pixel-Matrix mit Flugnummer, Flugzeugtyp, Airline und
-aktuellen Flugdaten.*
+## Aktueller Stand
 
-## Version 3.3.4
-
-- direkte readsb-/dump1090-Datenquelle (`aircraft.json`)
-- lokale Flugzeugauswahl mit CPA, Kleinflugzeug- und Höhenfilter
-- doppelter Erfassungsradius für Special Types
-- Routenabfrage über adsb.im mit lokalem Cache
-- integrierte Flughafen- und Airline-Übersetzungstabellen
-- HUB75-Ausgabe mit 2 Bit Farbtiefe und drei Helligkeitsstufen
-- Dual-Core-Betrieb: Netzwerk und Webserver auf Core 0, Display und Sensorik
-  auf Core 1
-- Webinterface unter `http://matrixportal.local`
-- BH1750-Helligkeitsautomatik mit manuellem Fallback
-- MQTT-Wetterseite mit Windrichtung, Windgeschwindigkeit, Böen und Regenmenge
-- Bedienung über die UP- und DOWN-Tasten
-- dauerhaft gespeicherte Einstellungen
-- Diagnose für WLAN, DNS und HTTP
-- Transponder-Notfallcodes 7500, 7600 und 7700 mit höchster Priorität,
-  eigener Alarmseite und Rotation mehrerer betroffener Flugzeuge
-
-### Transponder-Notfälle
-
-Die Firmware erkennt die Squawk-Codes `7700` (Emergency), `7600` (Radio) und
-`7500` (Hijack) bereits beim Einlesen der ADS-B-Daten. Betroffene Flugzeuge
-haben Vorrang vor allen normalen Zielen und umgehen Anzeigeradius,
-Special-Type-Radius, Maximalhöhe sowie Kleinflugzeugfilter. Die Reichweite ist
-damit nur noch durch die aktive ADS-B-Quelle begrenzt.
-
-Vor den konfigurierten Flugzeugseiten erscheint automatisch eine zusätzliche,
-nicht abschaltbare Alarmseite mit Callsign beziehungsweise ICAO-Adresse,
-Transpondercode, Bedeutung sowie – sofern verfügbar – Entfernung und Höhe.
-Sind mehrere Notfallflugzeuge gleichzeitig aktuell, zeigt die Matrix für jedes
-Flugzeug zuerst die Alarmseite und danach einmal den konfigurierten
-Seitenzyklus; anschließend wird zum nächsten Flugzeug gewechselt.
-
-Die Konfigurationsseite enthält einen zeitlich begrenzten Notfalltest für einen
-bis drei simulierte Flugzeuge. Er verändert weder die ADS-B-Daten noch die
-gespeicherten Einstellungen. Notfallstatus, Squawk, Bedeutung und Position in
-der Wechselreihenfolge stehen außerdem im Web-Display, in der Statusseite sowie
-unter `/api/display` und `/api/status` bereit. Nachtruhe, ausgeschaltetes
-Display, Displaytest und OTA-Sicherheitszustände behalten ihren Vorrang.
-
-## Installation
-
-1. VS Code und die Erweiterung **PlatformIO IDE** installieren.
-2. Dieses Verzeichnis in VS Code öffnen.
-3. `include/secrets.h.example` nach `include/secrets.h` kopieren.
-4. WLAN-Name und Passwort in `include/secrets.h` eintragen.
-5. **PlatformIO: Upload** ausführen.
-6. Optional den seriellen Monitor mit 115200 Baud öffnen.
-
-`include/secrets.h` wird durch `.gitignore` vom Repository ausgeschlossen.
-
-## LED-Matrix und Ansteuerung
-
-### Verwendeter Aufbau
-
-| Komponente | Ausführung |
+| Merkmal | Stand |
 |---|---|
-| Controller | Adafruit MatrixPortal S3 mit ESP32-S3 |
-| LED-Panels | 2 × RGB-HUB75, jeweils 64 × 32 Pixel |
-| Gesamtauflösung | 128 × 32 Pixel |
-| Anordnung | horizontal, Panel 1 links und Panel 2 rechts |
-| Verkettung | HUB75-OUT des ersten Panels an HUB75-IN des zweiten Panels |
-| Scanverfahren | 1/16-Scan mit vier Adressleitungen A bis D |
-| Bibliothek | Adafruit Protomatter 1.7.1 und Adafruit GFX 1.12.6 |
-| Farbtiefe | 2 Bit pro Farbkanal |
-| Bildausgabe | doppelter Bildpuffer; sichtbarer Pufferwechsel mit `matrix.show()` |
+| Firmware | `3.4.0-3bit-dmasync.15-looproutes` |
+| Controller | Adafruit MatrixPortal S3 / ESP32-S3 |
+| Anzeige | 2 × 64×32 HUB75, horizontal verkettet |
+| Gesamtauflösung | 128×32 Pixel |
+| Farbtiefe | 3 Bit je Farbkanal |
+| Framework | Arduino über PlatformIO |
+| Bedienoberfläche | Deutsch und Englisch |
+| Aktualisierung | USB, Web-OTA oder PlatformIO-OTA |
+| Lizenz | MIT |
 
-Die beiden Panels verhalten sich für die Firmware wie eine einzige
-128 × 32-Pixel-Fläche. Der erste Pixelbereich reicht von `x=0` bis `x=63`,
-der zweite von `x=64` bis `x=127`. Falls die Panelreihenfolge nach dem Aufbau
-vertauscht erscheint, müssen die beiden HUB75-Datenkabel beziehungsweise die
-Reihenfolge der Panels getauscht werden.
+Wesentliche Funktionen:
 
-### HUB75-Signale des MatrixPortal S3
+- direkte Verarbeitung lokaler readsb-/dump1090-Daten und der externen
+  adsb.fi-API
+- Auswahl des nächsten geeigneten Flugzeugs einschließlich CPA-Berechnung
+- konfigurierbare Filter für Kleinflugzeuge und Maximalhöhe
+- bevorzugte Behandlung interessanter Flugzeuge und Transpondernotfälle
+- Routenauflösung über adsb.im mit verwaltetem RAM-/Flash-Cache
+- vollständige Multi-Hop-Routen und kompakte Darstellung geschlossener Umläufe
+- integrierte Flughafen- und Airline-Klartexte
+- sieben frei auswählbare und sortierbare Matrixseiten
+- responsive Webanzeige für iPhone, Tablet und Desktop
+- deutsch/englisch umschaltbare Matrix- und Weboberfläche
+- BME280-Klimawerte, Schimmelrisiko und optionale MQTT-Wetterdaten
+- BH1750-Helligkeitsautomatik mit sieben stabilen Helligkeitsstufen
+- umfangreiche Status-, Test- und Diagnosefunktionen
+- Dual-Core-Betrieb mit voneinander getrennter Anzeige und Netzverarbeitung
 
-Die Pinbelegung entspricht dem fest verdrahteten HUB75-Anschluss des
-MatrixPortal S3 und ist am Anfang von `src/main.cpp` hinterlegt:
+## Systemaufbau
 
-| HUB75-Signal | ESP32-S3 GPIO |
-|---|---:|
-| R1 | 42 |
-| G1 | 41 |
-| B1 | 40 |
-| R2 | 38 |
-| G2 | 39 |
-| B2 | 37 |
-| A | 45 |
-| B | 36 |
-| C | 48 |
-| D | 35 |
-| CLK | 2 |
-| LAT | 47 |
-| OE | 14 |
+```text
+readsb / dump1090 ─┐
+                   ├─> ADS-B-Auswahl ─> Route/Klartexte ─> LED-Matrix
+adsb.fi ───────────┘          │                  │
+                              ├─> Web-Display    ├─> Routencache
+                              └─> Status-API     └─> unbekannte Codes
 
-Ein E-Adresssignal wird nicht verwendet. Der unveränderte Aufbau ist daher
-für 64 × 32-Panels mit 1/16-Scan vorgesehen. Panels mit anderer Auflösung,
-anderem Scanverfahren oder fünf Adressleitungen benötigen eine angepasste
-Protomatter-Konfiguration und sind nicht ohne Weiteres austauschbar.
-
-### Technische Ansteuerung
-
-Die Initialisierung erfolgt als 128 Pixel breite, einfach verkettete Matrix:
-
-```cpp
-Adafruit_Protomatter matrix(
-    128, 2, 1, rgbPins, 4, addrPins,
-    clockPin, latchPin, oePin, true);
+BME280 ───────────────> Klima-/Schimmelbewertung ─┐
+Mosquitto ────────────> Wind/Böen/Regen ──────────┴─> Wetterseite
+BH1750 ───────────────> automatische Helligkeit
 ```
 
-Der letzte Parameter aktiviert den Doppelbuffer. Die Firmware zeichnet eine
-vollständige Seite zunächst unsichtbar in den rückwärtigen Puffer und schaltet
-sie anschließend mit `matrix.show()` auf die Anzeige. Vor Seitenwechseln und
-Flash-Schreibvorgängen werden beide Puffer gezielt gelöscht. Zusammen mit der
-auf 2 Bit reduzierten Farbtiefe verschafft dies der zeitkritischen
-Protomatter-Ansteuerung mehr Reserve und reduziert die zuvor beobachteten
-einzelnen Störpixel deutlich.
+Die Arduino-Hauptschleife läuft auf Core 1 und bedient Matrix, Tasten und
+Sensoren. Eine FreeRTOS-Task auf Core 0 verarbeitet WLAN, ADS-B, Routen,
+MQTT, Webserver und OTA. Flugzeug- und Wetterdaten werden über geschützte
+Kopien zwischen beiden Bereichen übergeben.
 
-Die drei Helligkeitsstufen 33, 66 und 100 Prozent werden vor dem Zeichnen auf
-die RGB-Farbwerte angewendet. Sie können manuell mit den beiden Tasten oder
-automatisch über den BH1750 gewählt werden. Die geringe Farbtiefe ist hier
-bewusst gewählt: Für die klaren Signalfarben und große Schrift der FlightWall
-ist sie ausreichend und verbessert gleichzeitig die Stabilität der Ausgabe.
+## Hardware
 
-### Stromversorgung und Verkabelung
+### Benötigte Komponenten
 
-Die LED-Panels werden **nicht** aus dem USB-Anschluss des MatrixPortal gespeist.
-Sie benötigen ein eigenes, ausreichend dimensioniertes und stabilisiertes
-5-V-Netzteil. Beide Panels werden parallel mit 5 V versorgt; der genaue
-Strombedarf hängt von Paneltyp, Helligkeit und dargestelltem Bild ab. Netzteil,
-beide Panels und MatrixPortal müssen eine gemeinsame Masse besitzen.
+- Adafruit MatrixPortal S3
+- zwei kompatible 64×32-RGB-HUB75-Panels mit 1/16-Scan
+- ausreichend dimensioniertes, stabilisiertes 5-V-Netzteil für die Panels
+- zwei HUB75-Flachbandkabel
+- WLAN mit Zugriff auf mindestens eine ADS-B-Quelle
 
-Für die Datenverbindung werden kurze, sauber sitzende HUB75-Flachbandkabel
-empfohlen. Die Einspeisung erfolgt am `IN`-Anschluss des ersten Panels, dessen
-`OUT`-Anschluss mit `IN` des zweiten Panels verbunden wird. Vor Änderungen an
-Verkabelung oder Panelreihenfolge sollte die 5-V-Versorgung ausgeschaltet
-werden.
+Optional:
 
-## Wiederherstellungspunkt
+- BH1750 zur automatischen Helligkeitsregelung
+- BME280 für Temperatur, Luftfeuchte und Luftdruck
+- Mosquitto-kompatibler MQTT-Broker für Wind und Regen
 
-Der letzte bekannte Stand vor der Server-Integration ist in GitHub mit dem
-Tag `pre-flightmatrix-integration-2026-10-04` gesichert. Er kann jederzeit in
-einen eigenen Wiederherstellungszweig ausgecheckt werden:
+### Matrixverkabelung
+
+Die Panels werden horizontal verkettet:
+
+```text
+MatrixPortal HUB75 ─> IN Panel 1
+OUT Panel 1 ────────> IN Panel 2
+```
+
+Beide Panels werden parallel aus dem separaten 5-V-Netzteil versorgt. Das
+MatrixPortal, das Netzteil und beide Panels benötigen eine gemeinsame Masse.
+Die Panels dürfen nicht aus dem USB-Anschluss des MatrixPortal gespeist werden.
+Vor Änderungen an Datenkabeln oder Stromversorgung ist die 5-V-Versorgung
+abzuschalten.
+
+Die Firmware verwendet die fest verdrahteten HUB75-Signale des MatrixPortal S3:
+
+| HUB75 | GPIO | HUB75 | GPIO |
+|---|---:|---|---:|
+| R1 | 42 | R2 | 38 |
+| G1 | 41 | G2 | 39 |
+| B1 | 40 | B2 | 37 |
+| A | 45 | CLK | 2 |
+| B | 36 | LAT | 47 |
+| C | 48 | OE | 14 |
+| D | 35 | E | nicht verwendet |
+
+Andere Panelauflösungen, Scanverfahren oder Panels mit E-Adressleitung
+benötigen eine angepasste Protomatter-Konfiguration.
+
+### Sensoranschlüsse
+
+Der BH1750 wird im aktuellen Aufbau am gelöteten I²C-Bus betrieben:
+
+| BH1750 | MatrixPortal S3 |
+|---|---|
+| VIN | 3,3 V |
+| GND | GND |
+| SDA | A1 / GPIO 3 |
+| SCL | A2 / GPIO 9 |
+
+Die Adressen `0x23` und `0x5C` werden automatisch erkannt. Fällt der Sensor
+aus, verwendet die Firmware die gespeicherte manuelle Helligkeit und versucht
+regelmäßig eine erneute Erkennung.
+
+Der BME280 wird auf `0x76` und `0x77` gesucht – zuerst am Bus GPIO 3/9 und
+anschließend am STEMMA-QT-Bus GPIO 16/17. Er liefert:
+
+- Umgebungstemperatur in °C
+- relative Luftfeuchte in Prozent
+- gemessenen Stationsdruck
+- anhand der konfigurierten Standorthöhe auf Meereshöhe reduzierten Luftdruck
+- Taupunkt, kritische Oberflächentemperatur und Schimmelrisiko
+
+Die interne ESP32-S3-Temperatur steht zusätzlich als Diagnosewert bereit. Sie
+ist keine Messung der Raumtemperatur.
+
+## ADS-B-Daten und Flugzeugauswahl
+
+Es stehen drei auswählbare Quellen zur Verfügung:
+
+1. frei konfigurierbare lokale URL, typischerweise `aircraft.json`
+2. zweite frei konfigurierbare lokale URL
+3. externe [adsb.fi Open Data API](https://adsb.fi/)
+
+Nur die aktive Quelle wird im regulären Betrieb abgefragt. Die beiden lokalen
+Quellen akzeptieren das readsb-/dump1090-Format mit `aircraft`; adsb.fi liefert
+das v3-Format mit `ac`. Zeitstempel in Sekunden und Millisekunden werden intern
+vereinheitlicht. Die Standardabfrage erfolgt alle fünf Sekunden.
+
+Für adsb.fi erzeugt die Firmware die URL automatisch aus Standort und
+Anzeigeradius. Der abgefragte Radius ist groß genug für den verdoppelten
+Special-Type-Radius. Die öffentliche API ist für persönliche,
+nichtkommerzielle Nutzung vorgesehen; FlightWall bleibt mit einer Abfrage alle
+fünf Sekunden deutlich unter dem Limit von einer Anfrage pro Sekunde.
+
+### Auswahlregeln
+
+Im Normalfall wird das nächstgelegene geeignete Flugzeug gewählt. Dabei gelten:
+
+- normaler Anzeigeradius: frei konfigurierbar
+- Special Type: doppelter Anzeigeradius
+- optionaler Filter für Sport- und Kleinflugzeuge
+- optionaler Filter für Flugzeuge oberhalb einer Maximalhöhe in ft
+- frische Position erforderlich
+
+Der Kleinflugzeugfilter berücksichtigt unter anderem Kategorie `A1`, Typen wie
+`PRIM` und `C152`, Segler-/Ultraleicht-Beschreibungen sowie deutsche
+Kennzeichen nach den Mustern `D-E…`, `D-K…` und `D-M…`. Ein erkannter Special
+Type wird nicht allein wegen des Kleinflugzeugfilters verworfen.
+
+Für Flugzeuge mit Geschwindigkeit und Track berechnet der ESP32 den Closest
+Point of Approach (CPA), die Zeit bis zum CPA und ob sich das Flugzeug nähert
+oder entfernt.
+
+### Special Types
+
+Military, German Airforce, Bundespolizei, Polizei, Regierung, Hubschrauber,
+Luftschiff und A380 werden besonders klassifiziert und auf allen
+Flugzeugseiten mit eigenen Symbolen dargestellt. Die Erkennung verwendet
+ADS-B-Metadaten und bekannte Callsign-Muster, beispielsweise `GAF…`, `BPO…`,
+`VADER…`, `SHOCK…`, `SONIC…` und `FELON…`.
+
+Seit dem letzten Neustart zählt die Statusseite eindeutige Special-Flugzeuge
+nach Kategorie. Bis zu 256 Identitäten werden über ICAO-Hexadresse,
+Registrierung oder Callsign unterschieden.
+
+### Transpondernotfälle
+
+Die Squawk-Codes erhalten immer höchste Priorität:
+
+| Code | Anzeige | Bedeutung |
+|---|---|---|
+| `7700` | Emergency | allgemeiner Notfall |
+| `7600` | Radio | Funkausfall |
+| `7500` | Hijack | Entführung |
+
+Diese Flugzeuge umgehen Anzeigeradius, Maximalhöhe und Kleinflugzeugfilter.
+Eine zusätzliche, nicht abschaltbare Alarmseite zeigt Identität, Code,
+Bedeutung, Entfernung und Höhe. Sind mehrere Notfälle vorhanden, wechselt die
+Anzeige nach jedem vollständigen Seitenzyklus zum nächsten Flugzeug.
+
+Das Webinterface kann ein bis drei Testflugzeuge für höchstens zwei Minuten
+simulieren. Der Test verändert weder ADS-B-Daten noch gespeicherte
+Einstellungen.
+
+## Routen, Klartexte und Cache
+
+Der optionale Routendienst fragt standardmäßig `https://adsb.im/api/0/routeset`
+mit Callsign und aktueller Position ab. Er ergänzt:
+
+- Airline beziehungsweise Betreiber
+- Start, Ziel und Zwischenstopps
+- kurze Airport-Codes
+- kompakte deutschsprachige Airport- und Airline-Bezeichnungen
+
+Multi-Hop-Routen bleiben vollständig erhalten. Die ausführliche Matrixseite
+scrollt beispielsweise:
+
+```text
+DUS>BUD>DUS
+Duesseldorf > Budapest > Duesseldorf
+```
+
+Auf den Kompaktseiten wird ein geschlossener Umlauf ohne redundantes Endziel
+als `DUS<>BUD` beziehungsweise `Duesseldorf <> Budapest` dargestellt. Eine
+normale Route wie `DUS-FRA-JFK` bleibt vollständig `DUS>FRA>JFK`.
+
+Der Routencache besitzt je 32 Plätze im RAM und im nichtflüchtigen Speicher.
+Gültigkeitszeiten:
+
+| Ergebnis | Gültigkeit |
+|---|---:|
+| gefundene Standardroute | 7 Tage |
+| nicht gefundene Route | 1 Stunde |
+| militärisches/behördliches Einsatzrufzeichen | 30 Minuten |
+
+Neue Ergebnisse werden zunächst im RAM gesammelt. Der Flash-Schreibvorgang
+erfolgt bevorzugt, wenn kein Flugzeug angezeigt wird oder die Nachtruhe aktiv
+ist; die Matrix wird dafür kontrolliert dunkel geschaltet. Die
+Konfigurationsseite zeigt Callsign, Route, Alter, Speicherort und Zustand.
+Einträge können einzeln gelöscht, für das aktuelle Flugzeug neu abgefragt oder
+vollständig geleert werden.
+
+## Matrixanzeige
+
+Alle sieben Flugzeugseiten können einzeln aktiviert, frei angeordnet und mit
+einer Dauer von 2 bis 60 Sekunden versehen werden:
+
+| Seite | Inhalt |
+|---|---|
+| Flugdaten | Callsign, Entfernung, Richtung, Höhe und Steig-/Sinkdreieck |
+| Airline und Route | Airline, vollständige Routencodes und Geschwindigkeit |
+| CPA und Sondertyp | CPA, Annäherung/Entfernung und Klassifizierung |
+| Flughafennamen | Codes und Langnamen; Multi-Hop vollständig gescrollt |
+| Freitext | eigener Text bis 128 Zeichen, langsam/mittel/schnell |
+| Kompaktansicht | Typ, Kerndaten, Blickrichtung, Route und CPA |
+| Kompakt + Flughäfen | Airline, Typ, Kerndaten und dynamische Namenszeile |
+
+Lange Texte verlängern die Seitendauer automatisch, bis der Lauf vollständig
+sichtbar war. Seiten ohne verwertbaren Inhalt werden übersprungen. Sanfte
+Übergänge sind optional.
+
+Die Blickrichtung bezieht sich auf den Standort des Betrachters, nicht auf den
+Track des Flugzeugs. Aus Standort, Entfernung, Höhe und Standorthöhe berechnet
+die Firmware den vertikalen Blickwinkel. Unterhalb des konfigurierbaren
+Grenzwerts – standardmäßig 30° – erscheint `weit`. Ab etwa 60° wird `oben`
+ergänzt, ab 80° gilt das Flugzeug als direkt über dem Betrachter. Eine
+Hysterese beruhigt die Anzeige an den Winkelgrenzen.
+
+Wenn kein Flugzeug im Anzeigeradius liegt, erscheint wahlweise die Wetterseite.
+Ohne Wetterseite blinkt unten links ein Betriebs-Pixel: weiß bei gültigen
+ADS-B-Daten, rot nach einem Abruffehler. Display-Aus, Nachtruhe, Flash- und
+OTA-Zustände haben Vorrang vor der normalen Seitenausgabe.
+
+### Matrixansteuerung und Helligkeit
+
+Adafruit Protomatter betreibt die Matrix mit 3 Bit Farbtiefe, Doppelbuffer und
+einem angepassten ESP32-S3-DMA-Timing. Vollständige Seiten werden im
+unsichtbaren Puffer aufgebaut und mit `matrix.show()` umgeschaltet. Vor
+Seitenwechseln und zeitkritischen Flashzugriffen werden beide Puffer gezielt
+bereinigt. Diese Kombination reduziert sporadische Störpixel bei gleichzeitig
+feineren Farben als die frühere 2-Bit-Version.
+
+Sieben native Helligkeitsstufen von 14 bis 100 Prozent vermeiden zeitliches
+Dithering. Die BH1750-Automatik verteilt sie zwischen den konfigurierten
+Lux-Schwellen. Manuelle Bedienung:
+
+- **UP:** manueller Modus, heller
+- **DOWN:** manueller Modus, dunkler
+- **UP + DOWN:** Automatik aktivieren
+
+## Wetterseite
+
+Ist „Wetterdaten anzeigen, wenn kein Flugzeug in der Nähe ist“ aktiviert,
+erscheinen alle verfügbaren Messwerte gemeinsam auf einer ruhigen Seite:
+
+- BME280: Temperatur, Feuchte und auf Meereshöhe reduzierter Luftdruck
+- MQTT: Windrichtung, Windgeschwindigkeit, Böen und Regen heute
+
+Die obere Zeile enthält Temperatur, mittig Feuchte und rechts Luftdruck. Die
+untere Zeile enthält Windrichtung, Windgeschwindigkeit, mittig Böen und rechts
+Regen. `B` steht in der deutschen Oberfläche für Böen, `G` in der englischen
+für *gusts*. Regen wird über MQTT in Zentimetern empfangen und für die Anzeige
+in Millimeter umgerechnet. MQTT-Werte verfallen nach 15 Minuten ohne Update.
+
+Broker, Port, Benutzer, Passwort und alle vier Topics sind im Webinterface
+konfigurierbar. Windrichtung kann numerisch oder als kurze Himmelsrichtung
+geliefert werden; numerische Werte werden in eine von 16 Richtungen umgesetzt.
+
+### Schimmelrisiko
+
+Aus Temperatur und relativer Luftfeuchtigkeit berechnet die Firmware Taupunkt
+und die Oberflächentemperatur, bei der 80 % relative Feuchte erreicht würden.
+Das Ergebnis ist eine Orientierungshilfe, keine bauphysikalische Messung:
+
+- unter 60 %: normal
+- ab 60 %: erhöht; Feuchte erscheint gelb
+- ab 75 % sofort oder ab 65 % für 30 Minuten: hoch; Feuchte erscheint rot
+- ein hoher Zustand wird nach 15 Minuten unter 60 % zurückgenommen
+
+Statusseite und `/api/status` liefern Risikostufe, Taupunkt, kritische
+Oberflächentemperatur und Dauer erhöhter Feuchtigkeit.
+
+## Weboberfläche
+
+Nach erfolgreicher WLAN-Verbindung antwortet der Server auf Port 80:
+
+| Adresse | Funktion |
+|---|---|
+| `http://matrixportal.local/` | Konfiguration und Status |
+| `http://matrixportal.local/display` | responsive FlightWall-Anzeige |
+| `http://matrixportal.local/api/display` | aktuelle Displaydaten als JSON |
+| `http://matrixportal.local/api/status` | vollständige Statusdaten als JSON |
+| `http://matrixportal.local/update` | passwortgeschütztes Web-OTA |
+
+Falls mDNS im Netz nicht funktioniert, kann statt `matrixportal.local` die im
+seriellen Monitor oder Router angezeigte IP-Adresse verwendet werden.
+
+Die Konfigurationsseite ist für iPhone, Tablet und Desktop optimiert. Sie
+verwaltet unter anderem Sprache, Display, Wetterseite, Standort,
+Blickrichtung, ADS-B-Quelle, Filter, Routendienst, MQTT, Seitenreihenfolge,
+Freitext, Helligkeit und Nachtruhe. Statuskarten werden regelmäßig aktualisiert,
+ohne geöffnete Bereiche zu schließen oder ungespeicherte Formulareingaben zu
+überschreiben.
+
+Die Seite `/display` zeigt Callsign, Typ, Airline/Special Type, vollständige
+Route, Entfernung, Höhe, Geschwindigkeit, CPA, Vertikalbewegung und
+Blickrichtung. Sie aktualisiert sich automatisch und ist unabhängig vom
+128×32-Layout gestaltet.
+
+Deutsch/Englisch wirkt gemeinsam auf Matrix, Konfiguration, Diagnose,
+Web-Display und Wetterkürzel. Airport-, Airline- und Freitextnamen werden nicht
+automatisch übersetzt.
+
+## Installation per USB
+
+### Voraussetzungen
+
+- Git
+- VS Code mit PlatformIO-Erweiterung oder PlatformIO Core
+- USB-C-Datenkabel
+- Zugangsdaten für das WLAN
+
+Repository laden:
+
+```bash
+git clone https://github.com/leliep/flightwall-matrixportal.git
+cd flightwall-matrixportal
+cp include/secrets.h.example include/secrets.h
+```
+
+In `include/secrets.h` mindestens WLAN-Name und Passwort eintragen:
+
+```cpp
+constexpr char WIFI_SSID[] = "mein-wlan";
+constexpr char WIFI_PASSWORD[] = "mein-wlan-passwort";
+
+#define OTA_PASSWORD "ein-langes-ota-passwort"
+#define MQTT_PASSWORD ""
+```
+
+`OTA_PASSWORD` benötigt mindestens acht Zeichen. Ein leerer Wert deaktiviert
+Web-OTA und PlatformIO-OTA. `include/secrets.h` wird von Git ignoriert und darf
+nicht eingecheckt werden.
+
+Kompilieren und per USB übertragen:
+
+```bash
+pio run
+pio run -t upload
+```
+
+Der serielle Monitor läuft mit 115200 Baud:
+
+```bash
+pio device monitor -b 115200
+```
+
+Nach dem ersten Start `http://matrixportal.local` öffnen und mindestens
+Standort, Blickrichtung, aktive ADS-B-Quelle und Anzeigeradius kontrollieren.
+Die mitgelieferten Standardwerte sind auf den ursprünglichen Aufbau
+zugeschnitten und nicht als allgemeine Standortvorgabe gedacht.
+
+GitHub Actions baut die Firmware bei Push und Pull Request mit den
+Platzhalterwerten aus `include/secrets.h.example`.
+
+## OTA-Updates
+
+Das erste OTA-fähige Image muss per USB installiert werden. Danach gibt es
+zwei Wege.
+
+### Web-OTA
+
+1. `http://matrixportal.local/update` öffnen.
+2. Mit Benutzer `admin` und dem `OTA_PASSWORD` anmelden.
+3. `.pio/build/adafruit_matrixportal_esp32s3/firmware.bin` auswählen.
+4. Upload bestätigen und den automatischen Neustart abwarten.
+
+Die Seite prüft Dateiendung und ESP32-Dateikopf, zeigt den Fortschritt und
+vergleicht nach dem Neustart alte und neue Firmwareversion.
+
+### PlatformIO-OTA
+
+```bash
+export MATRIXPORTAL_OTA_PASSWORD='ein-langes-ota-passwort'
+pio run -e adafruit_matrixportal_esp32s3_ota -t upload
+```
+
+Das Passwort steht bewusst nicht in `platformio.ini`. Die VS-Code-Aufgabe
+**FlightWall: Git-Update + OTA** führt zunächst ein Fast-forward-Update von
+`origin/main` aus, fragt das Passwort verdeckt ab und startet anschließend den
+Upload.
+
+Vor jedem geplanten Neustart oder OTA sollten die Listen unbekannter Airports
+und Airlines auf der Statusseite geprüft und neue Codes in die Quelldaten
+übernommen werden, da diese Beobachtungen nur im RAM liegen.
+
+## Übersetzungstabellen pflegen
+
+Die editierbaren Quellen liegen hier:
+
+- `data/airport_names.de.json`
+- `data/airline_names.de.json`
+
+Die C++-Dateien in `src/*.generated.cpp` werden daraus erzeugt und sollten
+nicht direkt bearbeitet werden:
+
+```bash
+python3 tools/validate_airport_names.py
+python3 tools/validate_airline_names.py
+python3 tools/generate_airport_names.py
+python3 tools/generate_airline_names.py
+pio run
+```
+
+Unbekannte Codes werden während des Betriebs flüchtig gesammelt – jeweils bis
+zu 32 Airports und Airlines. Die Statusseite und `/api/status` zeigen die
+gesammelten Listen. Nach einem Neustart sind diese Beobachtungen verloren.
+
+## Diagnose und Tests
+
+Die Statusseite zeigt unter anderem:
+
+- Firmwareversion, Build, Laufzeit und Neustartgrund
+- freien Heap, WLAN-Signal und Wiederverbindungen
+- aktive ADS-B-Quelle, Abrufalter, empfangene und geeignete Flugzeuge
+- aktuelles Flugzeug, Route, CPA, Filter und Routencache
+- unbekannte Airport-/Airline-Codes
+- Special- und Notfallstatistik seit dem Neustart
+- BME280-, Schimmel-, MQTT- und BH1750-Werte
+- Matrix-Farbtiefe, Bildwiederholrate sowie letzte/maximale `show()`-Dauer
+- maximale Laufzeiten einzelner Netzwerkphasen und Taskdiagnose
+
+Verfügbare Tests:
+
+- ADS-B-Verbindungstest der ausgewählten Quelle
+- Routendiensttest mit frei eingegebenem Callsign
+- Transpondernotfalltest mit einem bis drei Flugzeugen
+- etwa 23 Sekunden langer Matrixtest mit Farben, Raster, Linien, Text,
+  Farbbalken und allen Special-Type-Symbolen
+
+Der Netzwerk-Task läuft mit niedriger Priorität und kurzen Scheduler-Pausen,
+damit synchrone HTTP-, TLS- und MQTT-Aufrufe den ESP32-Task-Watchdog nicht
+blockieren. Bei WLAN-Verlust werden Webserver, mDNS, MQTT und OTA kontrolliert
+beendet und nach der Wiederverbindung neu gestartet.
+
+## Wiederherstellung und Git
+
+Der Stand vor der Integration der Serverfunktionen ist mit dem Tag
+`pre-flightmatrix-integration-2026-10-04` gesichert:
 
 ```bash
 git fetch --tags
 git switch -c restore-pre-integration pre-flightmatrix-integration-2026-10-04
 ```
 
-## Webinterface
-
-Nach erfolgreicher WLAN-Verbindung ist die Konfiguration normalerweise unter
-`http://matrixportal.local` erreichbar. Falls mDNS im lokalen Netz nicht
-funktioniert, zeigt der serielle Monitor die IP-Adresse an.
-
-Unter `http://matrixportal.local/display` steht zusätzlich ein responsives
-FlightWall-Dashboard für iPhone, Tablet und Desktop bereit. Es zeigt das
-aktuelle Flugzeug in einer eigenständigen, für Webbrowser optimierten Ansicht:
-Callsign, Flugzeugtyp, Airline, Route mit Flughafennamen, Entfernung, Höhe,
-Geschwindigkeit, CPA, Steig-/Sinktendenz und Blickrichtung. Die Daten werden
-automatisch aktualisiert.
-
-Konfigurierbar sind Display ein/aus, automatische oder manuelle Helligkeit,
-Lux-Schwellen, lokaler Anzeigeradius, Standort, Blickrichtung, zwei frei
-konfigurierbare lokale ADS-B-Quellen und die externe Quelle adsb.fi mit Auswahl
-der aktiven Quelle,
-Routendienst, Kleinflugzeug- und Höhenfilter sowie eine tägliche Nachtruhe. Der Zeitraum
-darf über Mitternacht reichen, beispielsweise von 23:55 bis 05:55. Während
-dieser Zeit bleibt die Matrix einschließlich Betriebs-Pixel vollständig dunkel;
-Netzwerk, Datenabruf, Webinterface und OTA bleiben aktiv. Die lokale Uhrzeit
-wird per NTP bezogen und automatisch zwischen MEZ und MESZ umgestellt.
-Die Einstellung **Sprache / Language** schaltet die Konfigurations- und
-Statusseite, das responsive Web-Display, Hilfsseiten und die Texte der
-LED-Matrix gemeinsam zwischen Deutsch und Englisch um. Die Auswahl wird im
-ESP32 dauerhaft gespeichert; Airport-, Airline- und frei eingegebene Namen
-bleiben unverändert.
-Der Kleinflugzeugfilter erkennt unter anderem deutsche `D-E…`-, `D-K…`- und
-`D-M…`-Kennzeichen; damit werden auch Motorsegler erfasst.
-Wenn kein Flugzeug angezeigt wird, blinkt der Betriebs-Pixel unten links bei
-erfolgreichem ADS-B-Abruf weiß. Nach einem fehlgeschlagenen
-Datenabruf blinkt er rot, bis wieder gültige Daten empfangen wurden.
-Die Statusanzeige und `/api/status` melden außerdem die interne
-ESP32-S3-Chiptemperatur. Sie dient zur thermischen Überwachung und entspricht
-nicht der Umgebungstemperatur.
-Der Statusbereich im Webinterface aktualisiert sich bei sichtbarer Seite alle
-fünf Sekunden, ohne ungespeicherte Eingaben im Konfigurationsformular zu ändern.
-Vier farbige Zustandsanzeigen geben dort sofort Auskunft über System, ADS-B,
-MQTT und Sensoren. Die Detailwerte sind in responsive Karten für Netzwerk,
-aktuelles Flugzeug, ADS-B und Route, Konfiguration, Übersetzungstabellen,
-Wetter/Sensoren und Display gegliedert. Lange URLs, Speicher-, Task- und
-Resetinformationen bleiben in standardmäßig geschlossenen Diagnosebereichen;
-auf dem iPhone ordnen sich alle Karten automatisch einspaltig an.
-Für die Blickrichtung werden außerdem die Standorthöhe über NHN und der
-konfigurierbare Elevationswinkel für `weit` gespeichert.
-Routen mit Zwischenlandungen bleiben vollständig erhalten, beispielsweise
-`CGN-BER-CGN`. Matrix, Web-Display, Status-API und Routentest zeigen dabei alle
-Flughäfen in der korrekten Reihenfolge; Start und Endziel werden zusätzlich
-weiterhin separat bereitgestellt.
-Neue Routenergebnisse werden beim Flugzeugwechsel ausschließlich im RAM
-zwischengespeichert. Die persistente Speicherung erfolgt gesammelt, sobald
-kein Flugzeug angezeigt wird oder die Nachtruhe aktiv ist. Während des kurzen
-Flash-Schreibvorgangs wird die Matrix kontrolliert dunkel geschaltet, um
-zufällige Lichtpunkte durch Flashzugriffe des ESP32-S3 zu vermeiden.
-Die Konfigurationsseite listet den Routencache mit Callsign, Route, Alter,
-Speicherort und Ablaufzustand auf. Einträge können einzeln gelöscht oder sofort
-neu abgefragt werden; zusätzlich kann der gesamte Cache geleert werden.
-Standardrouten gelten sieben Tage, negative Ergebnisse eine Stunde und
-erkannte Einsatzrufzeichen 30 Minuten. Beim Lesen mehrfach vorhandener
-Alteinträge wird der jüngste gültige Eintrag verwendet; neue Schreibvorgänge
-entfernen Dubletten desselben Callsigns.
-Die beiden vollständigen lokalen ADS-B-URLs und der Routendienst lassen sich
-ändern. Für adsb.fi erzeugt die Firmware die URL aus dem gespeicherten Standort
-und einem in nautische Meilen umgerechneten Radius automatisch. Dieser umfasst
-mindestens den doppelten Anzeigeradius für Special Types. Die Formate
-`aircraft`/Sekunden der lokalen readsb-Quellen und `ac`/Millisekunden der
-adsb.fi-v3-API werden intern vereinheitlicht. Nur die ausgewählte ADS-B-Quelle
-wird abgefragt und direkt getestet. Die sieben
-Anzeigeseiten können einzeln aktiviert, frei sortiert und mit einer eigenen
-Dauer versehen werden. Sanfte Übergänge sind optional. Das Webinterface ist
-für ein vertrauenswürdiges lokales WLAN gedacht und hat derzeit keine eigene
-Anmeldung.
-
-Die öffentliche [adsb.fi Open Data API](https://adsb.fi/) wird ausschließlich
-bei Auswahl der externen Quelle verwendet. Sie ist für persönliche,
-nichtkommerzielle Nutzung vorgesehen und auf eine Anfrage pro Sekunde begrenzt;
-FlightWall fragt regulär nur alle fünf Sekunden ab.
-
-Der Displaytest im Webinterface prüft die gesamte Matrix für jeweils kurze
-Zeit mit Rot, Grün, Blau, Weiß, einem Pixelraster, geometrischen Linien, Text
-und Farbbalken. Anschließend zeigt er alle sieben 14×7-Typensymbole jeweils
-zusammen mit ihrer Bedeutung. Nach etwa 23 Sekunden endet er automatisch;
-über denselben Schalter kann er vorher beendet werden.
-
-Die Seite **Flughafennamen** zeigt – sofern eine Route ermittelt wurde –
-bei direkten Flügen die Langnamen des Start- und Zielflughafens. Bei
-Multi-Hop-Flügen erscheinen sämtliche Codes und sämtliche Flughafennamen in
-der gelieferten Reihenfolge. Namen, die breiter als das Display sind, werden
-vollständig horizontal gescrollt; dafür verlängert die Firmware die
-konfigurierte Seitendauer bei Bedarf automatisch. Fehlt ein Langname, wird der
-Flughafencode angezeigt. Sind Start und Ziel beide unbekannt, wird die gesamte
-Seite automatisch übersprungen.
-
-Die Seite **Freitext** zeigt einen im Webinterface eingegebenen Text mit bis
-zu 128 darstellbaren Zeichen. Bei jedem Seitenaufruf läuft der Text genau
-einmal vollständig von rechts nach links über die Anzeige. Die Firmware
-verlängert die konfigurierte Seitendauer automatisch, wenn der Durchlauf mehr
-Zeit benötigt. Die Scrollgeschwindigkeit ist unabhängig davon als langsam,
-mittel oder schnell wählbar; bestehende Konfigurationen verwenden mittel.
-Ein leerer Freitext überspringt die Seite.
-
-Vor jeder Seitenaktivierung löscht die Firmware beide Matrixpuffer vollständig
-und setzt den Seitenzeitpunkt neu. Dadurch erscheinen weder Bildreste noch alte
-Scrollpositionen der zuvor angezeigten Seite.
-
-Die alternative **Kompaktansicht** bündelt Flugnummer, kurzen ICAO-Flugzeugtyp,
-Entfernung, Höhe in Fuß mit direkt folgendem farbigem Steig-/Sinkdreieck,
-Fluggeschwindigkeit, Blickrichtung mit absolutem Azimut (Norden = 0°) und
-Richtungspfeil sowie Route und CPA auf einer Seite. Entfernt sich das Flugzeug
-nach dem CPA, erscheint bei ausreichendem Platz `entfernt sich`, andernfalls
-die Kurzform `geht`.
-Bei gleichbleibender Höhe wird kein Dreieck angezeigt. Alle Blickrichtungspfeile
-verwenden auf sämtlichen Seiten dieselbe gleichmäßig kräftige 7×7-Gestaltung.
-Die Geschwindigkeit erscheint bei ausreichendem Platz als beispielsweise
-`900kmh`, bei weniger Platz als `900k` und wird andernfalls weggelassen. Fehlt
-das Steig-/Sinkdreieck, trennt nach Möglichkeit ein Leerzeichen Höhe und
-Geschwindigkeit; nur bei Platzmangel wird der Abstand verkleinert.
-Fehlende Routenteile erzeugen kein einzelnes Trennzeichen. Alle Werte werden
-mit den laufenden ADS-B-Abrufen aktualisiert. Für Hubschrauber, A380,
-Militär, Polizei, Regierung und Luftschiff (`SHIP`) verwendet sie eigene
-14×7-Symbole; unbekannte Special Types erhalten ein allgemeines Symbol.
-
-Die Seite **Kompakt + Flughäfen** zeigt in der ersten Zeile statt der Flugnummer
-die Fluggesellschaft in Rot. Ist der verfügbare Platz vor dem unverändert
-rechts stehenden Typensymbol und Flugzeugtyp zu kurz, scrollt ihr vollständiger
-Name innerhalb dieses Bereichs. Der Serverwert `UNKNOWN` wird als `Airline N/A`
-angezeigt. In der unteren Zeile erscheinen Start- und
-Zielflughafen sofort ausgeschrieben in
-einem dynamischen Layout. Passen beide Namen gemeinsam in die Zeile, stehen sie
-links- und rechtsbündig und das `>` mittig im freien Raum. Passt nur ein Name
-in weniger als eine halbe Zeile, bleibt er außen bündig stehen und das `>`
-rückt an ihn heran, während der lange Name im übrigen Bereich scrollt. Sind
-beide Namen länger, scrollen beide in getrennten Hälften mit festem `>` in der
-Mitte. Bei geschlossenen Umläufen entfällt das redundante letzte Ziel: Aus
-`DUS-BUD-DUS` wird kompakt `DUS<>BUD`, die Namenszeile scrollt entsprechend
-`Duesseldorf <> Budapest`. Die ausführliche Flughafenseite zeigt dagegen
-weiterhin die vollständige Route. Kurze Namen bleiben mindestens fünf Sekunden
-sichtbar; die konfigurierte
-Seitendauer wird bei Bedarf bis zum Ende aller Lauftexte verlängert. Jeder
-Lauftext pausiert kurz am vollständig gescrollten Ende, läuft anschließend mit
-vierfacher Geschwindigkeit zum Anfang zurück und pausiert dort nochmals kurz,
-bevor ein Seitenwechsel erfolgen kann.
-
-Die Matrix berechnet den vertikalen Blickwinkel selbst aus horizontaler
-Entfernung, Flugzeughöhe und konfigurierter Standorthöhe. Unterhalb des
-konfigurierten Elevationswinkels, standardmäßig 30° über dem Horizont, werden
-die vier groben Richtungen mit `weit` gekennzeichnet. Ab 60° Elevation erscheint
-`oben vorne/rechts/hinten/links`, ab 80° `oben`. Eine Winkelhysterese verhindert
-springende Texte an den Grenzen.
-
-Special Types erhalten auf allen Flugzeugseiten ein farbiges 14×7-Symbol.
-Vor einem OTA-Flashvorgang erscheint kurz `OTA UPDATE / BITTE WARTEN`; danach
-bleibt das Display bis zum Neustart schwarz.
-
-## OTA-Updates
-
-In `include/secrets.h` muss ein eigenes Passwort mit mindestens acht Zeichen
-gesetzt werden:
-
-```cpp
-#define OTA_PASSWORD "ein-langes-eigenes-passwort"
-```
-
-Danach erscheint im Webinterface der Link **Firmware drahtlos aktualisieren**.
-Die Anmeldung verwendet den Benutzernamen `admin` und das gesetzte
-OTA-Passwort. Hochgeladen wird die von PlatformIO erzeugte `firmware.bin`.
-Die Updateseite prüft Dateityp und ESP32-Dateikopf, verlangt eine Bestätigung,
-zeigt den Uploadfortschritt und vergleicht nach dem Neustart die Firmwareversion
-vor und nach dem Update. Flash- und Prüfungsfehler werden einzeln gemeldet.
-
-Alternativ kann das OTA-Environment von PlatformIO verwendet werden. Das
-Passwort wird dabei bewusst nicht in `platformio.ini` gespeichert:
+Aktualisierung eines bestehenden Checkouts ohne lokale Änderungen:
 
 ```bash
-export MATRIXPORTAL_OTA_PASSWORD='ein-langes-eigenes-passwort'
-pio run -e adafruit_matrixportal_esp32s3_ota -t upload
+git switch main
+git pull --ff-only origin main
 ```
 
-In VS Code fasst die Aufgabe **FlightWall: Git-Update + OTA** das vorherige
-Fast-forward-Update von `origin/main`, die verdeckte Passwortabfrage und den
-OTA-Upload zusammen. Sie ist über **Terminal → Aufgabe ausführen…** erreichbar.
+## Projektstruktur
 
-Das erste Aufspielen einer OTA-fähigen Firmware muss weiterhin per USB
-erfolgen. Ohne gültiges `OTA_PASSWORD` sind beide OTA-Wege deaktiviert.
+| Pfad | Inhalt |
+|---|---|
+| `src/main.cpp` | Display, Webserver, Sensorik, MQTT, OTA und Laufzeitlogik |
+| `src/AdsbClient.cpp` | ADS-B-Abruf und JSON-Parsing |
+| `src/AircraftProcessor.cpp` | Filter, Auswahl, CPA und Klassifizierung |
+| `src/RouteClient.cpp` | Routendienst und Cache |
+| `src/WebDisplay.cpp` | responsives FlightWall-Web-Display |
+| `data/` | Airport- und Airline-Quelldaten |
+| `tools/` | Prüfung und Erzeugung der Lookup-Tabellen |
+| `include/secrets.h.example` | Vorlage ohne echte Zugangsdaten |
+| `platformio.ini` | Build- und OTA-Umgebungen |
+| `CHANGELOG.md` | chronologische Änderungen |
+| `PLATFORMIO.md` | ergänzende Entwicklerhinweise |
 
-## BH1750
+## Sicherheit und Grenzen
 
-| BH1750 | Standard: gelötet | Alternative: STEMMA QT |
-|---|---|---|
-| VIN | 3,3 V | 3,3 V |
-| GND | GND | GND |
-| SDA | A1 / GPIO 3 | GPIO 16 |
-| SCL | A2 / GPIO 9 | GPIO 17 |
-
-Die Pins stehen gut sichtbar am Anfang von `src/main.cpp`. Die Adressen `0x23`
-und `0x5C` werden automatisch erkannt. Antwortet der Sensor nicht, verwendet
-die Firmware die gespeicherte manuelle Helligkeit und sucht ihn regelmäßig
-erneut.
-
-## Tasten
-
-- **UP:** manueller Modus, Helligkeit erhöhen
-- **DOWN:** manueller Modus, Helligkeit verringern
-- **UP + DOWN:** Helligkeitsautomatik aktivieren
-
-## BME280
-
-Ein BME280 wird an den I²C-Adressen `0x76` und `0x77` automatisch gesucht.
-Die Firmware prüft sowohl den mit dem BH1750 geteilten Bus auf GPIO 3/9 als
-auch den STEMMA-QT-Bus auf GPIO 16/17. Umgebungstemperatur, relative
-Luftfeuchtigkeit und der anhand der konfigurierten Standorthöhe auf Meereshöhe
-reduzierte Luftdruck erscheinen in der Statusseite und unter `/api/status`.
-Der direkt gemessene Stationsdruck bleibt dort zusätzlich als Diagnosewert
-verfügbar. In der Webkonfiguration lässt sich außerdem einschalten, dass
-die komplette Wetterseite auf der Matrix erscheint, solange kein Flugzeug innerhalb
-des Anzeigeradius liegt. Dieser gemeinsame Schalter steuert sowohl die
-BME280- als auch die MQTT-Werte. Ein erkanntes Flugzeug übernimmt die Anzeige sofort;
-Nachtruhe und ausgeschaltetes Display bleiben vollständig dunkel.
-
-## MQTT-Wetter
-
-Die Firmware kann Windrichtung, Windgeschwindigkeit, Windböen und die
-Regenmenge der letzten 24 Stunden von einem Mosquitto-Server im lokalen Netz
-beziehen. Server, Port, Benutzer, Passwort und alle vier Topics werden im
-Webinterface konfiguriert; das Passwort erscheint weder dort noch in der
-Status-API im Klartext. Die gelieferten Zentimeter der Regenmenge werden für
-die Anzeige in Millimeter umgerechnet.
-
-Wenn kein Flugzeug angezeigt wird, erscheinen sämtliche Klima- und Wetterwerte
-ruhig auf einer gemeinsamen Kompaktseite. Die obere Zeile zeigt Temperatur,
-Feuchte und Luftdruck, die untere Windrichtung, Windgeschwindigkeit, Böen
-(`B` auf Deutsch, `G` für *gusts* auf Englisch) und Regenmenge (`R`). Wind und Böen werden platzsparend als ganze km/h
-dargestellt. Feuchte und Böenwert teilen sich eine gemeinsame Spaltenmitte;
-Luftdruck und Regenmenge sind am rechten Rand bündig ausgerichtet. Eine
-numerische Windrichtung wird automatisch in eine von 16 deutschen
-Himmelsrichtungen umgesetzt. Werte, die länger als 15 Minuten nicht erneuert
-wurden, werden nicht mehr angezeigt. Verbindungszustand, letzter Empfang und
-Messwerte stehen zusätzlich in der Statusseite und unter `/api/status`.
-
-## Diagnose
-
-Die Statusseite zeigt Firmwareversion und Erstellungszeitpunkt, Laufzeit,
-freien und minimal freien RAM, WLAN-Signal, Luxwert, BME280-Umgebungswerte, Helligkeitsstufe,
-Zeitpunkt des letzten ADS-B-Abrufs, empfangene und geeignete Flugzeuge,
-unbekannte Flughafen- und Airline-Codes, Core-Zuordnung, Stackreserven und den
-Grund des letzten Neustarts. Über eine bestätigungspflichtige Schaltfläche kann
-der ESP neu gestartet werden. Maschinenlesbare Basiswerte stehen zusätzlich
-unter `/api/status` als JSON bereit.
-
-## Hardware
-
-Die Panels benötigen ein ausreichend dimensioniertes separates 5-V-Netzteil.
-Die Masse des Netzteils und des MatrixPortal muss gemeinsam verbunden sein.
+- Konfiguration, Status und JSON-APIs besitzen keine eigene Anmeldung. Das
+  Gerät ist für ein vertrauenswürdiges lokales Netz gedacht.
+- Nur die OTA-Seite ist mit Benutzername und Passwort geschützt.
+- HTTPS-Verbindungen sind verschlüsselt, die Firmware validiert die
+  Serverzertifikate derzeit jedoch nicht, weil beim frühen Systemstart noch
+  keine verlässliche Uhrzeit garantiert ist.
+- Routen und Klartexte hängen von Verfügbarkeit und Qualität externer Daten ab.
+- CPA und aktueller Streckenabschnitt sind berechnete beziehungsweise
+  abgeleitete Werte und keine Flugsicherungsinformationen.
+- Wetter- und Schimmelanzeige ersetzen keine kalibrierten Messgeräte oder
+  bauphysikalische Begutachtung.
 
 ## Lizenz
 
