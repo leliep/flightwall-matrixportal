@@ -1,6 +1,7 @@
 // Version generated: 2026-10-03 12:17:49 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
+#include <DNSServer.h>
 #include <ESPmDNS.h>
 #include <HTTPClient.h>
 #include <Preferences.h>
@@ -34,12 +35,14 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.4.0-3bit-dmasync.15-looproutes";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-25 compact loop routes";
+constexpr char APP_VERSION[] = "3.5.0-wifi-config.1";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-26 configurable Wi-Fi";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
 constexpr uint32_t WIFI_RETRY_MS = 60000;
+constexpr char WIFI_SETUP_AP_PREFIX[] = "FlightWall-Setup";
+constexpr char WIFI_SETUP_AP_PASSWORD[] = "flightwall";
 constexpr uint32_t POLL_INTERVAL_MS = 5000;
 constexpr uint32_t DEFAULT_PAGE_INTERVAL_MS = 5000;
 constexpr uint32_t PAGE_TRANSITION_MS = 350;
@@ -169,6 +172,7 @@ String lastAdsbError = "WARTE AUF DATEN";
 String lastRouteError;
 Preferences preferences;
 WebServer webServer(80);
+DNSServer setupDnsServer;
 WiFiClient mqttTransport;
 PubSubClient mqttClient(mqttTransport);
 SemaphoreHandle_t flightMutex;
@@ -264,6 +268,12 @@ bool webServerStarted = false;
 bool webServerConfigured = false;
 bool otaStarted = false;
 bool wifiWasConnected = false;
+bool wifiSetupAccessPointActive = false;
+bool wifiSettingsChanged = false;
+String wifiSettingsError;
+String wifiSsid = WIFI_SSID;
+String wifiPassword = WIFI_PASSWORD;
+String wifiSetupAccessPointSsid;
 uint32_t wifiReconnectCount = 0;
 uint32_t webServerStartCount = 0;
 uint32_t lastWifiDisconnect = 0;
@@ -2323,9 +2333,9 @@ void syncNetworkState() {
 
 bool connectWiFi(uint32_t timeoutMs) {
   if (WiFi.status() == WL_CONNECTED) return true;
-  WiFi.mode(WIFI_STA);
+  WiFi.mode(wifiSetupAccessPointActive ? WIFI_AP_STA : WIFI_STA);
   WiFi.setSleep(false);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  WiFi.begin(wifiSsid.c_str(), wifiPassword.c_str());
 
   const uint32_t started = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - started < timeoutMs) {
@@ -2921,6 +2931,14 @@ void translateWebPageToEnglish(String &html) {
     {"ADS-B-Adresse Quelle", "ADS-B address source"},
     {"Nur die ausgewählte Quelle wird abgefragt. Quelle 2 darf unkonfiguriert bleiben. Der Radius von adsb.fi wird automatisch aus dem Anzeigeradius berechnet.", "Only the selected source is queried. Source 2 may remain unconfigured. The adsb.fi radius is calculated automatically from the display radius."},
     {"Regen wird für die Anzeige von cm in mm umgerechnet. Ein leeres Passwortfeld behält das gespeicherte Passwort bei.", "Rain is converted from cm to mm for display. An empty password field keeps the saved password."},
+    {"WLAN-Zugang", "Wi-Fi access"},
+    {"WLAN-Name (SSID)", "Wi-Fi name (SSID)"},
+    {"Neues WLAN-Passwort", "New Wi-Fi password"},
+    {"Offenes WLAN ohne Passwort", "Open Wi-Fi network without a password"},
+    {"Ein leeres Passwortfeld behält das gespeicherte WLAN-Passwort bei. Änderungen werden nach einem automatischen Neustart aktiv.", "An empty password field keeps the stored Wi-Fi password. Changes take effect after an automatic restart."},
+    {"Falls keine Verbindung möglich ist, startet das Einrichtungsnetz", "If no connection is possible, the setup network starts"},
+    {"Einrichtungsnetz", "Setup network"},
+    {"WLAN-Name", "Wi-Fi name"},
     {"Sprache / Language", "Language / Sprache"},
     {"Deutsch", "German"},
     {"Display eingeschaltet", "Display enabled"},
@@ -3073,7 +3091,7 @@ String webPage(bool includeRouteCache = true) {
   html += F("<title>FlightWall MatrixPortal</title><style>");
   html += F("body{font:16px system-ui;background:#10131a;color:#eef2ff;margin:auto;max-width:920px;padding:20px}");
   html += F("h1{font-size:1.5rem}fieldset{border:1px solid #445;border-radius:10px;margin:14px 0;padding:14px}");
-  html += F("label{display:block;margin:12px 0}input[type=number],input[type=text],input[type=url],select{width:100%;box-sizing:border-box;padding:9px}");
+  html += F("label{display:block;margin:12px 0}input[type=number],input[type=text],input[type=password],input[type=url],select{width:100%;box-sizing:border-box;padding:9px}");
   html += F("button{background:#00bcd4;color:#001018;border:0;border-radius:8px;padding:12px 18px;font-weight:bold}.danger{background:#ff8597;color:#24050b}.smallButton{padding:7px 10px;font-size:.82rem}.inlineForm{display:inline;margin:0 4px 0 0}.cacheTable{width:100%;border-collapse:collapse}.cacheTable th,.cacheTable td{text-align:left;padding:8px 6px;border-bottom:1px solid #343d50;vertical-align:top}.cacheTable th{color:#aab;font-size:.8rem}.cacheActions{white-space:nowrap}");
   html += F(".status{display:grid;grid-template-columns:minmax(145px,42%) minmax(0,1fr);gap:7px 14px}.status span{color:#aab}.status b{overflow-wrap:anywhere}.statusNote{grid-column:1/-1;margin:2px 0 5px;line-height:1.35}.statusCards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.statusCard{background:#171c26;border:1px solid #343d50;border-radius:12px;padding:14px}.statusCard h3{margin:0 0 12px;font-size:1rem;color:#7ee7f0}.healthbar{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 14px}.pill{border-radius:999px;padding:7px 11px;font-size:.86rem;font-weight:700}.ok{background:#153b2b;color:#74e3aa}.warn{background:#493c16;color:#ffd166}.bad{background:#4a1f29;color:#ff8597}.off{background:#303541;color:#abb3c3}.wide{grid-column:1/-1}details summary{cursor:pointer;font-weight:700;color:#7ee7f0}details .status{margin-top:12px}@media(max-width:650px){body{padding:12px}.statusCards{grid-template-columns:1fr}.wide{grid-column:auto}.status{grid-template-columns:1fr}.status b{margin-bottom:7px}}.muted{color:#aab}</style></head><body>");
   html += F("<h1>FlightWall MatrixPortal ");
@@ -3085,6 +3103,15 @@ String webPage(bool includeRouteCache = true) {
   html += F(">Deutsch</option><option value='en'");
   html += selected(uiEnglish);
   html += F(">English</option></select></label></fieldset>");
+  html += F("<fieldset><legend>WLAN-Zugang</legend><label>WLAN-Name (SSID)<input type='text' name='wifiSsid' maxlength='32' value='");
+  html += htmlEscape(wifiSsid);
+  html += F("' required></label><label>Neues WLAN-Passwort<input type='password' name='wifiPassword' minlength='8' maxlength='63' value='' placeholder='unverändert lassen'></label><label><input type='checkbox' name='wifiOpen' value='1'");
+  html += checked(!wifiPassword.length());
+  html += F("> Offenes WLAN ohne Passwort</label><p class='muted'>Ein leeres Passwortfeld behält das gespeicherte WLAN-Passwort bei. Änderungen werden nach einem automatischen Neustart aktiv.</p><p class='muted'>Falls keine Verbindung möglich ist, startet das Einrichtungsnetz <b>");
+  html += htmlEscape(wifiSetupAccessPointSsid.length()
+                         ? wifiSetupAccessPointSsid
+                         : String(WIFI_SETUP_AP_PREFIX));
+  html += F("</b> mit dem Passwort <b>flightwall</b>. Konfiguration: <b>http://192.168.4.1</b></p></fieldset>");
   html += F("<fieldset><legend>Display</legend><label><input type='checkbox' name='display' value='1'");
   html += checked(displayEnabled);
   html += F("> Display eingeschaltet</label><label><input type='checkbox' name='environmentIdle' value='1'");
@@ -3215,8 +3242,15 @@ String webPage(bool includeRouteCache = true) {
           "'>● Schimmelrisiko: " + moldRiskText() + "</span>";
   html += F("</div><div class='statusCards'><section class='statusCard'><h3>Netzwerk</h3><div class='status'><span>Adresse</span><b>http://matrixportal.local</b><span>IP</span><b>");
   html += WiFi.localIP().toString();
+  html += F("</b><span>WLAN-Name</span><b>");
+  html += htmlEscape(wifiSsid);
   html += F("</b><span>WLAN</span><b>");
-  html += String(WiFi.RSSI()) + " dBm";
+  html += WiFi.status() == WL_CONNECTED ? String(WiFi.RSSI()) + " dBm"
+                                        : uiText("getrennt", "disconnected");
+  html += F("</b><span>Einrichtungsnetz</span><b>");
+  html += wifiSetupAccessPointActive
+              ? htmlEscape(wifiSetupAccessPointSsid + " / 192.168.4.1")
+              : uiText("inaktiv", "inactive");
   html += F("</b><span>WLAN-Neuverbindungen</span><b>");
   html += String(wifiReconnectCount);
   html += F("</b><span>Webserver-Starts</span><b>");
@@ -3557,11 +3591,36 @@ bool validFlightWallHost(const String &host) {
 
 
 void applyWebSettings() {
+  wifiSettingsChanged = false;
+  wifiSettingsError = "";
   settingsWritePreparing = true;
   vTaskDelay(pdMS_TO_TICKS(120));
   settingsWritePreparing = false;
   settingsWriteInProgress = true;
   if (xSemaphoreTake(preferencesMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+    String requestedWifiSsid = webServer.arg("wifiSsid");
+    const String requestedWifiPassword = webServer.arg("wifiPassword");
+    const bool requestedOpenWifi = webServer.hasArg("wifiOpen");
+    if (!requestedWifiSsid.length() || requestedWifiSsid.length() > 32) {
+      wifiSettingsError = uiText(
+          "Der WLAN-Name muss 1 bis 32 Zeichen lang sein.",
+          "The Wi-Fi name must contain 1 to 32 characters.");
+    } else if (!requestedOpenWifi && requestedWifiPassword.length() &&
+               (requestedWifiPassword.length() < 8 ||
+                requestedWifiPassword.length() > 63)) {
+      wifiSettingsError = uiText(
+          "Das WLAN-Passwort muss 8 bis 63 Zeichen lang sein.",
+          "The Wi-Fi password must contain 8 to 63 characters.");
+    } else {
+      String nextWifiPassword = wifiPassword;
+      if (requestedOpenWifi) nextWifiPassword = "";
+      else if (requestedWifiPassword.length())
+        nextWifiPassword = requestedWifiPassword;
+      wifiSettingsChanged = requestedWifiSsid != wifiSsid ||
+                            nextWifiPassword != wifiPassword;
+      wifiSsid = requestedWifiSsid;
+      wifiPassword = nextWifiPassword;
+    }
     uiEnglish = webServer.arg("uiLanguage") == "en";
     displayEnabled = webServer.hasArg("display");
     environmentIdleDisplayEnabled = webServer.hasArg("environmentIdle");
@@ -3659,6 +3718,10 @@ void applyWebSettings() {
       manualBrightnessIndex = requestedBrightness;
     }
     preferences.putBool("displayOn", displayEnabled);
+    if (wifiSettingsChanged) {
+      preferences.putString("wifiSsid", wifiSsid);
+      preferences.putString("wifiPass", wifiPassword);
+    }
     preferences.putBool("uiEnglish", uiEnglish);
     preferences.putBool("envIdle", environmentIdleDisplayEnabled);
     preferences.putBool("mqttOn", mqttWeatherEnabled);
@@ -3706,11 +3769,38 @@ void applyWebSettings() {
   mqttConnected = false;
   lastMqttAttempt = 0;
   resetPageTransition();
+  if (wifiSettingsChanged) manualRebootAt = millis() + 2500;
 }
 
 
 void handleWebSave() {
   applyWebSettings();
+  if (wifiSettingsError.length()) {
+    webServer.send(400, "text/html; charset=utf-8",
+        String("<!doctype html><html lang='") + (uiEnglish ? "en" : "de") +
+        "'><meta name='viewport' content='width=device-width'>"
+        "<body style='font:18px system-ui;max-width:600px;margin:40px auto'>"
+        "<h1>" + uiText("WLAN-Einstellungen ungültig",
+                         "Invalid Wi-Fi settings") +
+        "</h1><p>" + htmlEscape(wifiSettingsError) +
+        "</p><p><a href='/'>" + uiText("Zurück", "Back") +
+        "</a></p></body></html>");
+    return;
+  }
+  if (wifiSettingsChanged) {
+    webServer.send(200, "text/html; charset=utf-8",
+        String("<!doctype html><html lang='") + (uiEnglish ? "en" : "de") +
+        "'><meta name='viewport' content='width=device-width'>"
+        "<body style='font:18px system-ui;max-width:600px;margin:40px auto'>"
+        "<h1>" + uiText("WLAN gespeichert", "Wi-Fi saved") +
+        "</h1><p>" +
+        uiText("Der ESP startet neu und verbindet sich mit dem neuen WLAN. "
+               "Falls das nicht gelingt, steht das Einrichtungsnetz zur Verfügung.",
+               "The ESP restarts and connects to the new Wi-Fi network. "
+               "If that fails, the setup network will be available.") +
+        "</p></body></html>");
+    return;
+  }
   webServer.sendHeader("Location", "/");
   webServer.send(303, "text/plain", uiText("Gespeichert", "Saved"));
 }
@@ -4024,6 +4114,13 @@ void handleStatusApi() {
       ",\"wind_speed_kph\":" + jsonNumberOrNull(statusWindSpeed) +
       ",\"wind_gust_kph\":" + jsonNumberOrNull(statusWindGust) +
       ",\"rain24_mm\":" + jsonNumberOrNull(statusRain) +
+      ",\"wifi_ssid\":\"" + jsonEscape(wifiSsid) + "\"" +
+      ",\"wifi_connected\":" +
+          String(WiFi.status() == WL_CONNECTED ? "true" : "false") +
+      ",\"wifi_setup_ap_active\":" +
+          String(wifiSetupAccessPointActive ? "true" : "false") +
+      ",\"wifi_setup_ap_ssid\":\"" +
+          jsonEscape(wifiSetupAccessPointSsid) + "\"" +
       ",\"rssi\":" + String(WiFi.RSSI()) +
       ",\"wifi_reconnects\":" + String(wifiReconnectCount) +
       ",\"webserver_starts\":" + String(webServerStartCount) +
@@ -4428,15 +4525,59 @@ void startWebServer() {
     webServer.on("/restart", HTTP_POST, handleRestart);
     webServer.on("/update", HTTP_GET, handleOtaPage);
     webServer.on("/update", HTTP_POST, finishOtaUpload, handleOtaUpload);
-    webServer.onNotFound([]() { webServer.send(404, "text/plain; charset=utf-8", "Nicht gefunden"); });
+    webServer.onNotFound([]() {
+      if (wifiSetupAccessPointActive) {
+        webServer.sendHeader("Location", "http://192.168.4.1/", true);
+        webServer.send(302, "text/plain; charset=utf-8", "FlightWall Setup");
+      } else {
+        webServer.send(404, "text/plain; charset=utf-8", "Nicht gefunden");
+      }
+    });
     webServerConfigured = true;
   }
   webServer.begin();
-  if (MDNS.begin("matrixportal")) MDNS.addService("http", "tcp", 80);
+  if (WiFi.status() == WL_CONNECTED && MDNS.begin("matrixportal"))
+    MDNS.addService("http", "tcp", 80);
   webServerStarted = true;
   ++webServerStartCount;
-  startArduinoOta();
-  Serial.println("Web interface: http://matrixportal.local");
+  if (WiFi.status() == WL_CONNECTED) {
+    startArduinoOta();
+    Serial.println("Web interface: http://matrixportal.local");
+  }
+}
+
+
+void startSetupAccessPoint() {
+  if (wifiSetupAccessPointActive) return;
+  if (!wifiSetupAccessPointSsid.length()) {
+    const uint32_t suffix = static_cast<uint32_t>(ESP.getEfuseMac() & 0xFFFFFF);
+    char suffixText[7];
+    snprintf(suffixText, sizeof(suffixText), "%06X", suffix);
+    wifiSetupAccessPointSsid = String(WIFI_SETUP_AP_PREFIX) + "-" + suffixText;
+  }
+  WiFi.mode(WIFI_AP_STA);
+  if (!WiFi.softAP(wifiSetupAccessPointSsid.c_str(),
+                   WIFI_SETUP_AP_PASSWORD)) {
+    setNetworkError("SETUP-WLAN FEHLER");
+    return;
+  }
+  wifiSetupAccessPointActive = true;
+  setupDnsServer.setErrorReplyCode(DNSReplyCode::NoError);
+  setupDnsServer.start(53, "*", WiFi.softAPIP());
+  startWebServer();
+  setNetworkError("WLAN EINRICHTUNG");
+  Serial.printf("Wi-Fi setup network: %s / http://%s\n",
+                wifiSetupAccessPointSsid.c_str(),
+                WiFi.softAPIP().toString().c_str());
+}
+
+
+void stopSetupAccessPoint() {
+  if (!wifiSetupAccessPointActive) return;
+  setupDnsServer.stop();
+  WiFi.softAPdisconnect(false);
+  wifiSetupAccessPointActive = false;
+  Serial.println("Wi-Fi setup network stopped");
 }
 
 
@@ -4507,6 +4648,8 @@ void networkTask(void *) {
     startWebServer();
     fetchLocalFlight();
     lastPoll = millis();
+  } else {
+    startSetupAccessPoint();
   }
   for (;;) {
     const uint32_t now = millis();
@@ -4516,18 +4659,26 @@ void networkTask(void *) {
       lastWifiDisconnect = now;
       stopNetworkServices();
       setNetworkError("WLAN GETRENNT");
+      startSetupAccessPoint();
     } else if (wifiConnected && !wifiWasConnected) {
       wifiWasConnected = true;
       ++wifiReconnectCount;
+      if (wifiSetupAccessPointActive) {
+        stopSetupAccessPoint();
+        stopNetworkServices();
+      }
       startWebServer();
       Serial.println("Network services restarted after Wi-Fi reconnect");
     }
-    if (wifiConnected) {
+    if (wifiConnected || wifiSetupAccessPointActive) {
       {
         NetworkPhaseScope phase(NetworkPhase::Web);
         webServer.handleClient();
       }
       vTaskDelay(pdMS_TO_TICKS(1));
+      if (wifiSetupAccessPointActive) setupDnsServer.processNextRequest();
+    }
+    if (wifiConnected) {
       if (otaStarted) {
         NetworkPhaseScope phase(NetworkPhase::Ota);
         ArduinoOTA.handle();
@@ -4587,6 +4738,15 @@ void setup() {
 
   preferences.begin("flightwall", false);
   const uint8_t settingsVersion = preferences.getUChar("settingsVer", 1);
+  wifiSsid = preferences.getString("wifiSsid", WIFI_SSID);
+  wifiPassword = preferences.getString("wifiPass", WIFI_PASSWORD);
+  if (!wifiSsid.length() || wifiSsid.length() > 32) wifiSsid = WIFI_SSID;
+  const uint32_t setupSuffix =
+      static_cast<uint32_t>(ESP.getEfuseMac() & 0xFFFFFF);
+  char setupSuffixText[7];
+  snprintf(setupSuffixText, sizeof(setupSuffixText), "%06X", setupSuffix);
+  wifiSetupAccessPointSsid =
+      String(WIFI_SETUP_AP_PREFIX) + "-" + setupSuffixText;
   manualBrightnessIndex = preferences.getUChar("brightness", 1);
   if (settingsVersion < 2) {
     const uint8_t migratedLevels[] = {1, 3, 6};
@@ -4679,7 +4839,7 @@ void setup() {
     pageOrder[page] = preferences.getUChar(
         ("order" + String(page)).c_str(), page);
   }
-  if (settingsVersion < 13) preferences.putUChar("settingsVer", 13);
+  if (settingsVersion < 14) preferences.putUChar("settingsVer", 14);
   displayRadiusKm = constrain(displayRadiusKm, 1.0f, 100.0f);
   siteLatitude = constrain(siteLatitude, -90.0, 90.0);
   siteLongitude = constrain(siteLongitude, -180.0, 180.0);

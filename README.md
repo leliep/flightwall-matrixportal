@@ -12,7 +12,7 @@ FlightMatrixServer ist für den Betrieb nicht erforderlich.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.4.0-3bit-dmasync.15-looproutes` |
+| Firmware | `3.5.0-wifi-config.1` |
 | Controller | Adafruit MatrixPortal S3 / ESP32-S3 |
 | Anzeige | 2 × 64×32 HUB75, horizontal verkettet |
 | Gesamtauflösung | 128×32 Pixel |
@@ -38,6 +38,7 @@ Wesentliche Funktionen:
 - BME280-Klimawerte, Schimmelrisiko und optionale MQTT-Wetterdaten
 - BH1750-Helligkeitsautomatik mit sieben stabilen Helligkeitsstufen
 - umfangreiche Status-, Test- und Diagnosefunktionen
+- änderbare WLAN-Zugangsdaten mit geschütztem Einrichtungsnetz als Rückfallweg
 - Dual-Core-Betrieb mit voneinander getrennter Anzeige und Netzverarbeitung
 
 ## Systemaufbau
@@ -335,7 +336,7 @@ Falls mDNS im Netz nicht funktioniert, kann statt `matrixportal.local` die im
 seriellen Monitor oder Router angezeigte IP-Adresse verwendet werden.
 
 Die Konfigurationsseite ist für iPhone, Tablet und Desktop optimiert. Sie
-verwaltet unter anderem Sprache, Display, Wetterseite, Standort,
+verwaltet unter anderem WLAN-Zugang, Sprache, Display, Wetterseite, Standort,
 Blickrichtung, ADS-B-Quelle, Filter, Routendienst, MQTT, Seitenreihenfolge,
 Freitext, Helligkeit und Nachtruhe. Statuskarten werden regelmäßig aktualisiert,
 ohne geöffnete Bereiche zu schließen oder ungespeicherte Formulareingaben zu
@@ -377,9 +378,33 @@ constexpr char WIFI_PASSWORD[] = "mein-wlan-passwort";
 #define MQTT_PASSWORD ""
 ```
 
+Die Werte `WIFI_SSID` und `WIFI_PASSWORD` dienen als erstmalige beziehungsweise
+werkseitige Zugangsdaten. Danach können WLAN-Name und Passwort über die
+Konfigurationsseite geändert werden; die gespeicherten Werte bleiben bei
+Firmwareupdates erhalten.
+
 `OTA_PASSWORD` benötigt mindestens acht Zeichen. Ein leerer Wert deaktiviert
 Web-OTA und PlatformIO-OTA. `include/secrets.h` wird von Git ignoriert und darf
 nicht eingecheckt werden.
+
+### WLAN später ändern
+
+Unter **WLAN-Zugang** kann ein neuer WLAN-Name mit neuem Passwort gespeichert
+werden. Ein leeres Passwortfeld behält das vorhandene Passwort bei; für ein
+offenes Netz steht eine eigene Auswahl zur Verfügung. Nach einer Änderung
+startet der Controller automatisch neu.
+
+Kann der Controller das gespeicherte WLAN nicht erreichen, öffnet er ein
+Einrichtungsnetz mit einem gerätespezifischen Namen nach dem Muster
+`FlightWall-Setup-123ABC`:
+
+| Einstellung | Wert |
+|---|---|
+| Passwort | `flightwall` |
+| Konfigurationsadresse | `http://192.168.4.1/` |
+
+Das Einrichtungsnetz leitet Browseraufrufe auf die Konfigurationsseite um und
+wird nach einer erfolgreichen Verbindung mit dem normalen WLAN wieder beendet.
 
 Kompilieren und per USB übertragen:
 
@@ -460,7 +485,7 @@ gesammelten Listen. Nach einem Neustart sind diese Beobachtungen verloren.
 Die Statusseite zeigt unter anderem:
 
 - Firmwareversion, Build, Laufzeit und Neustartgrund
-- freien Heap, WLAN-Signal und Wiederverbindungen
+- freien Heap, WLAN-Name, Verbindungsstatus, Einrichtungsnetz und Wiederverbindungen
 - aktive ADS-B-Quelle, Abrufalter, empfangene und geeignete Flugzeuge
 - aktuelles Flugzeug, Route, CPA, Filter und Routencache
 - unbekannte Airport-/Airline-Codes
@@ -479,8 +504,9 @@ Verfügbare Tests:
 
 Der Netzwerk-Task läuft mit niedriger Priorität und kurzen Scheduler-Pausen,
 damit synchrone HTTP-, TLS- und MQTT-Aufrufe den ESP32-Task-Watchdog nicht
-blockieren. Bei WLAN-Verlust werden Webserver, mDNS, MQTT und OTA kontrolliert
-beendet und nach der Wiederverbindung neu gestartet.
+blockieren. Bei WLAN-Verlust werden mDNS, MQTT und OTA kontrolliert beendet;
+der Webserver bleibt über das Einrichtungsnetz erreichbar und die normalen
+Netzdienste werden nach der Wiederverbindung neu gestartet.
 
 ## Wiederherstellung und Git
 
