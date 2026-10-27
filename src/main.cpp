@@ -35,8 +35,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.5.0-wifi-config.1";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-26 configurable Wi-Fi";
+constexpr char APP_VERSION[] = "3.5.1-wifi-setup-display.1";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-27 Wi-Fi setup display";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -268,7 +268,7 @@ bool webServerStarted = false;
 bool webServerConfigured = false;
 bool otaStarted = false;
 bool wifiWasConnected = false;
-bool wifiSetupAccessPointActive = false;
+volatile bool wifiSetupAccessPointActive = false;
 bool wifiSettingsChanged = false;
 String wifiSettingsError;
 String wifiSsid = WIFI_SSID;
@@ -1457,6 +1457,20 @@ int16_t scrollingTextX(const String &text, uint32_t elapsedMs) {
 }
 
 
+void drawWifiSetupPage() {
+  matrix.fillScreen(0);
+  drawLine(0, 0, "WLAN SETUP", yellow);
+  const String ssidText = "SSID " + wifiSetupAccessPointSsid;
+  const uint32_t scrollDuration = scrollingTextDuration(ssidText);
+  const uint32_t scrollElapsed = scrollDuration
+      ? millis() % scrollDuration : 0;
+  drawLine(scrollingTextX(ssidText, scrollElapsed), 8, ssidText, cyan);
+  drawLine(0, 16, String("PW ") + WIFI_SETUP_AP_PASSWORD, orange);
+  drawLine(0, 24, "CONFIG IP 192.168.4.1", green);
+  showMatrix();
+}
+
+
 bool flightHasMultiHopRoute() {
   const int firstSeparator = flight.routeCodes.indexOf('-');
   return firstSeparator >= 0 &&
@@ -1878,6 +1892,11 @@ void drawDisplay() {
     resetPageTransition();
     matrix.fillScreen(0);
     showMatrix();
+    return;
+  }
+  if (wifiSetupAccessPointActive) {
+    resetPageTransition();
+    drawWifiSetupPage();
     return;
   }
   if (serviceDisplayTest()) return;
@@ -4904,6 +4923,7 @@ void serviceMatrixDiagnostics(uint32_t now) {
 
 
 uint32_t displayDrawIntervalMs() {
+  if (wifiSetupAccessPointActive) return 50;
   if (otaPreparing || otaInProgress || routeCacheWritePreparing ||
       routeCacheWriteInProgress || settingsWritePreparing ||
       settingsWriteInProgress || displayTestActive ||

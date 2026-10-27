@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.5.1-wifi-setup-display.1 – 2026-10-27
+
+- bei fehlender WLAN-Verbindung zeigt die Matrix die Daten des eigenen
+  Einrichtungs-WLANs mit `WLAN SETUP`, SSID, Passwort und
+  `CONFIG IP 192.168.4.1` an
+- lange SSIDs laufen automatisch durch die zweite Displayzeile
+- Flughafencodes `ADL`, `AJR`, `EGC`, `ERC` und `SCN` sowie Betreiber-Codes
+  `RAZ`, `RGN` und `VOE` aus der Merkliste ergänzt
+
 ## 3.4.0-3bit-dmasync.15-looproutes – 2026-10-25
 
 - geschlossene Multi-Hop-Routen werden auf den Kompaktseiten ohne das

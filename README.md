@@ -12,7 +12,7 @@ FlightMatrixServer ist für den Betrieb nicht erforderlich.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.5.0-wifi-config.1` |
+| Firmware | `3.5.1-wifi-setup-display.1` |
 | Controller | Adafruit MatrixPortal S3 / ESP32-S3 |
 | Anzeige | 2 × 64×32 HUB75, horizontal verkettet |
 | Gesamtauflösung | 128×32 Pixel |
@@ -405,6 +405,8 @@ Einrichtungsnetz mit einem gerätespezifischen Namen nach dem Muster
 
 Das Einrichtungsnetz leitet Browseraufrufe auf die Konfigurationsseite um und
 wird nach einer erfolgreichen Verbindung mit dem normalen WLAN wieder beendet.
+Solange es aktiv ist, zeigt die Matrix dauerhaft WLAN-Name, Passwort und
+`CONFIG IP 192.168.4.1` an. Ein zu langer WLAN-Name läuft als Laufschrift.
 
 Kompilieren und per USB übertragen:
 
