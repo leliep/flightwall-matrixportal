@@ -1,5 +1,19 @@
 # Changelog
 
+## 3.5.4-free-route-fallback.1 – 2026-10-27
+
+- kostenlosen ADSBDB-Dienst als automatische zweite Routenquelle ergänzt;
+  der vorhandene adsb.im-Dienst bleibt die erste Quelle
+- ADSBDB wird nur bei fehlender Primärroute abgefragt und benötigt weder Konto
+  noch API-Schlüssel
+- Fallbackrouten werden anhand von Callsign und geografischer Lage auf
+  Plausibilität geprüft und maximal einen Tag ausschließlich im RAM gehalten;
+  sie werden nicht in den permanenten Routencache kopiert
+- Routenquelle in Status-JSON, Statusseite, Routentest und Cachetabelle sichtbar
+- ADSBDB-Fallback in der Konfigurationsseite abschaltbar
+- Airline-Codes `APA` (Air Park Aviation), `FRO` (Frost Air) und `XRO`
+  (Exxaero) ergänzt
+
 ## 3.5.3-compact-config.1 – 2026-10-27
 
 - Eingabefelder der Konfigurationsseite in ein responsives Raster eingeordnet

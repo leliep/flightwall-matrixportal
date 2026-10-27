@@ -12,7 +12,7 @@ FlightMatrixServer ist für den Betrieb nicht erforderlich.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.5.3-compact-config.1` |
+| Firmware | `3.5.4-free-route-fallback.1` |
 | Controller | Adafruit MatrixPortal S3 / ESP32-S3 |
 | Anzeige | 2 × 64×32 HUB75, horizontal verkettet |
 | Gesamtauflösung | 128×32 Pixel |
@@ -43,7 +43,8 @@ Wesentliche Funktionen:
 - Auswahl des nächsten geeigneten Flugzeugs einschließlich CPA-Berechnung
 - konfigurierbare Filter für Kleinflugzeuge und Maximalhöhe
 - bevorzugte Behandlung interessanter Flugzeuge und Transpondernotfälle
-- Routenauflösung über adsb.im mit verwaltetem RAM-/Flash-Cache
+- Routenauflösung über adsb.im mit kostenlosem ADSBDB-Fallback und
+  verwaltetem RAM-/Flash-Cache
 - vollständige Multi-Hop-Routen und kompakte Darstellung geschlossener Umläufe
 - integrierte Flughafen- und Airline-Klartexte
 - sieben frei auswählbare und sortierbare Matrixseiten
@@ -226,6 +227,14 @@ mit Callsign und aktueller Position ab. Er ergänzt:
 - kurze Airport-Codes
 - kompakte deutschsprachige Airport- und Airline-Bezeichnungen
 
+Findet der Primärdienst keine Route, kann die Firmware automatisch den
+kostenlosen, schlüsselfreien Dienst ADSBDB abfragen. Das Ergebnis wird nur
+übernommen, wenn Callsign und Lage des Flugzeugs zur Verbindung zwischen Start
+und Ziel plausibel sind. ADSBDB dient ausschließlich als Fallback; eine bereits
+gefundene Primärroute wird nicht ersetzt. Die Funktion ist in der
+Konfigurationsseite abschaltbar. ADSBDB-Ergebnisse bleiben ausschließlich im
+flüchtigen RAM-Cache und werden nicht in den permanenten Routencache kopiert.
+
 Multi-Hop-Routen bleiben vollständig erhalten. Die ausführliche Matrixseite
 scrollt beispielsweise:
 
@@ -243,7 +252,8 @@ Gültigkeitszeiten:
 
 | Ergebnis | Gültigkeit |
 |---|---:|
-| gefundene Standardroute | 7 Tage |
+| gefundene Route des Primärdienstes | 7 Tage |
+| gefundene ADSBDB-Fallbackroute (nur RAM) | maximal 1 Tag |
 | nicht gefundene Route | 1 Stunde |
 | militärisches/behördliches Einsatzrufzeichen | 30 Minuten |
 
@@ -252,7 +262,8 @@ erfolgt bevorzugt, wenn kein Flugzeug angezeigt wird oder die Nachtruhe aktiv
 ist; die Matrix wird dafür kontrolliert dunkel geschaltet. Die
 Konfigurationsseite zeigt Callsign, Route, Alter, Speicherort und Zustand.
 Einträge können einzeln gelöscht, für das aktuelle Flugzeug neu abgefragt oder
-vollständig geleert werden.
+vollständig geleert werden. Statusseite, Routentest und Cachetabelle zeigen
+zusätzlich, aus welcher Quelle das Ergebnis stammt.
 
 ## Matrixanzeige
 

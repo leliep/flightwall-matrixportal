@@ -11,6 +11,7 @@ struct RouteResult {
   String originName;
   String destinationName;
   String airlineCode;
+  String source;
   String status = "unavailable";
   String error;
 
@@ -20,6 +21,7 @@ struct RouteResult {
 struct RouteCacheEntryInfo {
   String callsign;
   String routeCodes;
+  String source;
   uint32_t updated = 0;
   bool found = false;
   bool inMemory = false;
@@ -31,7 +33,8 @@ struct RouteCacheEntryInfo {
 class RouteClient {
  public:
   RouteClient() = default;
-  void configure(bool enabled, const String& url);
+  void configure(bool enabled, const String& url,
+                 bool adsbDbFallbackEnabled = true);
   RouteResult lookup(const String& callsign, double latitude, double longitude,
                      uint32_t now);
   RouteResult test(const String& callsign, double latitude, double longitude);
@@ -56,9 +59,14 @@ class RouteClient {
   RouteResult readCache(const String& callsign, uint32_t now);
   void writeCache(const String& callsign, const RouteResult& route,
                   uint32_t now);
+  RouteResult fetchPrimary(const String& callsign, double latitude,
+                           double longitude);
+  RouteResult fetchAdsbDb(const String& callsign, double latitude,
+                          double longitude);
   RouteResult fetch(const String& callsign, double latitude, double longitude);
 
   bool enabled_ = true;
+  bool adsbDbFallbackEnabled_ = true;
   String url_;
   String lastError_;
   static constexpr size_t memoryCacheSlots_ = 32;

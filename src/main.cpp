@@ -35,8 +35,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.5.3-compact-config.1";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-27 compact configuration form";
+constexpr char APP_VERSION[] = "3.5.4-free-route-fallback.1";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-27 free ADSBDB route fallback";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -366,6 +366,7 @@ double siteLatitude = DEFAULT_SITE_LATITUDE;
 double siteLongitude = DEFAULT_SITE_LONGITUDE;
 float viewHeading = DEFAULT_VIEW_HEADING;
 bool routesEnabled = true;
+bool adsbDbFallbackEnabled = true;
 bool hideSportAircraft = true;
 bool altitudeFilterEnabled = false;
 
@@ -2666,7 +2667,7 @@ bool fetchLocalFlight() {
   config.hideSportAircraft = hideSportAircraft;
   config.maximumAltitudeFt = altitudeFilterEnabled ? maximumAltitudeFt : 0;
   adsbClient.setUrl(activeAdsbUrl());
-  routeClient.configure(routesEnabled, routeUrl);
+  routeClient.configure(routesEnabled, routeUrl, adsbDbFallbackEnabled);
 
   AdsbResult result;
   {
@@ -3005,6 +3006,7 @@ void translateWebPageToEnglish(String &html) {
     {"Sport- und Kleinflugzeuge ausblenden", "Hide sport and light aircraft"},
     {"Flugzeuge oberhalb der Maximalhöhe ausblenden", "Hide aircraft above maximum altitude"},
     {"Maximalhöhe", "Maximum altitude"}, {"Routen über adsb.im ergänzen", "Add routes via adsb.im"},
+    {"ADSBDB bei fehlender Route verwenden", "Use ADSBDB when no route is found"},
     {"Routen-Dienst", "Route service"}, {"Routendienst testen", "Test route service"},
     {"ADS-B-Verbindung testen", "Test ADS-B connection"}, {"Notfalltest-Code", "Emergency test code"},
     {"Anzahl Testflugzeuge", "Number of test aircraft"}, {"Notfallanzeige testen", "Test emergency display"},
@@ -3034,15 +3036,17 @@ void translateWebPageToEnglish(String &html) {
     {"ADS-B und Route", "ADS-B and route"}, {"ADS-B-Fehler", "ADS-B error"},
     {"Routenfehler", "Route error"}, {"Routencache wartet auf Flash", "Route cache pending flash write"},
     {"Empfangen / Kandidaten", "Received / candidates"}, {"Letzter Erfolg", "Last success"},
-    {"Vertikalbewegung", "Vertical motion"}, {"Routenstatus", "Route status"}, {"Letzter ADS-B-Erfolg", "Last ADS-B success"},
-    {"Gefundene Routen gelten sieben Tage, negative Ergebnisse eine Stunde und erkannte Einsatzrufzeichen 30 Minuten. Der jüngste Eintrag eines Callsigns wird verwendet. Eine sofortige Neuabfrage ist nur für das aktuell beobachtete Flugzeug möglich.", "Found routes are valid for seven days, negative results for one hour, and recognised operational callsigns for 30 minutes. The newest entry for a callsign is used. Immediate refresh is available only for the currently observed aircraft."},
+    {"Vertikalbewegung", "Vertical motion"}, {"Routenstatus", "Route status"},
+    {"Routenquelle", "Route source"}, {"ADSBDB-Fallback", "ADSBDB fallback"},
+    {"Letzter ADS-B-Erfolg", "Last ADS-B success"},
+    {"Routen des Primärdienstes gelten sieben Tage. ADSBDB-Routen bleiben maximal einen Tag nur im RAM. Negative Ergebnisse gelten eine Stunde und erkannte Einsatzrufzeichen 30 Minuten. Der jüngste Eintrag eines Callsigns wird verwendet. Eine sofortige Neuabfrage ist nur für das aktuell beobachtete Flugzeug möglich.", "Routes from the primary service are valid for seven days. ADSBDB routes remain in RAM only for up to one day. Negative results are valid for one hour and recognised operational callsigns for 30 minutes. The newest entry for a callsign is used. Immediate refresh is available only for the currently observed aircraft."},
     {"Gesamten Routencache wirklich löschen?", "Really clear the entire route cache?"},
     {"Diesen Cacheeintrag löschen?", "Delete this cache entry?"},
     {"Aktuelle Route neu laden", "Refresh current route"},
     {"Gesamten Cache löschen", "Clear entire cache"},
     {"Der Routencache ist leer.", "The route cache is empty."},
     {"Routencache", "Route cache"}, {"Callsign", "Callsign"},
-    {"Alter", "Age"}, {"Speicher", "Storage"}, {"Aktionen", "Actions"},
+    {"Quelle", "Source"}, {"Alter", "Age"}, {"Speicher", "Storage"}, {"Aktionen", "Actions"},
     {"Neu laden", "Refresh"}, {"Löschen", "Delete"},
     {"nicht gefunden", "not found"}, {"gefunden", "found"},
     {"wartet", "pending"}, {"abgelaufen", "expired"},
@@ -3199,7 +3203,9 @@ String webPage(bool includeRouteCache = true) {
   html += String(maximumAltitudeFt);
   html += F("'></label><label class='twoThird check'><input type='checkbox' name='routesEnabled' value='1'");
   html += checked(routesEnabled);
-  html += F("> Routen über adsb.im ergänzen</label><label class='fieldWide'>Routen-Dienst<input type='url' name='routeUrl' maxlength='180' value='");
+  html += F("> Routen über adsb.im ergänzen</label><label class='twoThird check'><input type='checkbox' name='adsbDbFallback' value='1'");
+  html += checked(adsbDbFallbackEnabled);
+  html += F("> ADSBDB bei fehlender Route verwenden</label><label class='fieldWide'>Routen-Dienst<input type='url' name='routeUrl' maxlength='180' value='");
   html += htmlEscape(routeUrl);
   html += F("'></label><label class='third'>Test-Callsign<input type='text' name='routeTestCallsign' maxlength='10' value='DLH123'></label></div>"
             "<div class='buttonRow'><button type='submit' formaction='/test-route'>Routendienst testen</button>"
@@ -3404,6 +3410,10 @@ String webPage(bool includeRouteCache = true) {
   html += lastRouteError.length() ? htmlEscape(lastRouteError) : "keiner";
   html += F("</b><span>Routenstatus</span><b>");
   html += htmlEscape(currentRoute.status);
+  html += F("</b><span>Routenquelle</span><b>");
+  html += currentRoute.source.length() ? htmlEscape(currentRoute.source) : "-";
+  html += F("</b><span>ADSBDB-Fallback</span><b>");
+  html += adsbDbFallbackEnabled ? "aktiv" : "aus";
   html += F("</b><span>Routencache wartet auf Flash</span><b>");
   html += routeClient.hasPendingWrites() ? "ja" : "nein";
   html += F("</b><span>Aktive ADS-B-Quelle</span><b>");
@@ -3532,7 +3542,7 @@ String webPage(bool includeRouteCache = true) {
   if (includeRouteCache) {
     const std::vector<RouteCacheEntryInfo> cacheEntries =
         routeClient.cacheEntries(lastFeedTimestamp);
-    html += F("<fieldset id='routeCache'><legend>Routencache</legend><p class='muted'>Gefundene Routen gelten sieben Tage, negative Ergebnisse eine Stunde und erkannte Einsatzrufzeichen 30 Minuten. Der jüngste Eintrag eines Callsigns wird verwendet. Eine sofortige Neuabfrage ist nur für das aktuell beobachtete Flugzeug möglich.</p>");
+    html += F("<fieldset id='routeCache'><legend>Routencache</legend><p class='muted'>Routen des Primärdienstes gelten sieben Tage. ADSBDB-Routen bleiben maximal einen Tag nur im RAM. Negative Ergebnisse gelten eine Stunde und erkannte Einsatzrufzeichen 30 Minuten. Der jüngste Eintrag eines Callsigns wird verwendet. Eine sofortige Neuabfrage ist nur für das aktuell beobachtete Flugzeug möglich.</p>");
     if (routedFlight.length()) {
       html += F("<form class='inlineForm' method='post' action='/route-cache/refresh'><input type='hidden' name='callsign' value='");
       html += htmlEscape(routedFlight);
@@ -3542,7 +3552,7 @@ String webPage(bool includeRouteCache = true) {
     if (cacheEntries.empty()) {
       html += F("<p>Der Routencache ist leer.</p>");
     } else {
-      html += F("<div style='overflow-x:auto'><table class='cacheTable'><thead><tr><th>Callsign</th><th>Route</th><th>Alter</th><th>Speicher</th><th>Aktionen</th></tr></thead><tbody>");
+      html += F("<div style='overflow-x:auto'><table class='cacheTable'><thead><tr><th>Callsign</th><th>Route</th><th>Quelle</th><th>Alter</th><th>Speicher</th><th>Aktionen</th></tr></thead><tbody>");
       for (const RouteCacheEntryInfo& entry : cacheEntries) {
         String age = "-";
         if (lastFeedTimestamp && entry.updated && lastFeedTimestamp >= entry.updated) {
@@ -3566,6 +3576,8 @@ String webPage(bool includeRouteCache = true) {
                     ? htmlEscape(entry.routeCodes.length()
                                      ? entry.routeCodes : "gefunden")
                     : "nicht gefunden";
+        html += F("</td><td>");
+        html += entry.source.length() ? htmlEscape(entry.source) : "-";
         html += F("</td><td>");
         html += age;
         html += F("</td><td>");
@@ -3715,6 +3727,7 @@ void applyWebSettings() {
     siteLongitude = constrain(webServer.arg("siteLon").toDouble(), -180.0, 180.0);
     viewHeading = constrain(webServer.arg("viewHeading").toFloat(), 0.0f, 359.0f);
     routesEnabled = webServer.hasArg("routesEnabled");
+    adsbDbFallbackEnabled = webServer.hasArg("adsbDbFallback");
     hideSportAircraft = webServer.hasArg("hideSport");
     altitudeFilterEnabled = webServer.hasArg("altitudeFilter");
     maximumAltitudeFt = constrain(
@@ -3795,6 +3808,7 @@ void applyWebSettings() {
     preferences.putDouble("siteLon", siteLongitude);
     preferences.putFloat("heading", viewHeading);
     preferences.putBool("routesOn", routesEnabled);
+    preferences.putBool("routeFallback", adsbDbFallbackEnabled);
     preferences.putBool("hideSport", hideSportAircraft);
     preferences.putBool("altFilter", altitudeFilterEnabled);
     preferences.putInt("maxAltFt", maximumAltitudeFt);
@@ -3986,13 +4000,13 @@ void handleRouteTest() {
   testUrl.trim();
   if (!testUrl.startsWith("http://") && !testUrl.startsWith("https://"))
     testUrl = routeUrl;
-  routeClient.configure(true, testUrl);
+  routeClient.configure(true, testUrl, adsbDbFallbackEnabled);
   RouteResult result;
   {
     NetworkPhaseScope phase(NetworkPhase::Route);
     result = routeClient.test(callsign, siteLatitude, siteLongitude);
   }
-  routeClient.configure(routesEnabled, routeUrl);
+  routeClient.configure(routesEnabled, routeUrl, adsbDbFallbackEnabled);
   lastRouteError = result.error;
   const bool reachable = result.error.isEmpty();
   String detail;
@@ -4006,9 +4020,15 @@ void handleRouteTest() {
     if (result.airlineCode.length())
       detail += "<br>Airline-Code: <b>" +
                 htmlEscape(result.airlineCode) + "</b>";
+    if (result.source.length())
+      detail += "<br>" + String(uiText("Quelle: ", "Source: ")) +
+                "<b>" + htmlEscape(result.source) + "</b>";
   } else {
     detail = uiText("Dienst erreichbar, aber keine Route für dieses Callsign gefunden.",
                     "Service reachable, but no route found for this callsign.");
+    if (result.source.length())
+      detail += "<br>" + String(uiText("Letzte Quelle: ", "Last source: ")) +
+                "<b>" + htmlEscape(result.source) + "</b>";
   }
   webServer.send(reachable ? 200 : 502, "text/html; charset=utf-8",
       String("<!doctype html><html lang='") + (uiEnglish ? "en" : "de") +
@@ -4193,6 +4213,8 @@ void handleStatusApi() {
       ",\"display_radius_km\":" + String(displayRadiusKm, 1) +
       ",\"effective_radius_km\":" + jsonNumberOrNull(effectiveRadiusKm) +
       ",\"routes_enabled\":" + String(routesEnabled ? "true" : "false") +
+      ",\"adsbdb_route_fallback_enabled\":" +
+          String(adsbDbFallbackEnabled ? "true" : "false") +
       ",\"hide_sport_aircraft\":" + String(hideSportAircraft ? "true" : "false") +
       ",\"altitude_filter_enabled\":" + String(altitudeFilterEnabled ? "true" : "false") +
       ",\"maximum_altitude_ft\":" + String(maximumAltitudeFt) +
@@ -4210,6 +4232,7 @@ void handleStatusApi() {
       ",\"display_error\":\"" + jsonEscape(statusError) + "\"" +
       ",\"route_error\":\"" + jsonEscape(lastRouteError) + "\"" +
       ",\"route_status\":\"" + jsonEscape(currentRoute.status) + "\"" +
+      ",\"route_source\":\"" + jsonEscape(currentRoute.source) + "\"" +
       ",\"route_cache_write_pending\":" +
           String(routeClient.hasPendingWrites() ? "true" : "false") +
       ",\"flight_available\":" + String(statusFlight.available ? "true" : "false") +
@@ -4865,6 +4888,7 @@ void setup() {
   siteLongitude = preferences.getDouble("siteLon", DEFAULT_SITE_LONGITUDE);
   viewHeading = preferences.getFloat("heading", DEFAULT_VIEW_HEADING);
   routesEnabled = preferences.getBool("routesOn", true);
+  adsbDbFallbackEnabled = preferences.getBool("routeFallback", true);
   hideSportAircraft = preferences.getBool("hideSport", true);
   altitudeFilterEnabled = preferences.getBool("altFilter", false);
   maximumAltitudeFt = preferences.getInt(

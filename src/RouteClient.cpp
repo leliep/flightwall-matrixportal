@@ -6,6 +6,7 @@
 #include <WiFiClientSecure.h>
 
 #include <algorithm>
+#include <cmath>
 
 #include "AirportNames.hpp"
 #include "CallsignClassifier.hpp"
@@ -14,8 +15,11 @@
 namespace {
 constexpr size_t cacheSlots = 32;
 constexpr uint32_t positiveTtl = 7U * 24U * 60U * 60U;
+constexpr uint32_t adsbDbPositiveTtl = 24U * 60U * 60U;
 constexpr uint32_t negativeTtl = 60U * 60U;
 constexpr uint32_t specialTtl = 30U * 60U;
+constexpr char adsbDbUrl[] = "https://api.adsbdb.com/v0/callsign/";
+constexpr double earthRadiusKm = 6371.0;
 
 String cacheKey(size_t slot) {
   char key[5];
@@ -49,14 +53,16 @@ bool shortLivedCallsign(const String& callsign) {
          callsign.startsWith("CHX");
 }
 
-uint32_t cacheTtl(const String& callsign, bool found) {
+uint32_t cacheTtl(const String& callsign, bool found, const String& source) {
   if (!found) return negativeTtl;
-  return shortLivedCallsign(callsign) ? specialTtl : positiveTtl;
+  if (shortLivedCallsign(callsign)) return specialTtl;
+  return source == "adsbdb" ? adsbDbPositiveTtl : positiveTtl;
 }
 
 bool cacheExpired(const String& callsign, bool found, uint32_t updated,
-                  uint32_t now) {
-  return !now || !updated || now - updated >= cacheTtl(callsign, found);
+                  uint32_t now, const String& source) {
+  return !now || !updated ||
+         now - updated >= cacheTtl(callsign, found, source);
 }
 
 bool decodeCacheValue(const String& raw, String& callsign, uint32_t& updated,
@@ -72,7 +78,115 @@ bool decodeCacheValue(const String& raw, String& callsign, uint32_t& updated,
   route.routeCodes = fields.size() >= 7
                          ? fields[6]
                          : route.origin + "-" + route.destination;
+  route.source = fields.size() >= 8 && !fields[7].isEmpty()
+                     ? fields[7]
+                     : "primary";
   return true;
+}
+
+double greatCircleDistanceKm(double lat1, double lon1,
+                             double lat2, double lon2) {
+  constexpr double radiansPerDegree = 0.017453292519943295;
+  const double phi1 = lat1 * radiansPerDegree;
+  const double phi2 = lat2 * radiansPerDegree;
+  const double deltaPhi = (lat2 - lat1) * radiansPerDegree;
+  const double deltaLambda = (lon2 - lon1) * radiansPerDegree;
+  const double sinPhi = sin(deltaPhi / 2.0);
+  const double sinLambda = sin(deltaLambda / 2.0);
+  const double a = sinPhi * sinPhi +
+                   cos(phi1) * cos(phi2) * sinLambda * sinLambda;
+  return earthRadiusKm * 2.0 * atan2(sqrt(a), sqrt(std::max(0.0, 1.0 - a)));
+}
+
+bool validCoordinates(double latitude, double longitude) {
+  return isfinite(latitude) && isfinite(longitude) &&
+         latitude >= -90.0 && latitude <= 90.0 &&
+         longitude >= -180.0 && longitude <= 180.0;
+}
+
+String airportCode(JsonVariantConst airport) {
+  if (!airport.is<JsonObjectConst>()) return "";
+  JsonObjectConst object = airport.as<JsonObjectConst>();
+  String code = upperTrimmed(object["iata_code"] | "");
+  if (code.isEmpty()) code = upperTrimmed(object["icao_code"] | "");
+  return code;
+}
+
+void appendRouteCode(String& routeCodes, const String& rawCode) {
+  const String code = upperTrimmed(rawCode);
+  if (code.isEmpty()) return;
+  if (!routeCodes.isEmpty()) routeCodes += '-';
+  routeCodes += code;
+}
+
+bool adsbDbRoutePlausible(JsonObjectConst route, double latitude,
+                          double longitude) {
+  JsonObjectConst origin = route["origin"].as<JsonObjectConst>();
+  JsonObjectConst destination = route["destination"].as<JsonObjectConst>();
+  if (origin.isNull() || destination.isNull() ||
+      !origin["latitude"].is<double>() ||
+      !origin["longitude"].is<double>() ||
+      !destination["latitude"].is<double>() ||
+      !destination["longitude"].is<double>())
+    return false;
+
+  const double originLat = origin["latitude"].as<double>();
+  const double originLon = origin["longitude"].as<double>();
+  const double destinationLat = destination["latitude"].as<double>();
+  const double destinationLon = destination["longitude"].as<double>();
+  if (!validCoordinates(latitude, longitude) ||
+      !validCoordinates(originLat, originLon) ||
+      !validCoordinates(destinationLat, destinationLon))
+    return false;
+
+  struct RoutePoint {
+    double latitude;
+    double longitude;
+  };
+  RoutePoint points[10];
+  size_t pointCount = 0;
+  points[pointCount++] = {originLat, originLon};
+
+  auto appendPoint = [&](JsonVariantConst airport) {
+    if (pointCount >= 9 || !airport.is<JsonObjectConst>()) return;
+    JsonObjectConst object = airport.as<JsonObjectConst>();
+    if (!object["latitude"].is<double>() ||
+        !object["longitude"].is<double>())
+      return;
+    const double pointLat = object["latitude"].as<double>();
+    const double pointLon = object["longitude"].as<double>();
+    if (validCoordinates(pointLat, pointLon))
+      points[pointCount++] = {pointLat, pointLon};
+  };
+  JsonVariantConst midpoint = route["midpoint"];
+  if (midpoint.is<JsonArrayConst>()) {
+    for (JsonVariantConst item : midpoint.as<JsonArrayConst>())
+      appendPoint(item);
+  } else {
+    appendPoint(midpoint);
+  }
+  points[pointCount++] = {destinationLat, destinationLon};
+
+  // Check every leg separately. This also accepts circular routes such as
+  // DUS-BUD-DUS, whose origin and destination alone have zero distance.
+  for (size_t index = 1; index < pointCount; ++index) {
+    const RoutePoint& start = points[index - 1];
+    const RoutePoint& end = points[index];
+    const double direct = greatCircleDistanceKm(
+        start.latitude, start.longitude, end.latitude, end.longitude);
+    const double viaAircraft =
+        greatCircleDistanceKm(start.latitude, start.longitude,
+                              latitude, longitude) +
+        greatCircleDistanceKm(latitude, longitude,
+                              end.latitude, end.longitude);
+    const double allowance = 350.0 + std::min(500.0, direct * 0.15);
+    if (viaAircraft <= direct + allowance) return true;
+  }
+  return false;
+}
+
+String primarySourceName(const String& url) {
+  return url.indexOf("adsb.im") >= 0 ? "adsb.im" : "primary";
 }
 
 void fillNames(RouteResult& route) {
@@ -137,16 +251,19 @@ void extractCodes(JsonObjectConst row, RouteResult& route) {
 }
 }  // namespace
 
-void RouteClient::configure(bool enabled, const String& url) {
+void RouteClient::configure(bool enabled, const String& url,
+                            bool adsbDbFallbackEnabled) {
   enabled_ = enabled;
   url_ = url;
+  adsbDbFallbackEnabled_ = adsbDbFallbackEnabled;
 }
 
 RouteResult RouteClient::readMemoryCache(const String& callsign,
                                          uint32_t now) {
   for (MemoryCacheEntry& entry : memoryCache_) {
     if (entry.callsign != callsign) continue;
-    if (cacheExpired(callsign, entry.route.found(), entry.updated, now)) {
+    if (cacheExpired(callsign, entry.route.found(), entry.updated, now,
+                     entry.route.source)) {
       entry = {};
       return {};
     }
@@ -222,7 +339,9 @@ std::vector<RouteCacheEntryInfo> RouteClient::cacheEntries(uint32_t now) const {
       target->updated = updated;
       target->found = found;
       target->routeCodes = route.routeCodes;
-      target->expired = cacheExpired(callsign, found, updated, now);
+      target->source = route.source;
+      target->expired = cacheExpired(callsign, found, updated, now,
+                                     route.source);
     }
   }
   preferences.end();
@@ -247,8 +366,10 @@ std::vector<RouteCacheEntryInfo> RouteClient::cacheEntries(uint32_t now) const {
       target->updated = memory.updated;
       target->found = memory.route.found();
       target->routeCodes = memory.route.routeCodes;
+      target->source = memory.route.source;
       target->expired = cacheExpired(memory.callsign, memory.route.found(),
-                                     memory.updated, now);
+                                     memory.updated, now,
+                                     memory.route.source);
     }
   }
 
@@ -314,7 +435,7 @@ RouteResult RouteClient::readCache(const String& callsign, uint32_t now) {
     RouteResult route;
     if (!decodeCacheValue(raw, storedCallsign, updated, found, route) ||
         storedCallsign != callsign ||
-        cacheExpired(callsign, found, updated, now) ||
+        cacheExpired(callsign, found, updated, now, route.source) ||
         (haveResult && updated <= newest))
       continue;
     haveResult = true;
@@ -354,14 +475,15 @@ void RouteClient::writeCache(const String& callsign, const RouteResult& route,
   const String value = callsign + "|" + String(now) + "|" +
                        (route.found() ? "1" : "0") + "|" + route.origin +
                        "|" + route.destination + "|" + route.airlineCode +
-                       "|" + route.routeCodes;
+                       "|" + route.routeCodes + "|" + route.source;
   preferences.putString(cacheKey(targetSlot).c_str(), value);
   preferences.end();
 }
 
-RouteResult RouteClient::fetch(const String& callsign, double latitude,
-                               double longitude) {
+RouteResult RouteClient::fetchPrimary(const String& callsign, double latitude,
+                                      double longitude) {
   RouteResult result;
+  result.source = primarySourceName(url_);
   WiFiClientSecure client;
   // The ESP32 has no trusted wall clock before ADS-B data arrives. HTTPS still
   // encrypts transport, but certificate verification is therefore disabled.
@@ -417,6 +539,83 @@ RouteResult RouteClient::fetch(const String& callsign, double latitude,
   return result;
 }
 
+RouteResult RouteClient::fetchAdsbDb(const String& callsign, double latitude,
+                                     double longitude) {
+  RouteResult result;
+  result.source = "adsbdb";
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+  http.setConnectTimeout(5000);
+  http.setTimeout(8000);
+  if (!http.begin(client, String(adsbDbUrl) + callsign)) {
+    result.error = "Ungültige ADSBDB-Adresse";
+    return result;
+  }
+  http.addHeader("Accept", "application/json");
+  const int status = http.GET();
+  if (status == HTTP_CODE_NOT_FOUND) {
+    result.status = "not_found";
+    http.end();
+    return result;
+  }
+  if (status != HTTP_CODE_OK) {
+    result.error = "ADSBDB-HTTP " + String(status);
+    http.end();
+    return result;
+  }
+
+  JsonDocument document;
+  const DeserializationError error = deserializeJson(document, http.getStream());
+  http.end();
+  if (error) {
+    result.error = "ADSBDB-JSON: " + String(error.c_str());
+    return result;
+  }
+
+  JsonObjectConst route =
+      document["response"]["flightroute"].as<JsonObjectConst>();
+  if (route.isNull()) {
+    result.status = "not_found";
+    return result;
+  }
+  const String returnedCallsign = upperTrimmed(route["callsign"] | "");
+  if ((!returnedCallsign.isEmpty() && returnedCallsign != callsign) ||
+      !adsbDbRoutePlausible(route, latitude, longitude)) {
+    result.source = "adsbdb-rejected";
+    result.status = "not_found";
+    return result;
+  }
+
+  appendRouteCode(result.routeCodes, airportCode(route["origin"]));
+  JsonVariantConst midpoint = route["midpoint"];
+  if (midpoint.is<JsonArrayConst>()) {
+    for (JsonVariantConst item : midpoint.as<JsonArrayConst>())
+      appendRouteCode(result.routeCodes, airportCode(item));
+  } else {
+    appendRouteCode(result.routeCodes, airportCode(midpoint));
+  }
+  appendRouteCode(result.routeCodes, airportCode(route["destination"]));
+  result.airlineCode = upperTrimmed(route["airline"]["icao"] | "");
+  fillNames(result);
+  result.status = result.found() ? "current" : "not_found";
+  return result;
+}
+
+RouteResult RouteClient::fetch(const String& callsign, double latitude,
+                               double longitude) {
+  RouteResult primary = fetchPrimary(callsign, latitude, longitude);
+  if (primary.found() || !adsbDbFallbackEnabled_) return primary;
+
+  RouteResult fallback = fetchAdsbDb(callsign, latitude, longitude);
+  if (fallback.found()) return fallback;
+  if (primary.error.length() && fallback.error.length())
+    fallback.error = primary.error + "; " + fallback.error;
+  else if (primary.error.length())
+    fallback.error = primary.error;
+  return fallback;
+}
+
 RouteResult RouteClient::lookup(const String& callsign, double latitude,
                                 double longitude, uint32_t now) {
   if (!enabled_ || callsign.isEmpty()) {
@@ -437,7 +636,12 @@ RouteResult RouteClient::lookup(const String& callsign, double latitude,
 
   RouteResult result = fetch(callsign, latitude, longitude);
   lastError_ = result.error;
-  if (result.error.isEmpty()) rememberInMemory(callsign, result, now, true);
+  if (result.error.isEmpty()) {
+    // ADSBDB is a runtime fallback only. Keep its data in RAM and do not copy
+    // it into the controller's persistent route database.
+    const bool persist = !result.source.startsWith("adsbdb");
+    rememberInMemory(callsign, result, now, persist);
+  }
   return result;
 }
 

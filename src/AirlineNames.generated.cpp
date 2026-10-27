@@ -27,6 +27,7 @@ const AirlineName names[] = {
   {"ANE", "Air Nostrum"},
   {"AOJ", "Avcon Jet"},
   {"AOM", "Air Ocean Maroc"},
+  {"APA", "Air Park Aviation"},
   {"ASL", "Spurling Aviation"},
   {"ATJ", "Air Traffic GmbH"},
   {"AUA", "Austrian Airlines"},
@@ -105,6 +106,7 @@ const AirlineName names[] = {
   {"FPO", "ASL Airlines France"},
   {"FR", "Ryanair"},
   {"FRF", "Fleet Air International"},
+  {"FRO", "Frost Air"},
   {"GAC", "GlobeAir"},
   {"GAF", "German Airforce"},
   {"GDK", "Goldeck-Flug"},
@@ -292,6 +294,7 @@ const AirlineName names[] = {
   {"WZZ", "Wizz Air"},
   {"X3", "TUI fly Deutschland"},
   {"XQ", "SunExpress"},
+  {"XRO", "Exxaero"},
   {"YZR", "Suparna Airlines"},
 };
 }  // namespace
