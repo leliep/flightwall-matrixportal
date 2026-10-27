@@ -35,8 +35,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.5.2-aircraft-description.1";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-27 CPA aircraft description";
+constexpr char APP_VERSION[] = "3.5.3-compact-config.1";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-27 compact configuration form";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -3129,96 +3129,96 @@ String webPage(bool includeRouteCache = true) {
   String html;
   // The complete configuration page is currently about 18 KiB. Reserving its
   // real size avoids several large heap reallocations while it is assembled.
-  html.reserve(includeRouteCache ? 28000 : 20500);
+  html.reserve(includeRouteCache ? 30000 : 22000);
   html += F("<!doctype html><html lang='de'><head><meta charset='utf-8'>");
   html += F("<meta name='viewport' content='width=device-width,initial-scale=1'>");
   html += F("<title>FlightWall MatrixPortal</title><style>");
   html += F("body{font:16px system-ui;background:#10131a;color:#eef2ff;margin:auto;max-width:920px;padding:20px}");
-  html += F("h1{font-size:1.5rem}fieldset{border:1px solid #445;border-radius:10px;margin:14px 0;padding:14px}");
-  html += F("label{display:block;margin:12px 0}input[type=number],input[type=text],input[type=password],input[type=url],select{width:100%;box-sizing:border-box;padding:9px}");
+  html += F("h1{font-size:1.5rem}fieldset{border:1px solid #445;border-radius:10px;margin:14px 0;padding:14px;min-width:0}");
+  html += F("label{display:block;margin:12px 0}input[type=number],input[type=text],input[type=password],input[type=url],input[type=time],select,textarea{width:100%;box-sizing:border-box;padding:9px;min-height:42px}input[type=checkbox]{width:auto;min-height:auto}.fieldGrid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:10px 14px;align-items:end;margin:10px 0}.fieldGrid>label{grid-column:span 6;margin:0;min-width:0}.fieldGrid>.third{grid-column:span 4}.fieldGrid>.quarter{grid-column:span 3}.fieldGrid>.twoThird{grid-column:span 8}.fieldGrid>.threeQuarter{grid-column:span 9}.fieldGrid>.fieldWide{grid-column:1/-1}.fieldGrid .check{align-self:center;padding:9px 0}.buttonRow{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}.pageSettings{display:grid;grid-template-columns:minmax(0,1fr) minmax(120px,180px);gap:8px 14px;align-items:end;margin:10px 0}.pageSettings label{margin:0}.orderGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px 14px}.orderGrid label{margin:0}");
   html += F("button{background:#00bcd4;color:#001018;border:0;border-radius:8px;padding:12px 18px;font-weight:bold}.danger{background:#ff8597;color:#24050b}.smallButton{padding:7px 10px;font-size:.82rem}.inlineForm{display:inline;margin:0 4px 0 0}.cacheTable{width:100%;border-collapse:collapse}.cacheTable th,.cacheTable td{text-align:left;padding:8px 6px;border-bottom:1px solid #343d50;vertical-align:top}.cacheTable th{color:#aab;font-size:.8rem}.cacheActions{white-space:nowrap}");
-  html += F(".status{display:grid;grid-template-columns:minmax(145px,42%) minmax(0,1fr);gap:7px 14px}.status span{color:#aab}.status b{overflow-wrap:anywhere}.statusNote{grid-column:1/-1;margin:2px 0 5px;line-height:1.35}.statusCards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.statusCard{background:#171c26;border:1px solid #343d50;border-radius:12px;padding:14px}.statusCard h3{margin:0 0 12px;font-size:1rem;color:#7ee7f0}.healthbar{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 14px}.pill{border-radius:999px;padding:7px 11px;font-size:.86rem;font-weight:700}.ok{background:#153b2b;color:#74e3aa}.warn{background:#493c16;color:#ffd166}.bad{background:#4a1f29;color:#ff8597}.off{background:#303541;color:#abb3c3}.wide{grid-column:1/-1}details summary{cursor:pointer;font-weight:700;color:#7ee7f0}details .status{margin-top:12px}@media(max-width:650px){body{padding:12px}.statusCards{grid-template-columns:1fr}.wide{grid-column:auto}.status{grid-template-columns:1fr}.status b{margin-bottom:7px}}.muted{color:#aab}</style></head><body>");
+  html += F(".status{display:grid;grid-template-columns:minmax(145px,42%) minmax(0,1fr);gap:7px 14px}.status span{color:#aab}.status b{overflow-wrap:anywhere}.statusNote{grid-column:1/-1;margin:2px 0 5px;line-height:1.35}.statusCards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.statusCard{background:#171c26;border:1px solid #343d50;border-radius:12px;padding:14px}.statusCard h3{margin:0 0 12px;font-size:1rem;color:#7ee7f0}.healthbar{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 14px}.pill{border-radius:999px;padding:7px 11px;font-size:.86rem;font-weight:700}.ok{background:#153b2b;color:#74e3aa}.warn{background:#493c16;color:#ffd166}.bad{background:#4a1f29;color:#ff8597}.off{background:#303541;color:#abb3c3}.wide{grid-column:1/-1}details summary{cursor:pointer;font-weight:700;color:#7ee7f0}details .status{margin-top:12px}@media(max-width:650px){body{padding:12px}.fieldGrid>label,.fieldGrid>.third,.fieldGrid>.quarter,.fieldGrid>.twoThird,.fieldGrid>.threeQuarter{grid-column:span 6}.fieldGrid>.fieldWide{grid-column:1/-1}.statusCards{grid-template-columns:1fr}.wide{grid-column:auto}.status{grid-template-columns:1fr}.status b{margin-bottom:7px}}@media(max-width:430px){.fieldGrid>label,.fieldGrid>.third,.fieldGrid>.quarter,.fieldGrid>.twoThird,.fieldGrid>.threeQuarter{grid-column:1/-1}.pageSettings{grid-template-columns:minmax(0,1fr) 112px;gap:8px}.pageSettings label{font-size:.92rem}fieldset{padding:11px}}.muted{color:#aab}</style></head><body>");
   html += F("<h1>FlightWall MatrixPortal ");
   html += APP_VERSION;
   html += F("</h1><form method='post' action='/save'>");
-  html += F("<fieldset><legend>Sprache / Language</legend><label><select name='uiLanguage'>"
+  html += F("<fieldset><legend>Sprache / Language</legend><div class='fieldGrid'><label class='third'><select name='uiLanguage'>"
             "<option value='de'");
   html += selected(!uiEnglish);
   html += F(">Deutsch</option><option value='en'");
   html += selected(uiEnglish);
-  html += F(">English</option></select></label></fieldset>");
-  html += F("<fieldset><legend>WLAN-Zugang</legend><label>WLAN-Name (SSID)<input type='text' name='wifiSsid' maxlength='32' value='");
+  html += F(">English</option></select></label></div></fieldset>");
+  html += F("<fieldset><legend>WLAN-Zugang</legend><div class='fieldGrid'><label>WLAN-Name (SSID)<input type='text' name='wifiSsid' maxlength='32' value='");
   html += htmlEscape(wifiSsid);
-  html += F("' required></label><label>Neues WLAN-Passwort<input type='password' name='wifiPassword' minlength='8' maxlength='63' value='' placeholder='unverändert lassen'></label><label><input type='checkbox' name='wifiOpen' value='1'");
+  html += F("' required></label><label>Neues WLAN-Passwort<input type='password' name='wifiPassword' minlength='8' maxlength='63' value='' placeholder='unverändert lassen'></label><label class='fieldWide check'><input type='checkbox' name='wifiOpen' value='1'");
   html += checked(!wifiPassword.length());
-  html += F("> Offenes WLAN ohne Passwort</label><p class='muted'>Ein leeres Passwortfeld behält das gespeicherte WLAN-Passwort bei. Änderungen werden nach einem automatischen Neustart aktiv.</p><p class='muted'>Falls keine Verbindung möglich ist, startet das Einrichtungsnetz <b>");
+  html += F("> Offenes WLAN ohne Passwort</label></div><p class='muted'>Ein leeres Passwortfeld behält das gespeicherte WLAN-Passwort bei. Änderungen werden nach einem automatischen Neustart aktiv.</p><p class='muted'>Falls keine Verbindung möglich ist, startet das Einrichtungsnetz <b>");
   html += htmlEscape(wifiSetupAccessPointSsid.length()
                          ? wifiSetupAccessPointSsid
                          : String(WIFI_SETUP_AP_PREFIX));
   html += F("</b> mit dem Passwort <b>flightwall</b>. Konfiguration: <b>http://192.168.4.1</b></p></fieldset>");
-  html += F("<fieldset><legend>Display</legend><label><input type='checkbox' name='display' value='1'");
+  html += F("<fieldset><legend>Display</legend><div class='fieldGrid'><label class='check'><input type='checkbox' name='display' value='1'");
   html += checked(displayEnabled);
-  html += F("> Display eingeschaltet</label><label><input type='checkbox' name='environmentIdle' value='1'");
+  html += F("> Display eingeschaltet</label><label class='check'><input type='checkbox' name='environmentIdle' value='1'");
   html += checked(environmentIdleDisplayEnabled);
-  html += F("> Wetterdaten anzeigen, wenn kein Flugzeug in der Nähe ist</label><label>Anzeigeradius (km)<input type='number' name='radius' min='1' max='100' step='0.5' value='");
+  html += F("> Wetterdaten anzeigen, wenn kein Flugzeug in der Nähe ist</label><label class='third'>Anzeigeradius (km)<input type='number' name='radius' min='1' max='100' step='0.5' value='");
   html += String(displayRadiusKm, 1);
-  html += F("'></label><label>Standorthöhe über NHN (m)<input type='number' name='observerElevation' min='-500' max='9000' step='1' value='");
+  html += F("'></label><label class='third'>Standorthöhe über NHN (m)<input type='number' name='observerElevation' min='-500' max='9000' step='1' value='");
   html += String(observerElevationM, 0);
-  html += F("'></label><label>Unter diesem Blickwinkel \"weit\" (°)<input type='number' name='farElevation' min='10' max='45' step='1' value='");
+  html += F("'></label><label class='third'>Unter diesem Blickwinkel \"weit\" (°)<input type='number' name='farElevation' min='10' max='45' step='1' value='");
   html += String(farDirectionElevationDeg, 0);
-  html += F("'></label><label><input type='checkbox' name='quietHours' value='1'");
+  html += F("'></label><label class='third check'><input type='checkbox' name='quietHours' value='1'");
   html += checked(quietHoursEnabled);
-  html += F("> Nachtruhe aktiv</label><label>Display dunkel ab<input type='time' name='quietStart' value='");
+  html += F("> Nachtruhe aktiv</label><label class='third'>Display dunkel ab<input type='time' name='quietStart' value='");
   html += minutesAsTime(quietHoursStartMinutes);
-  html += F("'></label><label>Display wieder aktiv ab<input type='time' name='quietEnd' value='");
+  html += F("'></label><label class='third'>Display wieder aktiv ab<input type='time' name='quietEnd' value='");
   html += minutesAsTime(quietHoursEndMinutes);
-  html += F("'></label><p class='muted'>Die Nachtruhe darf über Mitternacht reichen. Gleiche Zeiten deaktivieren die Abdunklung.</p><button type='submit' formaction='/display-test'>");
+  html += F("'></label></div><p class='muted'>Die Nachtruhe darf über Mitternacht reichen. Gleiche Zeiten deaktivieren die Abdunklung.</p><button type='submit' formaction='/display-test'>");
   html += (displayTestActive || displayTestCommand == 1) ?
       "Displaytest beenden" : "Displaytest starten";
-  html += F("</button><p class='muted'>Etwa 23 Sekunden: Matrix-Prüfbilder und alle Typensymbole mit Bedeutung.</p></fieldset><fieldset><legend>Flugzeugdaten</legend><label>Aktive ADS-B-Quelle<select name='activeAdsbSource'><option value='1'");
+  html += F("</button><p class='muted'>Etwa 23 Sekunden: Matrix-Prüfbilder und alle Typensymbole mit Bedeutung.</p></fieldset><fieldset><legend>Flugzeugdaten</legend><div class='fieldGrid'><label class='third'>Aktive ADS-B-Quelle<select name='activeAdsbSource'><option value='1'");
   html += selected(activeAdsbSource == 0);
   html += F(">Quelle 1</option><option value='2'");
   html += selected(activeAdsbSource == 1);
   html += F(">Quelle 2</option><option value='3'");
   html += selected(activeAdsbSource == 2);
-  html += F(">adsb.fi (externe Quelle)</option></select></label><label>ADS-B-Adresse Quelle 1<input type='url' name='adsbUrl1' maxlength='180' value='");
+  html += F(">adsb.fi (externe Quelle)</option></select></label><label class='fieldWide'>ADS-B-Adresse Quelle 1<input type='url' name='adsbUrl1' maxlength='180' value='");
   html += htmlEscape(adsbUrl1);
-  html += F("'></label><label>ADS-B-Adresse Quelle 2<input type='url' name='adsbUrl2' maxlength='180' value='");
+  html += F("'></label><label class='fieldWide'>ADS-B-Adresse Quelle 2<input type='url' name='adsbUrl2' maxlength='180' value='");
   html += htmlEscape(adsbUrl2);
-  html += F("' placeholder='http://zweiter-empfaenger/data/aircraft.json'></label><p class='muted'>Nur die ausgewählte Quelle wird abgefragt. Quelle 2 darf unkonfiguriert bleiben. Der Radius von adsb.fi wird automatisch aus dem Anzeigeradius berechnet. Daten: <a href='https://adsb.fi/' target='_blank' rel='noopener'>adsb.fi</a>.</p><label>Breitengrad<input type='number' name='siteLat' min='-90' max='90' step='0.000001' value='");
+  html += F("' placeholder='http://zweiter-empfaenger/data/aircraft.json'></label></div><p class='muted'>Nur die ausgewählte Quelle wird abgefragt. Quelle 2 darf unkonfiguriert bleiben. Der Radius von adsb.fi wird automatisch aus dem Anzeigeradius berechnet. Daten: <a href='https://adsb.fi/' target='_blank' rel='noopener'>adsb.fi</a>.</p><div class='fieldGrid'><label class='third'>Breitengrad<input type='number' name='siteLat' min='-90' max='90' step='0.000001' value='");
   html += String(siteLatitude, 6);
-  html += F("'></label><label>Längengrad<input type='number' name='siteLon' min='-180' max='180' step='0.000001' value='");
+  html += F("'></label><label class='third'>Längengrad<input type='number' name='siteLon' min='-180' max='180' step='0.000001' value='");
   html += String(siteLongitude, 6);
-  html += F("'></label><label>Blickrichtung (Grad)<input type='number' name='viewHeading' min='0' max='359' step='1' value='");
+  html += F("'></label><label class='third'>Blickrichtung (Grad)<input type='number' name='viewHeading' min='0' max='359' step='1' value='");
   html += String(viewHeading, 0);
-  html += F("'></label><label><input type='checkbox' name='hideSport' value='1'");
+  html += F("'></label><label class='check'><input type='checkbox' name='hideSport' value='1'");
   html += checked(hideSportAircraft);
-  html += F("> Sport- und Kleinflugzeuge ausblenden</label><label><input type='checkbox' name='altitudeFilter' value='1'");
+  html += F("> Sport- und Kleinflugzeuge ausblenden</label><label class='check'><input type='checkbox' name='altitudeFilter' value='1'");
   html += checked(altitudeFilterEnabled);
-  html += F("> Flugzeuge oberhalb der Maximalhöhe ausblenden</label><label>Maximalhöhe (ft)<input type='number' name='maximumAltitude' min='1000' max='100000' step='500' value='");
+  html += F("> Flugzeuge oberhalb der Maximalhöhe ausblenden</label><label class='third'>Maximalhöhe (ft)<input type='number' name='maximumAltitude' min='1000' max='100000' step='500' value='");
   html += String(maximumAltitudeFt);
-  html += F("'></label><label><input type='checkbox' name='routesEnabled' value='1'");
+  html += F("'></label><label class='twoThird check'><input type='checkbox' name='routesEnabled' value='1'");
   html += checked(routesEnabled);
-  html += F("> Routen über adsb.im ergänzen</label><label>Routen-Dienst<input type='url' name='routeUrl' maxlength='180' value='");
+  html += F("> Routen über adsb.im ergänzen</label><label class='fieldWide'>Routen-Dienst<input type='url' name='routeUrl' maxlength='180' value='");
   html += htmlEscape(routeUrl);
-  html += F("'></label><label>Test-Callsign<input type='text' name='routeTestCallsign' maxlength='10' value='DLH123'></label>"
-            "<button type='submit' formaction='/test-route'>Routendienst testen</button> "
-            "<button type='submit' formaction='/test-adsb'>ADS-B-Verbindung testen</button>"
-            "<hr><label>Notfalltest-Code<select name='emergencyTestCode'>"
+  html += F("'></label><label class='third'>Test-Callsign<input type='text' name='routeTestCallsign' maxlength='10' value='DLH123'></label></div>"
+            "<div class='buttonRow'><button type='submit' formaction='/test-route'>Routendienst testen</button>"
+            "<button type='submit' formaction='/test-adsb'>ADS-B-Verbindung testen</button></div>"
+            "<hr><div class='fieldGrid'><label>Notfalltest-Code<select name='emergencyTestCode'>"
             "<option value='7700'>7700 Emergency</option>"
             "<option value='7600'>7600 Radio</option>"
             "<option value='7500'>7500 Hijack</option></select></label>"
             "<label>Anzahl Testflugzeuge<select name='emergencyTestCount'>"
             "<option value='1'>1</option><option value='2'>2</option>"
-            "<option value='3'>3</option></select></label>"
-            "<button type='submit' formaction='/test-emergency'>Notfallanzeige testen</button> "
-            "<button type='submit' formaction='/stop-emergency-test'>Test beenden</button>"
+            "<option value='3'>3</option></select></label></div>"
+            "<div class='buttonRow'><button type='submit' formaction='/test-emergency'>Notfallanzeige testen</button>"
+            "<button type='submit' formaction='/stop-emergency-test'>Test beenden</button></div>"
             "<p class='muted'>Der Notfalltest läuft höchstens zwei Minuten und verändert keine ADS-B-Daten oder gespeicherten Einstellungen.</p></fieldset>");
-  html += F("<fieldset><legend>MQTT-Wetter</legend><label><input type='checkbox' name='mqttWeather' value='1'");
+  html += F("<fieldset><legend>MQTT-Wetter</legend><div class='fieldGrid'><label class='fieldWide check'><input type='checkbox' name='mqttWeather' value='1'");
   html += checked(mqttWeatherEnabled);
-  html += F("> Wetterseite in der Ruheanzeige aktivieren</label><label>Mosquitto-Server<input type='text' name='mqttHost' maxlength='96' value='");
+  html += F("> Wetterseite in der Ruheanzeige aktivieren</label><label class='threeQuarter'>Mosquitto-Server<input type='text' name='mqttHost' maxlength='96' value='");
   html += htmlEscape(mqttHost);
-  html += F("'></label><label>Port<input type='number' name='mqttPort' min='1' max='65535' value='");
+  html += F("'></label><label class='quarter'>Port<input type='number' name='mqttPort' min='1' max='65535' value='");
   html += String(mqttPort);
   html += F("'></label><label>Benutzer<input type='text' name='mqttUser' maxlength='64' value='");
   html += htmlEscape(mqttUser);
@@ -3231,10 +3231,10 @@ String webPage(bool includeRouteCache = true) {
   html += htmlEscape(windGustTopic);
   html += F("'></label><label>Regen heute (cm)<input type='text' name='rainTopic' maxlength='128' value='");
   html += htmlEscape(rainTopic);
-  html += F("'></label><p class='muted'>Regen wird für die Anzeige von cm in mm umgerechnet. Ein leeres Passwortfeld behält das gespeicherte Passwort bei.</p></fieldset>");
-  html += F("<fieldset><legend>Anzeigeseiten</legend><label><input type='checkbox' name='smooth' value='1'");
+  html += F("'></label></div><p class='muted'>Regen wird für die Anzeige von cm in mm umgerechnet. Ein leeres Passwortfeld behält das gespeicherte Passwort bei.</p></fieldset>");
+  html += F("<fieldset><legend>Anzeigeseiten</legend><div class='fieldGrid'><label class='check'><input type='checkbox' name='smooth' value='1'");
   html += checked(smoothTransitions);
-  html += F("> Sanfte Übergänge</label><label>Freitext (maximal 128 Zeichen)<textarea name='customText' maxlength='128' rows='3' style='width:100%;box-sizing:border-box;padding:9px'>");
+  html += F("> Sanfte Übergänge</label><label class='fieldWide'>Freitext (maximal 128 Zeichen)<textarea name='customText' maxlength='128' rows='3'>");
   html += htmlEscape(customPageText);
   html += F("</textarea></label><label>Freitext-Scrollgeschwindigkeit<select name='customScrollSpeed'><option value='2'");
   html += selected(customScrollSpeed == 2);
@@ -3242,14 +3242,14 @@ String webPage(bool includeRouteCache = true) {
   html += selected(customScrollSpeed == 1);
   html += F(">mittel</option><option value='0'");
   html += selected(customScrollSpeed == 0);
-  html += F(">langsam</option></select></label><p class='muted'>Ein leerer Freitext überspringt die Seite automatisch.</p>");
+  html += F(">langsam</option></select></label></div><p class='muted'>Ein leerer Freitext überspringt die Seite automatisch.</p><div class='pageSettings'>");
   for (uint8_t page = 0; page < PAGE_COUNT; ++page) {
     html += "<label><input type='checkbox' name='page" + String(page) + "On' value='1'";
     html += checked(pageEnabled[page]);
     html += "> " + pageName(page) + "</label><label>Dauer (Sekunden)<input type='number' name='page";
     html += String(page) + "Sec' min='2' max='60' value='" + String(pageDurationMs[page] / 1000) + "'></label>";
   }
-  html += F("<p class='muted'>Reihenfolge:</p>");
+  html += F("</div><p class='muted'>Reihenfolge:</p><div class='orderGrid'>");
   for (uint8_t slot = 0; slot < PAGE_COUNT; ++slot) {
     html += "<label>Position " + String(slot + 1) + "<select name='order" + String(slot) + "'>";
     for (uint8_t page = 0; page < PAGE_COUNT; ++page) {
@@ -3258,20 +3258,20 @@ String webPage(bool includeRouteCache = true) {
     }
     html += "</select></label>";
   }
-  html += F("</fieldset><fieldset><legend>Helligkeit</legend>");
-  html += F("<label><input type='checkbox' name='autoLight' value='1'");
+  html += F("</div></fieldset><fieldset><legend>Helligkeit</legend><div class='fieldGrid'>");
+  html += F("<label class='quarter check'><input type='checkbox' name='autoLight' value='1'");
   html += checked(automaticBrightnessEnabled);
-  html += F("> BH1750-Automatik</label><label>Manuelle Stufe<select name='brightness'>");
+  html += F("> BH1750-Automatik</label><label class='quarter'>Manuelle Stufe<select name='brightness'>");
   for (uint8_t i = 0; i < BRIGHTNESS_LEVEL_COUNT; ++i) {
     html += "<option value='" + String(i) + "'";
     if (i == manualBrightnessIndex) html += " selected";
     html += ">" + String(BRIGHTNESS_LEVELS[i]) + "%</option>";
   }
-  html += F("</select></label><label>Schwelle dunkel (Lux)<input type='number' name='lowLux' min='1' max='500' step='1' value='");
+  html += F("</select></label><label class='quarter'>Schwelle dunkel (Lux)<input type='number' name='lowLux' min='1' max='500' step='1' value='");
   html += String(lowLuxThreshold, 0);
-  html += F("'></label><label>Schwelle hell (Lux)<input type='number' name='highLux' min='50' max='50000' step='10' value='");
+  html += F("'></label><label class='quarter'>Schwelle hell (Lux)<input type='number' name='highLux' min='50' max='50000' step='10' value='");
   html += String(highLuxThreshold, 0);
-  html += F("'></label></fieldset><button type='submit'>Einstellungen speichern</button></form>");
+  html += F("'></label></div></fieldset><button type='submit'>Einstellungen speichern</button></form>");
   html += F("<fieldset><legend>Status <small class='muted' id='statusRefresh'>wird automatisch aktualisiert</small></legend><div id='statusData'><div class='healthbar'>");
   html += statusError.length() ? F("<span class='pill warn'>● System eingeschränkt</span>") : F("<span class='pill ok'>● System OK</span>");
   html += lastAdsbError.length() ? F("<span class='pill bad'>● ADS-B Fehler</span>") : F("<span class='pill ok'>● ADS-B OK</span>");

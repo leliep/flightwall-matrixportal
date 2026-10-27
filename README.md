@@ -12,7 +12,7 @@ FlightMatrixServer ist für den Betrieb nicht erforderlich.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.5.2-aircraft-description.1` |
+| Firmware | `3.5.3-compact-config.1` |
 | Controller | Adafruit MatrixPortal S3 / ESP32-S3 |
 | Anzeige | 2 × 64×32 HUB75, horizontal verkettet |
 | Gesamtauflösung | 128×32 Pixel |

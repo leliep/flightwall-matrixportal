@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.5.3-compact-config.1 – 2026-10-27
+
+- Eingabefelder der Konfigurationsseite in ein responsives Raster eingeordnet
+- kurze Zahlenwerte, Uhrzeiten und zusammengehörige Optionen stehen auf
+  breiten Bildschirmen nebeneinander; lange Adressen und Topics bleiben breit
+- Seitenaktivierung und Anzeigedauer werden kompakt als gemeinsame Zeilen
+  dargestellt; sehr schmale iPhone-Ansichten bleiben gut bedienbar
+
 ## 3.5.2-aircraft-description.1 – 2026-10-27
 
 - die Seite „CPA und Sondertyp“ zeigt in ihrer dritten Textzeile zusätzlich
