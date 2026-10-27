@@ -35,8 +35,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.5.1-wifi-setup-display.1";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-27 Wi-Fi setup display";
+constexpr char APP_VERSION[] = "3.5.2-aircraft-description.1";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-27 CPA aircraft description";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -135,6 +135,7 @@ struct FlightData {
   String squawk;
   String airline;
   String type;
+  String typeDescription;
   String specialType;
   String direction;
   String verticalMotion;
@@ -1103,6 +1104,22 @@ void drawRoutePage() {
 }
 
 
+uint32_t scrollingTextDuration(const String &text);
+int16_t scrollingTextX(const String &text, uint32_t elapsedMs);
+
+
+String cpaPageDetails() {
+  String details = flight.specialType;
+  String description = flight.typeDescription;
+  description.trim();
+  if (description.length()) {
+    if (details.length()) details += " | ";
+    details += description;
+  }
+  return displayAscii(details);
+}
+
+
 void drawCpaPage() {
   drawHeader();
   String cpa = "CPA ";
@@ -1120,8 +1137,14 @@ void drawCpaPage() {
   }
   drawLine(0, 16, clipped(cpa, 21), departing ? orange : green);
 
-  String details = flight.specialType;
-  drawLine(0, 24, clipped(details, 21), aircraftColor());
+  const String details = cpaPageDetails();
+  const uint32_t elapsed = millis() - currentPageStarted;
+  drawLine(scrollingTextX(details, elapsed), 24, details, aircraftColor());
+}
+
+
+uint32_t cpaPageDuration() {
+  return scrollingTextDuration(cpaPageDetails());
 }
 
 
@@ -1960,6 +1983,7 @@ void drawDisplay() {
   if (currentPageStarted == 0) currentPageStarted = now;
   const uint8_t page = pageOrder[currentPageSlot];
   uint32_t duration = pageDurationMs[page];
+  if (page == 2) duration = max(duration, cpaPageDuration());
   if (page == 3) duration = max(duration, airportNamesPageDuration());
   if (page == 4) duration = max(duration, customPageScrollDuration());
   if (page == 6) duration = max(duration, compactAirportsMinimumDuration());
@@ -2733,6 +2757,7 @@ bool fetchLocalFlight() {
     if (next.airline.isEmpty() && next.specialType.length())
       next.airline = specialTypeDisplayName(next.specialType);
     next.type = selected.type;
+    next.typeDescription = selected.description;
     next.direction = selected.direction;
     next.verticalMotion = verticalMotion(selected);
     next.motion = selected.motion;

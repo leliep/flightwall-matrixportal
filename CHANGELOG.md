@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.5.2-aircraft-description.1 – 2026-10-27
+
+- die Seite „CPA und Sondertyp“ zeigt in ihrer dritten Textzeile zusätzlich
+  die ausführliche ADS-B-Flugzeugtypenbezeichnung an
+- Sondertyp und Typenbezeichnung werden mit ` | ` kombiniert; zu lange Texte
+  laufen vollständig durch und verlängern die Seitendauer automatisch
+
 ## 3.5.1-wifi-setup-display.1 – 2026-10-27
 
 - bei fehlender WLAN-Verbindung zeigt die Matrix die Daten des eigenen
