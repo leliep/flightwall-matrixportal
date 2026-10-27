@@ -8,6 +8,10 @@ FlightMatrixServer ist für den Betrieb nicht erforderlich.
 
 ![FlightWall MatrixPortal mit aktuellen Flugdaten](IMG_4482.png)
 
+**Neu hier?** Die Anleitung [Getting Started](GETTING_STARTED.md) führt vom
+Hardwareaufbau über die Ersteinrichtung bis zur ersten Flugzeuganzeige und
+erklärt auch BME280, BH1750, MQTT, Routenauflösung und OTA.
+
 ## Aktueller Stand
 
 | Merkmal | Stand |
@@ -568,6 +572,7 @@ git pull --ff-only origin main
 | `include/secrets.h.example` | Vorlage ohne echte Zugangsdaten |
 | `platformio.ini` | Build- und OTA-Umgebungen |
 | `CHANGELOG.md` | chronologische Änderungen |
+| `GETTING_STARTED.md` | schrittweise Ersteinrichtung einschließlich optionaler Komponenten |
 | `PLATFORMIO.md` | ergänzende Entwicklerhinweise |
 | `IMG_4482.png` | Beispiel einer Flugdatenseite im realen Aufbau |
 | `IMG_4788.jpeg` | WLAN-Einrichtungsanzeige im realen Aufbau |
