@@ -22,6 +22,20 @@ FlightMatrixServer ist für den Betrieb nicht erforderlich.
 | Aktualisierung | USB, Web-OTA oder PlatformIO-OTA |
 | Lizenz | MIT |
 
+## Eindrücke aus dem Betrieb
+
+Die folgende Aufnahme zeigt den automatischen WLAN-Rückfallmodus direkt auf
+der Matrix. SSID, Passwort und Konfigurationsadresse bleiben dadurch auch ohne
+Zugriff auf den seriellen Monitor sichtbar.
+
+![FlightWall MatrixPortal im WLAN-Einrichtungsmodus](IMG_4788.jpeg)
+
+[▶ Video: Flugzeuganzeige im laufenden Betrieb (MOV, ca. 22 MB)](IMG_4794.mov)
+
+Das Video zeigt den realen Aufbau mit Callsign, Flugzeugtyp, CPA sowie
+Annäherungsinformation. GitHub öffnet die MOV-Datei je nach Browser direkt oder
+bietet sie zum Herunterladen an.
+
 Wesentliche Funktionen:
 
 - direkte Verarbeitung lokaler readsb-/dump1090-Daten und der externen
@@ -249,7 +263,7 @@ einer Dauer von 2 bis 60 Sekunden versehen werden:
 |---|---|
 | Flugdaten | Callsign, Entfernung, Richtung, Höhe und Steig-/Sinkdreieck |
 | Airline und Route | Airline, vollständige Routencodes und Geschwindigkeit |
-| CPA und Sondertyp | CPA, Annäherung/Entfernung und Klassifizierung |
+| CPA und Sondertyp | CPA, Annäherung/Entfernung, Klassifizierung und ausführliche Flugzeugtypenbezeichnung |
 | Flughafennamen | Codes und Langnamen; Multi-Hop vollständig gescrollt |
 | Freitext | eigener Text bis 128 Zeichen, langsam/mittel/schnell |
 | Kompaktansicht | Typ, Kerndaten, Blickrichtung, Route und CPA |
@@ -335,12 +349,14 @@ Nach erfolgreicher WLAN-Verbindung antwortet der Server auf Port 80:
 Falls mDNS im Netz nicht funktioniert, kann statt `matrixportal.local` die im
 seriellen Monitor oder Router angezeigte IP-Adresse verwendet werden.
 
-Die Konfigurationsseite ist für iPhone, Tablet und Desktop optimiert. Sie
-verwaltet unter anderem WLAN-Zugang, Sprache, Display, Wetterseite, Standort,
-Blickrichtung, ADS-B-Quelle, Filter, Routendienst, MQTT, Seitenreihenfolge,
-Freitext, Helligkeit und Nachtruhe. Statuskarten werden regelmäßig aktualisiert,
-ohne geöffnete Bereiche zu schließen oder ungespeicherte Formulareingaben zu
-überschreiben.
+Die Konfigurationsseite ist für iPhone, Tablet und Desktop optimiert. Kurze
+Werte und zusammengehörige Optionen werden in einem kompakten, responsiven
+Raster angeordnet; auf schmalen Displays ordnen sich die Felder automatisch
+untereinander an. Die Seite verwaltet unter anderem WLAN-Zugang, Sprache,
+Display, Wetterseite, Standort, Blickrichtung, ADS-B-Quelle, Filter,
+Routendienst, MQTT, Seitenreihenfolge, Freitext, Helligkeit und Nachtruhe.
+Statuskarten werden regelmäßig aktualisiert, ohne geöffnete Bereiche zu
+schließen oder ungespeicherte Formulareingaben zu überschreiben.
 
 Die Seite `/display` zeigt Callsign, Typ, Airline/Special Type, vollständige
 Route, Entfernung, Höhe, Geschwindigkeit, CPA, Vertikalbewegung und
@@ -542,6 +558,9 @@ git pull --ff-only origin main
 | `platformio.ini` | Build- und OTA-Umgebungen |
 | `CHANGELOG.md` | chronologische Änderungen |
 | `PLATFORMIO.md` | ergänzende Entwicklerhinweise |
+| `IMG_4482.png` | Beispiel einer Flugdatenseite im realen Aufbau |
+| `IMG_4788.jpeg` | WLAN-Einrichtungsanzeige im realen Aufbau |
+| `IMG_4794.mov` | kurzes Video der laufenden Flugzeuganzeige |
 
 ## Sicherheit und Grenzen
 
