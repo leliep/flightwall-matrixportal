@@ -16,7 +16,7 @@ erklärt auch BME280, BH1750, MQTT, Routenauflösung und OTA.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.5.4-free-route-fallback.1` |
+| Firmware | `3.5.5-code-download.1` |
 | Controller | Adafruit MatrixPortal S3 / ESP32-S3 |
 | Anzeige | 2 × 64×32 HUB75, horizontal verkettet |
 | Gesamtauflösung | 128×32 Pixel |
@@ -359,6 +359,7 @@ Nach erfolgreicher WLAN-Verbindung antwortet der Server auf Port 80:
 | `http://matrixportal.local/display` | responsive FlightWall-Anzeige |
 | `http://matrixportal.local/api/display` | aktuelle Displaydaten als JSON |
 | `http://matrixportal.local/api/status` | vollständige Statusdaten als JSON |
+| `http://matrixportal.local/unknown-codes.json` | unbekannte Airport-/Airline-Codes herunterladen |
 | `http://matrixportal.local/update` | passwortgeschütztes Web-OTA |
 
 Falls mDNS im Netz nicht funktioniert, kann statt `matrixportal.local` die im
@@ -511,7 +512,10 @@ pio run
 
 Unbekannte Codes werden während des Betriebs flüchtig gesammelt – jeweils bis
 zu 32 Airports und Airlines. Die Statusseite und `/api/status` zeigen die
-gesammelten Listen. Nach einem Neustart sind diese Beobachtungen verloren.
+gesammelten Listen und mögliche Überläufe. Über **Codes herunterladen (.json)**
+oder `/unknown-codes.json` lässt sich jederzeit eine Datei für die spätere
+Tabellenpflege sichern. Der Download löscht keine Einträge. Nach einem Neustart
+sind diese Beobachtungen verloren.
 
 ## Diagnose und Tests
 

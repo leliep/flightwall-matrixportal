@@ -1,7 +1,7 @@
 # FlightWall MatrixPortal – Getting Started
 
 Diese Anleitung beschreibt die grundlegende Einrichtung von FlightWall
-MatrixPortal in der Firmwareversion `3.5.4-free-route-fallback.1`. Sie führt
+MatrixPortal in der Firmwareversion `3.5.5-code-download.1`. Sie führt
 vom Hardwareaufbau bis zur ersten Flugzeuganzeige und erklärt auch alle
 optionalen Komponenten.
 
@@ -338,6 +338,7 @@ Die wichtigsten Adressen sind:
 | `http://matrixportal.local/display` | FlightWall-Web-Display für iPhone, Tablet und Desktop |
 | `http://matrixportal.local/api/display` | aktuelle Anzeigedaten als JSON |
 | `http://matrixportal.local/api/status` | vollständige Diagnose als JSON |
+| `http://matrixportal.local/unknown-codes.json` | unbekannte Airport-/Airline-Codes herunterladen |
 | `http://matrixportal.local/update` | Web-OTA, sofern aktiviert |
 
 Das Web-Display ist optional. Es zeigt dieselben aktuellen Flugdaten in einem
@@ -365,8 +366,10 @@ pio run -e adafruit_matrixportal_esp32s3_ota -t upload
 ```
 
 Vor jedem Neustart oder OTA die Listen **Unbekannte Airports** und
-**Unbekannte Airlines** auf der Statusseite sichern. Sie befinden sich nur im
-flüchtigen Speicher und gehen beim Neustart verloren.
+**Unbekannte Airlines** auf der Statusseite mit **Codes herunterladen (.json)**
+sichern. Die Datei enthält beide Listen und mögliche Überlaufzähler; der
+Download löscht keine Codes. Die Beobachtungen befinden sich nur im flüchtigen
+Speicher und gehen beim Neustart verloren.
 
 ## 12. Erster Funktionstest
 

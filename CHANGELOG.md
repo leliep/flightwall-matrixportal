@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.5.5-code-download.1 – 2026-10-28
+
+- unbekannte Airport- und Airline-Codes können über die Statusseite als
+  `flightwall-unknown-codes.json` heruntergeladen werden
+- Download enthält Firmwareversion, Laufzeit, beide Codelisten, Kapazität und
+  Überlaufzähler; die gesammelten Codes werden dabei nicht gelöscht
+- Überlaufwerte zusätzlich auf der Statusseite und in `/api/status` sichtbar
+- Flughäfen `RMS` (Ramstein), `BNJ` (Bonn-Hangelar) und `BES` (Brest) sowie
+  Airline `GFM` (Grafair) ergänzt
+
 ## 3.5.4-free-route-fallback.1 – 2026-10-27
 
 - kostenlosen ADSBDB-Dienst als automatische zweite Routenquelle ergänzt;

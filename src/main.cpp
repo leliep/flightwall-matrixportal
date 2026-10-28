@@ -35,8 +35,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.5.4-free-route-fallback.1";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-27 free ADSBDB route fallback";
+constexpr char APP_VERSION[] = "3.5.5-code-download.1";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-28 unknown-code download";
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -3437,7 +3437,14 @@ String webPage(bool includeRouteCache = true) {
   html += unknownCodesText(true);
   html += F("</b><span>Unbekannte Airlines</span><b>");
   html += unknownCodesText(false);
-  html += F("</b></div></section><details id='technicalDiagnosis' class='statusCard wide'><summary>Technische Diagnose</summary><div class='status'><span>ADS-B-Quelle 1</span><b>");
+  html += "</b><span>";
+  html += uiText("Überlauf Flughäfen / Airlines",
+                 "Overflow airports / airlines");
+  html += "</span><b>" + String(droppedUnknownAirports()) + " / " +
+          String(droppedUnknownAirlines());
+  html += F("</b></div><form class='inlineForm' method='get' action='/unknown-codes.json'><button type='submit'>");
+  html += uiText("Codes herunterladen (.json)", "Download codes (.json)");
+  html += F("</button></form></section><details id='technicalDiagnosis' class='statusCard wide'><summary>Technische Diagnose</summary><div class='status'><span>ADS-B-Quelle 1</span><b>");
   html += htmlEscape(adsbUrl1);
   html += F("</b><span>ADS-B-Quelle 2</span><b>");
   html += adsbUrl2.length() ? htmlEscape(adsbUrl2) : "nicht konfiguriert";
@@ -4300,6 +4307,11 @@ void handleStatusApi() {
           String(specialAircraftCount(SpecialStatisticCategory::Other)) + "}}" +
       ",\"unknown_airports\":" + unknownCodesJson(true) +
       ",\"unknown_airlines\":" + unknownCodesJson(false) +
+      ",\"unknown_code_limit\":" + String(unknownCodeLimit) +
+      ",\"dropped_unknown_airports\":" +
+          String(droppedUnknownAirports()) +
+      ",\"dropped_unknown_airlines\":" +
+          String(droppedUnknownAirlines()) +
       ",\"quiet_hours_enabled\":" + String(quietHoursEnabled ? "true" : "false") +
       ",\"quiet_hours_active\":" + String(quietHoursAreActive() ? "true" : "false") +
       ",\"display_test\":" + String(displayTestActive ? "true" : "false") +
@@ -4315,6 +4327,27 @@ void handleStatusApi() {
           ",\"route\":" + String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Route)]) +
           ",\"flash\":" + String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Flash)]) + "}}";
   webServer.sendHeader("Cache-Control", "no-store");
+  webServer.sendHeader("Connection", "close");
+  webServer.send(200, "application/json; charset=utf-8", json);
+}
+
+
+void handleUnknownCodesDownload() {
+  String json;
+  json.reserve(512);
+  json = "{\n  \"firmware_version\":\"" + jsonEscape(APP_VERSION) +
+         "\",\n  \"uptime_seconds\":" + String(millis() / 1000UL) +
+         ",\n  \"capacity_per_type\":" + String(unknownCodeLimit) +
+         ",\n  \"unknown_airports\":" + unknownCodesJson(true) +
+         ",\n  \"unknown_airlines\":" + unknownCodesJson(false) +
+         ",\n  \"dropped_unknown_airports\":" +
+         String(droppedUnknownAirports()) +
+         ",\n  \"dropped_unknown_airlines\":" +
+         String(droppedUnknownAirlines()) + "\n}\n";
+  webServer.sendHeader("Cache-Control", "no-store");
+  webServer.sendHeader(
+      "Content-Disposition",
+      "attachment; filename=\"flightwall-unknown-codes.json\"");
   webServer.sendHeader("Connection", "close");
   webServer.send(200, "application/json; charset=utf-8", json);
 }
@@ -4580,6 +4613,8 @@ void startWebServer() {
     webServer.on("/api/display", HTTP_GET, handleDisplayApi);
     webServer.on("/api/status", HTTP_GET, handleStatusApi);
     webServer.on("/api/status-fragment", HTTP_GET, handleStatusFragment);
+    webServer.on("/unknown-codes.json", HTTP_GET,
+                 handleUnknownCodesDownload);
     webServer.on("/save", HTTP_POST, handleWebSave);
     webServer.on("/test-adsb", HTTP_POST, handleAdsbTest);
     webServer.on("/test-route", HTTP_POST, handleRouteTest);
