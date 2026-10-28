@@ -1,11 +1,13 @@
 # FlightWall MatrixPortal
 
-FlightWall macht aus einem Adafruit MatrixPortal S3 und zwei HUB75-Panels eine
-eigenständige Flugzeuganzeige. Alternativ läuft derselbe Serverkern auf einem
-ESP32-S3-N16R8 ohne LED-Matrix; in dieser Variante dient die responsive
-FlightWall-Webseite als Anzeige. Der ESP32-S3 liest ADS-B-Daten direkt ein,
-wählt das relevanteste Flugzeug aus und ergänzt Route sowie Klartexte. Ein
-Raspberry Pi oder separater FlightMatrixServer ist nicht erforderlich.
+FlightWall ist eine eigenständige Flugzeuganzeige für den ESP32-S3. Das Projekt
+liefert zwei gleichwertig gepflegte Firmwarevarianten: Der **Matrixcontroller**
+steuert mit einem Adafruit MatrixPortal S3 zwei HUB75-Panels an; der
+**Headless-Controller** läuft auf einem ESP32-S3-N16R8 ohne LED-Matrix und nutzt
+die responsive FlightWall-Webseite als Anzeige. Beide Varianten lesen
+ADS-B-Daten direkt ein, wählen das relevanteste Flugzeug aus und ergänzen Route
+sowie Klartexte. Ein Raspberry Pi oder separater FlightMatrixServer ist nicht
+erforderlich.
 
 ![FlightWall MatrixPortal mit aktuellen Flugdaten](IMG_4482.png)
 
@@ -17,14 +19,15 @@ erklärt auch BME280, BH1750, MQTT, Routenauflösung und OTA.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.0-dual-target.2` |
+| Firmware | `3.6.1-dual-target.2` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
-| Anzeige | 2 × 64×32 HUB75, horizontal verkettet |
-| Gesamtauflösung | 128×32 Pixel |
+| Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
+| Anzeige Headless-Controller | responsives Web-Display |
 | Farbtiefe | 3 Bit je Farbkanal |
 | Framework | Arduino über PlatformIO |
 | Bedienoberfläche | Deutsch und Englisch |
 | Aktualisierung | USB, Web-OTA oder PlatformIO-OTA |
+| Gerätestatus | gemeinsame RGB-LED-Logik; zusätzlicher Betriebs-Pixel auf der Matrix |
 | Lizenz | MIT |
 
 ## Eindrücke aus dem Betrieb
@@ -65,9 +68,9 @@ Wesentliche Funktionen:
 
 ```text
 readsb / dump1090 ─┐
-                   ├─> ADS-B-Auswahl ─> Route/Klartexte ─> LED-Matrix
-adsb.fi ───────────┘          │                  │
-                              ├─> Web-Display    ├─> Routencache
+                   ├─> ADS-B-Auswahl ─> Route/Klartexte ─┬─> LED-Matrix (optional)
+adsb.fi ───────────┘          │                  │       └─> Web-Display
+                              ├─> RGB-Status-LED ├─> Routencache
                               └─> Status-API     └─> unbekannte Codes
 
 BME280 ───────────────> Klima-/Schimmelbewertung ─┐
@@ -84,23 +87,35 @@ Kopien zwischen beiden Bereichen übergeben.
 
 ### Unterstützte Varianten
 
-| Variante | PlatformIO-Environment | Anzeige | mDNS-Name |
-|---|---|---|---|
-| MatrixPortal S3 | `adafruit_matrixportal_esp32s3` | 128×32 HUB75-Matrix und Web | `matrixportal.local` |
-| ESP32-S3 N16R8 | `esp32s3_n16r8_headless` | Web-FlightWall | `flightwall-server.local` |
+| Variante | PlatformIO-Environment | Anzeige | optionale Sensoren | mDNS-Name |
+|---|---|---|---|---|
+| Matrixcontroller: Adafruit MatrixPortal S3 | `adafruit_matrixportal_esp32s3` | 128×32 HUB75-Matrix und Web | BH1750, BME280 | `matrixportal.local` |
+| Headless-Controller: ESP32-S3 N16R8 | `esp32s3_n16r8_headless` | Web-FlightWall | BME280 | `flightwall-server.local` |
 
 Beide Varianten verwenden denselben ADS-B-, Routen-, Klassifizierungs-,
-Wetter-, Konfigurations- und Webservercode. Matrixansteuerung, Taster,
-BH1750-Automatik und Matrixseiten werden im Headless-Build nicht initialisiert.
-Ein optionaler BME280 wird dort über SDA GPIO 16 und SCL GPIO 17 angeschlossen.
+Wetter-, Konfigurations-, Webserver- und RGB-Statuscode. Matrixansteuerung,
+Taster, BH1750-Automatik und Matrixseiten werden nur im Matrix-Build
+initialisiert. Ein optionaler BME280 wird beim Headless-Controller über SDA
+GPIO 16 und SCL GPIO 17 angeschlossen. Einstellungen und Datenformate bleiben
+zwischen beiden Varianten weitgehend identisch.
 
-### Benötigte Komponenten
+### Benötigte Komponenten: Matrixcontroller
 
 - Adafruit MatrixPortal S3
 - zwei kompatible 64×32-RGB-HUB75-Panels mit 1/16-Scan
 - ausreichend dimensioniertes, stabilisiertes 5-V-Netzteil für die Panels
 - zwei HUB75-Flachbandkabel
 - WLAN mit Zugriff auf mindestens eine ADS-B-Quelle
+
+### Benötigte Komponenten: Headless-Controller
+
+- ESP32-S3-DevKitC-1-kompatibles Board mit ESP32-S3-N16R8-Modul
+- USB-C-Datenkabel und geeignete USB-Stromversorgung
+- WLAN mit Zugriff auf mindestens eine ADS-B-Quelle
+
+Eine LED-Matrix, ein MatrixPortal, ein BH1750 und ein separates
+5-V-Matrixnetzteil werden für diese Variante nicht benötigt. Das eigentliche
+FlightWall-Display läuft im Browser auf iPhone, Tablet oder Desktop.
 
 Optional:
 
@@ -164,6 +179,35 @@ anschließend am STEMMA-QT-Bus GPIO 16/17. Er liefert:
 
 Die interne ESP32-S3-Temperatur steht zusätzlich als Diagnosewert bereit. Sie
 ist keine Messung der Raumtemperatur.
+
+### RGB-Status-LED
+
+Beide Controller-Varianten verwenden ihre integrierte adressierbare RGB-LED mit
+derselben Logik. Die Helligkeit ist in der Konfiguration als **aus**,
+**schwach** oder **normal** wählbar. Während der konfigurierten Nachtruhe wird
+die LED zusätzlich gedimmt.
+
+| Farbe und Verhalten | Bedeutung |
+|---|---|
+| Orange beim Start | Firmware startet |
+| Türkis blinkend | WLAN-Einrichtungsnetz ist aktiv |
+| Blau blinkend | Verbindung mit dem konfigurierten WLAN wird aufgebaut |
+| Grün mit kurzem hellerem Herzschlag | Normalbetrieb; auch die Hauptschleife ist aktiv |
+| Orange blinkend | ADS-B-Daten fehlen oder sind nicht aktuell |
+| Violett | Firmwareupdate läuft |
+| Rot blinkend | Fehler |
+| Rot schnell blinkend | Transpondernotfall `7500`, `7600` oder `7700` |
+| Gelb für etwa 180 ms | manueller HTTP-/Webzugriff |
+
+Regelmäßige Statusabfragen der Weboberfläche lösen den gelben Impuls nicht aus,
+damit die LED im normalen Betrieb ruhig bleibt. Update, Fehler und Notfall
+haben Vorrang vor der HTTP-Anzeige. Der aktuelle logische Zustand steht auch
+als `status_led_state` in `/api/status`.
+
+Beim Matrixcontroller bleibt zusätzlich der kleine Betriebs-Pixel unten links
+erhalten. Er gehört zur LED-Matrix und ist unabhängig von der RGB-LED: weiß
+bedeutet gültige ADS-B-Daten, rot einen Abruffehler. Beim Headless-Controller
+gibt es naturgemäß nur die RGB-Status-LED.
 
 ## ADS-B-Daten und Flugzeugauswahl
 
@@ -309,8 +353,9 @@ ergänzt, ab 80° gilt das Flugzeug als direkt über dem Betrachter. Eine
 Hysterese beruhigt die Anzeige an den Winkelgrenzen.
 
 Wenn kein Flugzeug im Anzeigeradius liegt, erscheint wahlweise die Wetterseite.
-Ohne Wetterseite blinkt unten links ein Betriebs-Pixel: weiß bei gültigen
-ADS-B-Daten, rot nach einem Abruffehler. Display-Aus, Nachtruhe, Flash- und
+Ohne Wetterseite blinkt unten links der zusätzliche Matrix-Betriebs-Pixel: weiß
+bei gültigen ADS-B-Daten, rot nach einem Abruffehler. Dieser Pixel bleibt neben
+der gemeinsamen RGB-Status-LED aktiv. Display-Aus, Nachtruhe, Flash- und
 OTA-Zustände haben Vorrang vor der normalen Seitenausgabe.
 
 ### Matrixansteuerung und Helligkeit
@@ -366,16 +411,16 @@ Oberflächentemperatur und Dauer erhöhter Feuchtigkeit.
 
 Nach erfolgreicher WLAN-Verbindung antwortet der Server auf Port 80:
 
-| Adresse | Funktion |
-|---|---|
-| `http://matrixportal.local/` | Konfiguration und Status |
-| `http://matrixportal.local/display` | responsive FlightWall-Anzeige |
-| `http://matrixportal.local/api/display` | aktuelle Displaydaten als JSON |
-| `http://matrixportal.local/api/status` | vollständige Statusdaten als JSON |
-| `http://matrixportal.local/unknown-codes.json` | unbekannte Airport-/Airline-Codes herunterladen |
-| `http://matrixportal.local/update` | passwortgeschütztes Web-OTA |
+| Pfad | Matrixcontroller | Headless-Controller | Funktion |
+|---|---|---|---|
+| `/` | `http://matrixportal.local/` | `http://flightwall-server.local/` | Konfiguration und Status |
+| `/display` | `http://matrixportal.local/display` | `http://flightwall-server.local/display` | responsive FlightWall-Anzeige |
+| `/api/display` | verfügbar | verfügbar | aktuelle Displaydaten als JSON |
+| `/api/status` | verfügbar | verfügbar | vollständige Statusdaten einschließlich RGB-LED als JSON |
+| `/unknown-codes.json` | verfügbar | verfügbar | unbekannte Airport-/Airline-Codes herunterladen |
+| `/update` | verfügbar | verfügbar | passwortgeschütztes Web-OTA |
 
-Falls mDNS im Netz nicht funktioniert, kann statt `matrixportal.local` die im
+Falls mDNS im Netz nicht funktioniert, kann statt des jeweiligen Namens die im
 seriellen Monitor oder Router angezeigte IP-Adresse verwendet werden.
 
 Die Konfigurationsseite ist für iPhone, Tablet und Desktop optimiert. Kurze
@@ -474,6 +519,10 @@ Die beiden Firmwaredateien liegen anschließend unter:
 .pio/build/esp32s3_n16r8_headless/firmware.bin
 ```
 
+Die Images sind **nicht austauschbar**: Das Matrix-Image initialisiert HUB75,
+Taster und die Matrixsensorik, das Headless-Image lässt diese Hardware bewusst
+aus. Die Update-Seite nennt deshalb die erkannte Gerätevariante.
+
 Der serielle Monitor läuft mit 115200 Baud:
 
 ```bash
@@ -488,6 +537,16 @@ zugeschnitten und nicht als allgemeine Standortvorgabe gedacht.
 GitHub Actions baut bei Push und Pull Request beide Firmwarevarianten mit den
 Platzhalterwerten aus `include/secrets.h.example` und stellt beide BIN-Dateien
 als getrennte Build-Artefakte bereit.
+
+| GitHub-Actions-Artefakt | Zielgerät | enthaltene Datei |
+|---|---|---|
+| `flightwall-matrixportal-s3` | Adafruit MatrixPortal S3 mit HUB75-Matrix | `firmware.bin` |
+| `flightwall-esp32s3-n16r8-headless` | ESP32-S3 DevKitC-1 N16R8 ohne Matrix | `firmware.bin` |
+
+Zum Herunterladen unter **Actions → letzter erfolgreicher „PlatformIO
+Build“-Lauf → Artifacts** das zum Controller passende ZIP auswählen. Die
+Build-Artefakte sind nicht direkt als Binärdateien im Git-Repository
+eingecheckt.
 
 ## OTA-Updates
 
@@ -556,6 +615,7 @@ sind diese Beobachtungen verloren.
 Die Statusseite zeigt unter anderem:
 
 - Firmwareversion, Build, Laufzeit und Neustartgrund
+- Hardwarevariante sowie Zustand und Helligkeitsmodus der RGB-Status-LED
 - freien Heap, WLAN-Name, Verbindungsstatus, Einrichtungsnetz und Wiederverbindungen
 - aktive ADS-B-Quelle, Abrufalter, empfangene und geeignete Flugzeuge
 - aktuelles Flugzeug, Route, CPA, Filter und Routencache
@@ -605,6 +665,7 @@ git pull --ff-only origin main
 | `src/AircraftProcessor.cpp` | Filter, Auswahl, CPA und Klassifizierung |
 | `src/RouteClient.cpp` | Routendienst und Cache |
 | `src/WebDisplay.cpp` | responsives FlightWall-Web-Display |
+| `src/StatusLed.cpp` | gemeinsame RGB-Statuslogik beider Controller-Varianten |
 | `data/` | Airport- und Airline-Quelldaten |
 | `tools/` | Prüfung und Erzeugung der Lookup-Tabellen |
 | `include/secrets.h.example` | Vorlage ohne echte Zugangsdaten |
