@@ -165,6 +165,10 @@ Mit diesem WLAN verbinden, die Adresse öffnen und unter **WLAN-Zugang** das
 gewünschte Heimnetz eintragen. Nach dem Speichern startet der Controller neu
 und verbindet sich mit dem neuen WLAN.
 
+Mit **WLANs suchen** lässt sich eine nach Empfangsstärke sortierte Liste der
+erkannten Netze öffnen. Die Auswahl übernimmt die SSID in das weiterhin frei
+editierbare Eingabefeld. Versteckte WLANs können direkt eingetragen werden.
+
 ## 5. Grundkonfiguration
 
 Nach dem ersten erfolgreichen Aufruf der Konfigurationsseite sollten die

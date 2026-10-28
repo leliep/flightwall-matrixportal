@@ -11,6 +11,7 @@
 #include <Wire.h>
 #include <esp_system.h>
 #include <time.h>
+#include <vector>
 
 #ifndef FLIGHTWALL_HAS_MATRIX
 #define FLIGHTWALL_HAS_MATRIX 1
@@ -42,8 +43,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.3";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-29 configurable OTA password";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.4";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-29 interactive Wi-Fi scan";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -309,6 +310,9 @@ bool otaSettingsChanged = false;
 String otaSettingsError;
 String otaPassword = OTA_PASSWORD;
 String wifiSetupAccessPointSsid;
+bool wifiScanRequested = false;
+uint32_t wifiScanStartedAt = 0;
+String wifiScanResultJson;
 uint32_t wifiReconnectCount = 0;
 uint32_t webServerStartCount = 0;
 uint32_t lastWifiDisconnect = 0;
@@ -3020,6 +3024,14 @@ void translateWebPageToEnglish(String &html) {
     {"Regen wird für die Anzeige von cm in mm umgerechnet. Ein leeres Passwortfeld behält das gespeicherte Passwort bei.", "Rain is converted from cm to mm for display. An empty password field keeps the saved password."},
     {"WLAN-Zugang", "Wi-Fi access"},
     {"WLAN-Name (SSID)", "Wi-Fi name (SSID)"},
+    {"WLANs suchen", "Scan for Wi-Fi networks"},
+    {"Erkannte WLANs", "Detected Wi-Fi networks"},
+    {"WLAN auswählen …", "Select Wi-Fi network…"},
+    {"Suche läuft …", "Scanning…"},
+    {"Keine WLANs gefunden.", "No Wi-Fi networks found."},
+    {"WLAN-Suche fehlgeschlagen.", "Wi-Fi scan failed."},
+    {" WLANs gefunden", " Wi-Fi networks found"},
+    {" · aktuell", " · current"},
     {"Neues WLAN-Passwort", "New Wi-Fi password"},
     {"Offenes WLAN ohne Passwort", "Open Wi-Fi network without a password"},
     {"Ein leeres Passwortfeld behält das gespeicherte WLAN-Passwort bei. Änderungen werden nach einem automatischen Neustart aktiv.", "An empty password field keeps the stored Wi-Fi password. Changes take effect after an automatic restart."},
@@ -3209,11 +3221,11 @@ String webPage(bool includeRouteCache = true) {
   html += F(">Deutsch</option><option value='en'");
   html += selected(uiEnglish);
   html += F(">English</option></select></label></div></fieldset>");
-  html += F("<fieldset><legend>WLAN-Zugang</legend><div class='fieldGrid'><label>WLAN-Name (SSID)<input type='text' name='wifiSsid' maxlength='32' value='");
+  html += F("<fieldset><legend>WLAN-Zugang</legend><div class='fieldGrid'><label>WLAN-Name (SSID)<input id='wifiSsid' type='text' name='wifiSsid' maxlength='32' value='");
   html += htmlEscape(wifiSsid);
   html += F("' required></label><label>Neues WLAN-Passwort<input type='password' name='wifiPassword' minlength='8' maxlength='63' value='' placeholder='unverändert lassen'></label><label class='fieldWide check'><input type='checkbox' name='wifiOpen' value='1'");
   html += checked(!wifiPassword.length());
-  html += F("> Offenes WLAN ohne Passwort</label></div><p class='muted'>Ein leeres Passwortfeld behält das gespeicherte WLAN-Passwort bei. Änderungen werden nach einem automatischen Neustart aktiv.</p><p class='muted'>Falls keine Verbindung möglich ist, startet das Einrichtungsnetz <b>");
+  html += F("> Offenes WLAN ohne Passwort</label><label id='wifiScanLabel' class='fieldWide' hidden>Erkannte WLANs<select id='wifiScanResults'><option value='' selected>WLAN auswählen …</option></select></label></div><div class='buttonRow'><button id='wifiScanButton' type='button'>WLANs suchen</button><span id='wifiScanStatus' class='muted' aria-live='polite'></span></div><p class='muted'>Ein leeres Passwortfeld behält das gespeicherte WLAN-Passwort bei. Änderungen werden nach einem automatischen Neustart aktiv.</p><p class='muted'>Falls keine Verbindung möglich ist, startet das Einrichtungsnetz <b>");
   html += htmlEscape(wifiSetupAccessPointSsid.length()
                          ? wifiSetupAccessPointSsid
                          : String(WIFI_SETUP_AP_PREFIX));
@@ -3732,6 +3744,63 @@ String webPage(bool includeRouteCache = true) {
     html += F("</fieldset>");
   }
   html += F("<p><a href='/display'>Web-Display öffnen</a></p>");
+  html += F(R"HTML(<script>
+const wifiScanButton=document.getElementById('wifiScanButton');
+const wifiScanLabel=document.getElementById('wifiScanLabel');
+const wifiScanResults=document.getElementById('wifiScanResults');
+const wifiScanStatus=document.getElementById('wifiScanStatus');
+const wifiSsid=document.getElementById('wifiSsid');
+async function pollWifiScan(){
+  try{
+    const response=await fetch('/api/wifi-scan',{cache:'no-store'});
+    const data=await response.json();
+    if(data.state==='running'){
+      wifiScanStatus.textContent='Suche läuft …';
+      setTimeout(pollWifiScan,700);
+      return;
+    }
+    if(data.state!=='ready')throw new Error();
+    wifiScanResults.replaceChildren();
+    const placeholder=document.createElement('option');
+    placeholder.value='';placeholder.textContent='WLAN auswählen …';placeholder.selected=true;
+    wifiScanResults.appendChild(placeholder);
+    data.networks.forEach(network=>{
+      const option=document.createElement('option');
+      option.value=network.ssid;
+      option.dataset.open=network.open?'1':'0';
+      option.textContent=network.ssid+' · '+network.rssi+' dBm · '+network.security+
+          (network.current?' · aktuell':'');
+      wifiScanResults.appendChild(option);
+    });
+    wifiScanLabel.hidden=false;
+    wifiScanStatus.textContent=data.networks.length?
+        data.networks.length+' WLANs gefunden':'Keine WLANs gefunden.';
+    wifiScanButton.disabled=false;
+  }catch(error){
+    wifiScanStatus.textContent='WLAN-Suche fehlgeschlagen.';
+    wifiScanButton.disabled=false;
+  }
+}
+wifiScanButton.addEventListener('click',async()=>{
+  wifiScanButton.disabled=true;
+  wifiScanStatus.textContent='Suche läuft …';
+  try{
+    const response=await fetch('/api/wifi-scan',{method:'POST'});
+    if(!response.ok)throw new Error();
+    pollWifiScan();
+  }catch(error){
+    wifiScanStatus.textContent='WLAN-Suche fehlgeschlagen.';
+    wifiScanButton.disabled=false;
+  }
+});
+wifiScanResults.addEventListener('change',()=>{
+  const option=wifiScanResults.selectedOptions[0];
+  if(!option||!option.value)return;
+  wifiSsid.value=option.value;
+  const openNetwork=document.querySelector("input[name='wifiOpen']");
+  if(openNetwork)openNetwork.checked=option.dataset.open==='1';
+});
+</script>)HTML");
   html += F("<p class='muted'>UP/DOWN: manuell; beide Tasten: Automatik.</p>"
             "<script>let statusBusy=false;async function refreshStatus(){"
             "if(statusBusy||document.hidden)return;statusBusy=true;"
@@ -4546,6 +4615,140 @@ void handleUnknownCodesDownload() {
 }
 
 
+const char *wifiSecurityName(wifi_auth_mode_t mode) {
+  switch (mode) {
+    case WIFI_AUTH_OPEN: return "OPEN";
+    case WIFI_AUTH_WEP: return "WEP";
+    case WIFI_AUTH_WPA_PSK: return "WPA";
+    case WIFI_AUTH_WPA2_PSK: return "WPA2";
+    case WIFI_AUTH_WPA_WPA2_PSK: return "WPA/WPA2";
+    case WIFI_AUTH_WPA2_ENTERPRISE: return "WPA2 Enterprise";
+    case WIFI_AUTH_WPA3_PSK: return "WPA3";
+    case WIFI_AUTH_WPA2_WPA3_PSK: return "WPA2/WPA3";
+    default: return "SECURED";
+  }
+}
+
+
+void handleWifiScanStart() {
+  if (otaPreparing || otaInProgress) {
+    webServer.send(409, "application/json; charset=utf-8",
+                   "{\"state\":\"blocked\",\"message\":\"OTA läuft\"}");
+    return;
+  }
+  if (WiFi.scanComplete() == WIFI_SCAN_RUNNING) {
+    webServer.send(202, "application/json; charset=utf-8",
+                   "{\"state\":\"running\"}");
+    return;
+  }
+  WiFi.scanDelete();
+  wifiScanResultJson = "";
+  wifiScanRequested = true;
+  wifiScanStartedAt = millis();
+  const int result = WiFi.scanNetworks(true, false, false, 160);
+  if (result == WIFI_SCAN_FAILED) {
+    wifiScanRequested = false;
+    webServer.send(500, "application/json; charset=utf-8",
+                   "{\"state\":\"failed\"}");
+    return;
+  }
+  webServer.send(202, "application/json; charset=utf-8",
+                 "{\"state\":\"running\"}");
+}
+
+
+void handleWifiScanResult() {
+  if (!wifiScanRequested) {
+    if (wifiScanResultJson.length()) {
+      webServer.sendHeader("Cache-Control", "no-store");
+      webServer.send(200, "application/json; charset=utf-8",
+                     wifiScanResultJson);
+    } else {
+      webServer.send(200, "application/json; charset=utf-8",
+                     "{\"state\":\"idle\",\"networks\":[]}");
+    }
+    return;
+  }
+
+  const int count = WiFi.scanComplete();
+  if (count == WIFI_SCAN_RUNNING) {
+    if (millis() - wifiScanStartedAt > 15000UL) {
+      WiFi.scanDelete();
+      wifiScanRequested = false;
+      webServer.send(500, "application/json; charset=utf-8",
+                     "{\"state\":\"failed\",\"networks\":[]}");
+    } else {
+      webServer.send(202, "application/json; charset=utf-8",
+                     "{\"state\":\"running\"}");
+    }
+    return;
+  }
+  if (count == WIFI_SCAN_FAILED) {
+    wifiScanRequested = false;
+    webServer.send(500, "application/json; charset=utf-8",
+                   "{\"state\":\"failed\",\"networks\":[]}");
+    return;
+  }
+
+  struct WifiScanEntry {
+    String ssid;
+    int32_t rssi;
+    wifi_auth_mode_t security;
+  };
+  std::vector<WifiScanEntry> networks;
+  networks.reserve(min(count, 32));
+  for (int i = 0; i < count; ++i) {
+    const String ssid = WiFi.SSID(i);
+    if (!ssid.length()) continue;
+    const int32_t rssi = WiFi.RSSI(i);
+    bool merged = false;
+    for (WifiScanEntry &entry : networks) {
+      if (entry.ssid == ssid) {
+        if (rssi > entry.rssi) {
+          entry.rssi = rssi;
+          entry.security = WiFi.encryptionType(i);
+        }
+        merged = true;
+        break;
+      }
+    }
+    if (!merged && networks.size() < 32) {
+      networks.push_back({ssid, rssi, WiFi.encryptionType(i)});
+    }
+  }
+  for (size_t i = 0; i < networks.size(); ++i) {
+    for (size_t j = i + 1; j < networks.size(); ++j) {
+      if (networks[j].rssi > networks[i].rssi) {
+        const WifiScanEntry temporary = networks[i];
+        networks[i] = networks[j];
+        networks[j] = temporary;
+      }
+    }
+  }
+
+  String json = "{\"state\":\"ready\",\"networks\":[";
+  json.reserve(256 + networks.size() * 80);
+  for (size_t i = 0; i < networks.size(); ++i) {
+    if (i) json += ',';
+    json += "{\"ssid\":\"" + jsonEscape(networks[i].ssid) +
+            "\",\"rssi\":" + String(networks[i].rssi) +
+            ",\"security\":\"" + wifiSecurityName(networks[i].security) +
+            "\",\"open\":" +
+            String(networks[i].security == WIFI_AUTH_OPEN ? "true" : "false") +
+            ",\"current\":" +
+            String(WiFi.status() == WL_CONNECTED &&
+                           networks[i].ssid == WiFi.SSID()
+                       ? "true" : "false") + "}";
+  }
+  json += "]}";
+  WiFi.scanDelete();
+  wifiScanRequested = false;
+  wifiScanResultJson = json;
+  webServer.sendHeader("Cache-Control", "no-store");
+  webServer.send(200, "application/json; charset=utf-8", json);
+}
+
+
 void handleRestart() {
   webServer.send(200, "text/html; charset=utf-8",
       String("<!doctype html><html lang='") + (uiEnglish ? "en" : "de") +
@@ -4817,6 +5020,10 @@ void startWebServer() {
     webServer.on("/api/display", HTTP_GET, handleDisplayApi);
     webServer.on("/api/status", HTTP_GET, handleStatusApi);
     webServer.on("/api/status-fragment", HTTP_GET, handleStatusFragment);
+    webServer.on("/api/wifi-scan", HTTP_POST, []() {
+      pulseHttpActivity(); handleWifiScanStart();
+    });
+    webServer.on("/api/wifi-scan", HTTP_GET, handleWifiScanResult);
     webServer.on("/unknown-codes.json", HTTP_GET, []() {
       pulseHttpActivity(); handleUnknownCodesDownload();
     });

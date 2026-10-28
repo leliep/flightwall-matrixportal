@@ -19,7 +19,7 @@ erklärt auch BME280, BH1750, MQTT, Routenauflösung und OTA.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.3` |
+| Firmware | `3.6.1-dual-target.4` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -486,6 +486,14 @@ Unter **WLAN-Zugang** kann ein neuer WLAN-Name mit neuem Passwort gespeichert
 werden. Ein leeres Passwortfeld behält das vorhandene Passwort bei; für ein
 offenes Netz steht eine eigene Auswahl zur Verfügung. Nach einer Änderung
 startet der Controller automatisch neu.
+
+**WLANs suchen** startet auf Wunsch einen asynchronen Umgebungsscan. Die Liste
+ist nach Signalstärke sortiert, fasst gleichnamige Netze zusammen und zeigt
+SSID, Empfangspegel und Verschlüsselung. Eine Auswahl übernimmt die SSID in das
+weiterhin frei editierbare Eingabefeld; bei einem offenen Netz wird die
+entsprechende Option gesetzt. Versteckte oder während des Scans nicht sichtbare
+Netze können unverändert von Hand eingetragen werden. Es finden keine
+automatischen Dauerscans statt.
 
 Kann der Controller das gespeicherte WLAN nicht erreichen, öffnet er ein
 Einrichtungsnetz mit einem gerätespezifischen Namen nach dem Muster
