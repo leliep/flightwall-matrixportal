@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.6.0-dual-target.1 – 2026-10-28
+
+- zweites PlatformIO-Buildziel für ESP32-S3-DevKitC-1-N16R8 ohne LED-Matrix
+- gemeinsamer ADS-B-, Routen-, Wetter-, Web-, Diagnose- und OTA-Kern für
+  MatrixPortal- und Headless-Variante
+- Protomatter, HUB75-DMA, Matrixseiten, Helligkeitstaster und BH1750 werden im
+  Headless-Build nicht initialisiert
+- eigene Gerätekennung und Adresse `flightwall-server.local`; Hardwarevariante
+  zusätzlich in Status-API und OTA-Seite sichtbar
+- matrixbezogene Eingabefelder werden in der Headless-Konfiguration entfernt
+- BME280 am Headless-Board optional über GPIO 16/17
+- GitHub Actions baut beide Firmwaredateien und stellt sie getrennt bereit
+
 ## 3.5.5-code-download.1 – 2026-10-28
 
 - unbekannte Airport- und Airline-Codes können über die Statusseite als

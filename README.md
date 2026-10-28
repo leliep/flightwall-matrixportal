@@ -1,10 +1,11 @@
 # FlightWall MatrixPortal
 
-FlightWall MatrixPortal macht aus einem Adafruit MatrixPortal S3 und zwei
-HUB75-Panels eine eigenständige Flugzeuganzeige. Der ESP32-S3 liest ADS-B-Daten
-direkt ein, wählt das relevanteste Flugzeug aus, ergänzt Route sowie Klartexte
-und steuert eine 128×32-Pixel-RGB-Matrix. Ein Raspberry Pi oder separater
-FlightMatrixServer ist für den Betrieb nicht erforderlich.
+FlightWall macht aus einem Adafruit MatrixPortal S3 und zwei HUB75-Panels eine
+eigenständige Flugzeuganzeige. Alternativ läuft derselbe Serverkern auf einem
+ESP32-S3-N16R8 ohne LED-Matrix; in dieser Variante dient die responsive
+FlightWall-Webseite als Anzeige. Der ESP32-S3 liest ADS-B-Daten direkt ein,
+wählt das relevanteste Flugzeug aus und ergänzt Route sowie Klartexte. Ein
+Raspberry Pi oder separater FlightMatrixServer ist nicht erforderlich.
 
 ![FlightWall MatrixPortal mit aktuellen Flugdaten](IMG_4482.png)
 
@@ -16,8 +17,8 @@ erklärt auch BME280, BH1750, MQTT, Routenauflösung und OTA.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.5.5-code-download.1` |
-| Controller | Adafruit MatrixPortal S3 / ESP32-S3 |
+| Firmware | `3.6.0-dual-target.1` |
+| Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige | 2 × 64×32 HUB75, horizontal verkettet |
 | Gesamtauflösung | 128×32 Pixel |
 | Farbtiefe | 3 Bit je Farbkanal |
@@ -80,6 +81,18 @@ MQTT, Webserver und OTA. Flugzeug- und Wetterdaten werden über geschützte
 Kopien zwischen beiden Bereichen übergeben.
 
 ## Hardware
+
+### Unterstützte Varianten
+
+| Variante | PlatformIO-Environment | Anzeige | mDNS-Name |
+|---|---|---|---|
+| MatrixPortal S3 | `adafruit_matrixportal_esp32s3` | 128×32 HUB75-Matrix und Web | `matrixportal.local` |
+| ESP32-S3 N16R8 | `esp32s3_n16r8_headless` | Web-FlightWall | `flightwall-server.local` |
+
+Beide Varianten verwenden denselben ADS-B-, Routen-, Klassifizierungs-,
+Wetter-, Konfigurations- und Webservercode. Matrixansteuerung, Taster,
+BH1750-Automatik und Matrixseiten werden im Headless-Build nicht initialisiert.
+Ein optionaler BME280 wird dort über SDA GPIO 16 und SCL GPIO 17 angeschlossen.
 
 ### Benötigte Komponenten
 
@@ -440,11 +453,25 @@ wird nach einer erfolgreichen Verbindung mit dem normalen WLAN wieder beendet.
 Solange es aktiv ist, zeigt die Matrix dauerhaft WLAN-Name, Passwort und
 `CONFIG IP 192.168.4.1` an. Ein zu langer WLAN-Name läuft als Laufschrift.
 
-Kompilieren und per USB übertragen:
+MatrixPortal kompilieren und per USB übertragen:
 
 ```bash
 pio run
 pio run -t upload
+```
+
+Headless-Server für das ESP32-S3-N16R8-Board kompilieren und übertragen:
+
+```bash
+pio run -e esp32s3_n16r8_headless
+pio run -e esp32s3_n16r8_headless -t upload
+```
+
+Die beiden Firmwaredateien liegen anschließend unter:
+
+```text
+.pio/build/adafruit_matrixportal_esp32s3/firmware.bin
+.pio/build/esp32s3_n16r8_headless/firmware.bin
 ```
 
 Der serielle Monitor läuft mit 115200 Baud:
@@ -458,8 +485,9 @@ Standort, Blickrichtung, aktive ADS-B-Quelle und Anzeigeradius kontrollieren.
 Die mitgelieferten Standardwerte sind auf den ursprünglichen Aufbau
 zugeschnitten und nicht als allgemeine Standortvorgabe gedacht.
 
-GitHub Actions baut die Firmware bei Push und Pull Request mit den
-Platzhalterwerten aus `include/secrets.h.example`.
+GitHub Actions baut bei Push und Pull Request beide Firmwarevarianten mit den
+Platzhalterwerten aus `include/secrets.h.example` und stellt beide BIN-Dateien
+als getrennte Build-Artefakte bereit.
 
 ## OTA-Updates
 
@@ -475,6 +503,12 @@ zwei Wege.
 
 Die Seite prüft Dateiendung und ESP32-Dateikopf, zeigt den Fortschritt und
 vergleicht nach dem Neustart alte und neue Firmwareversion.
+
+Für den Headless-Server lautet die Adresse
+`http://flightwall-server.local/update`; dort muss die Datei aus
+`.pio/build/esp32s3_n16r8_headless/` verwendet werden. Die Update-Seite zeigt
+die installierte Hardwarevariante ausdrücklich an. Images der beiden Varianten
+dürfen nicht miteinander vertauscht werden.
 
 ### PlatformIO-OTA
 

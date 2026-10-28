@@ -10,6 +10,24 @@
 
 Der serielle Monitor verwendet 115200 Baud.
 
+## Zweite Firmwarevariante ohne LED-Matrix
+
+Für ESP32-S3-DevKitC-1-Boards mit N16R8-Modul steht ein eigenes Buildziel zur
+Verfügung. Es verwendet denselben Server- und Auswertungskern, initialisiert
+aber weder Protomatter noch HUB75-DMA, Matrixseiten, Helligkeitstaster oder den
+BH1750:
+
+```bash
+pio run -e esp32s3_n16r8_headless
+pio run -e esp32s3_n16r8_headless -t upload
+```
+
+Die Weboberfläche ist anschließend unter
+`http://flightwall-server.local` oder über die ausgegebene IP-Adresse
+erreichbar. Ein optionaler BME280 verwendet SDA GPIO 16 und SCL GPIO 17.
+Die passende Binärdatei liegt in
+`.pio/build/esp32s3_n16r8_headless/firmware.bin`.
+
 ## Laufzeitarchitektur
 
 - Arduino `loop()` läuft auf Core 1 und bedient Display, Taster und BH1750.
@@ -56,6 +74,9 @@ Zeichen lang ist. Das Webinterface bietet dann einen passwortgeschützten
 Upload für `firmware.bin`. Für PlatformIO steht zusätzlich das Environment
 `adafruit_matrixportal_esp32s3_ota` bereit. Sein Passwort kommt aus der
 Umgebungsvariable `MATRIXPORTAL_OTA_PASSWORD` und wird nicht eingecheckt.
+
+Für den Headless-Server gibt es entsprechend
+`esp32s3_n16r8_headless_ota` mit dem Ziel `flightwall-server.local`.
 Der Web-Upload besitzt Firmwareprüfung, Bestätigungsdialog, Fortschrittsanzeige
 und einen Versionsvergleich nach dem automatischen Neustart.
 

@@ -1,18 +1,21 @@
-# FlightWall MatrixPortal – Getting Started
+# FlightWall – Getting Started
 
-Diese Anleitung beschreibt die grundlegende Einrichtung von FlightWall
-MatrixPortal in der Firmwareversion `3.5.5-code-download.1`. Sie führt
-vom Hardwareaufbau bis zur ersten Flugzeuganzeige und erklärt auch alle
-optionalen Komponenten.
+Diese Anleitung beschreibt die grundlegende Einrichtung von FlightWall in der
+Firmwareversion `3.6.0-dual-target.1`. Sie führt vom Hardwareaufbau bis zur
+ersten Flugzeuganzeige und erklärt auch alle optionalen Komponenten.
 
-FlightWall MatrixPortal arbeitet eigenständig auf dem ESP32-S3. Ein Raspberry
-Pi oder FlightMatrixServer wird nicht benötigt. Erforderlich ist lediglich
-eine erreichbare ADS-B-Datenquelle im lokalen Netz oder die öffentliche
+FlightWall arbeitet eigenständig auf dem ESP32-S3. Ein Raspberry Pi oder
+FlightMatrixServer wird nicht benötigt. Die Firmware steht als MatrixPortal-
+Variante mit HUB75-Anzeige und als Headless-Variante für ein ESP32-S3-N16R8-
+DevKit ohne LED-Matrix zur Verfügung. Erforderlich ist lediglich eine
+erreichbare ADS-B-Datenquelle im lokalen Netz oder die öffentliche
 adsb.fi-Schnittstelle.
 
 ## 1. Was wird benötigt?
 
 ### Pflichtausstattung
+
+Für die Matrixvariante:
 
 | Komponente | Anforderung |
 |---|---|
@@ -23,6 +26,11 @@ adsb.fi-Schnittstelle.
 | Datenkabel | zwei HUB75-Flachbandkabel |
 | Einrichtung | USB-C-Datenkabel und Rechner mit PlatformIO |
 | Netzwerk | 2,4-GHz-WLAN mit Zugriff auf eine ADS-B-Quelle oder das Internet |
+
+Für die Headless-Variante genügen ein ESP32-S3-DevKitC-1 mit N16R8-Modul,
+USB-C-Datenkabel und WLAN. Die Flugzeuganzeige erfolgt unter
+`http://flightwall-server.local/display`; LED-Matrix, HUB75-Kabel und
+Panelnetzteil entfallen.
 
 Das LED-Netzteil muss zur tatsächlichen Stromaufnahme der Panels passen. Eine
 großzügige Reserve ist sinnvoll. Die Panels dürfen nicht über den
@@ -104,11 +112,18 @@ Hinweise:
 - WLAN-Zugangsdaten lassen sich später über die Webseite ändern und bleiben
   bei Firmwareupdates erhalten.
 
-Firmware bauen und per USB übertragen:
+MatrixPortal-Firmware bauen und per USB übertragen:
 
 ```bash
 pio run
 pio run -t upload
+```
+
+Headless-Firmware für das ESP32-S3-N16R8-Board bauen und übertragen:
+
+```bash
+pio run -e esp32s3_n16r8_headless
+pio run -e esp32s3_n16r8_headless -t upload
 ```
 
 Bei Problemen liefert der serielle Monitor weitere Informationen:
@@ -126,6 +141,9 @@ unter folgender Adresse erreichbar:
 ```text
 http://matrixportal.local/
 ```
+
+Beim Headless-Server lautet die Adresse entsprechend
+`http://flightwall-server.local/`.
 
 Funktioniert der Name im eigenen Netz nicht, kann die im Router oder seriellen
 Monitor angezeigte IP-Adresse verwendet werden.

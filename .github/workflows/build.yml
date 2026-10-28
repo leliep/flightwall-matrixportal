@@ -17,5 +17,17 @@ jobs:
         run: pip install platformio
       - name: Prepare build-only secrets
         run: cp include/secrets.h.example include/secrets.h
-      - name: Build firmware
-        run: pio run
+      - name: Build MatrixPortal firmware
+        run: pio run -e adafruit_matrixportal_esp32s3
+      - name: Build headless ESP32-S3 N16R8 firmware
+        run: pio run -e esp32s3_n16r8_headless
+      - name: Upload MatrixPortal firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: flightwall-matrixportal-s3
+          path: .pio/build/adafruit_matrixportal_esp32s3/firmware.bin
+      - name: Upload headless ESP32-S3 N16R8 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: flightwall-esp32s3-n16r8-headless
+          path: .pio/build/esp32s3_n16r8_headless/firmware.bin

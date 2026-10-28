@@ -12,9 +12,15 @@
 #include <esp_system.h>
 #include <time.h>
 
+#ifndef FLIGHTWALL_HAS_MATRIX
+#define FLIGHTWALL_HAS_MATRIX 1
+#endif
+
 #include <Adafruit_GFX.h>
 #include <Adafruit_BME280.h>
+#if FLIGHTWALL_HAS_MATRIX
 #include <Adafruit_Protomatter.h>
+#endif
 #include <PubSubClient.h>
 #include "AdsbClient.hpp"
 #include "AircraftProcessor.hpp"
@@ -35,8 +41,17 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.5.5-code-download.1";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-28 unknown-code download";
+constexpr char APP_VERSION[] = "3.6.0-dual-target.1";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-28 dual MatrixPortal/headless target";
+#if FLIGHTWALL_HAS_MATRIX
+constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
+constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
+constexpr char DEVICE_HOSTNAME[] = "matrixportal";
+#else
+constexpr char DEVICE_NAME[] = "FlightWall ESP32-S3 Server";
+constexpr char DEVICE_VARIANT[] = "esp32s3_n16r8_headless";
+constexpr char DEVICE_HOSTNAME[] = "flightwall-server";
+#endif
 constexpr uint8_t PAGE_COUNT = 7;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
@@ -112,15 +127,30 @@ constexpr uint8_t BRIGHTNESS_LEVELS[] = {14, 29, 43, 57, 71, 86, 100};
 constexpr uint8_t BRIGHTNESS_LEVEL_COUNT =
     sizeof(BRIGHTNESS_LEVELS) / sizeof(BRIGHTNESS_LEVELS[0]);
 
+#if FLIGHTWALL_HAS_MATRIX
 uint8_t rgbPins[] = {42, 41, 40, 38, 39, 37};
 uint8_t addrPins[] = {45, 36, 48, 35};
 constexpr uint8_t clockPin = 2;
 constexpr uint8_t latchPin = 47;
 constexpr uint8_t oePin = 14;
-
 Adafruit_Protomatter matrix(
     MATRIX_WIDTH, BIT_DEPTH, 1, rgbPins, 4, addrPins,
     clockPin, latchPin, oePin, true);
+#else
+// Retain the common drawing code without allocating a HUB75 framebuffer or
+// using the ESP32-S3 LCD/DMA peripheral. Headless builds never call it.
+class HeadlessDisplay final : public Adafruit_GFX {
+ public:
+  HeadlessDisplay() : Adafruit_GFX(MATRIX_WIDTH, 32) {}
+  void drawPixel(int16_t, int16_t, uint16_t) override {}
+  void show() {}
+  uint32_t getFrameCount() const { return 0; }
+  uint16_t color565(uint8_t red, uint8_t green, uint8_t blue) const {
+    return ((red & 0xF8) << 8) | ((green & 0xFC) << 3) | (blue >> 3);
+  }
+};
+HeadlessDisplay matrix;
+#endif
 constexpr uint16_t AIRPORT_TEXT_CANVAS_WIDTH = 128 * 6;
 GFXcanvas1 airportTextCanvas(AIRPORT_TEXT_CANVAS_WIDTH, 8);
 TwoWire environmentWire(1);
@@ -2100,7 +2130,11 @@ bool beginEnvironmentSensorAt(TwoWire &bus, uint8_t address, bool onStemma) {
   environmentSensorAddress = address;
   environmentSensorFailures = 0;
   Serial.printf("BME280 found at 0x%02X on %s bus\n", address,
+#if FLIGHTWALL_HAS_MATRIX
                 onStemma ? "STEMMA QT" : "BH1750");
+#else
+                "GPIO 16/17");
+#endif
   return true;
 }
 
@@ -2192,9 +2226,11 @@ bool findEnvironmentSensor() {
   for (const uint8_t address : addresses) {
     if (beginEnvironmentSensorAt(Wire, address, false)) return true;
   }
+#if FLIGHTWALL_HAS_MATRIX
   for (const uint8_t address : addresses) {
     if (beginEnvironmentSensorAt(environmentWire, address, true)) return true;
   }
+#endif
   environmentSensorAvailable = false;
   environmentSensorAddress = 0;
   ambientTemperatureC = NAN;
@@ -3136,13 +3172,17 @@ String webPage(bool includeRouteCache = true) {
   html.reserve(includeRouteCache ? 30000 : 22000);
   html += F("<!doctype html><html lang='de'><head><meta charset='utf-8'>");
   html += F("<meta name='viewport' content='width=device-width,initial-scale=1'>");
-  html += F("<title>FlightWall MatrixPortal</title><style>");
+  html += F("<title>");
+  html += DEVICE_NAME;
+  html += F("</title><style>");
   html += F("body{font:16px system-ui;background:#10131a;color:#eef2ff;margin:auto;max-width:920px;padding:20px}");
   html += F("h1{font-size:1.5rem}fieldset{border:1px solid #445;border-radius:10px;margin:14px 0;padding:14px;min-width:0}");
   html += F("label{display:block;margin:12px 0}input[type=number],input[type=text],input[type=password],input[type=url],input[type=time],select,textarea{width:100%;box-sizing:border-box;padding:9px;min-height:42px}input[type=checkbox]{width:auto;min-height:auto}.fieldGrid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:10px 14px;align-items:end;margin:10px 0}.fieldGrid>label{grid-column:span 6;margin:0;min-width:0}.fieldGrid>.third{grid-column:span 4}.fieldGrid>.quarter{grid-column:span 3}.fieldGrid>.twoThird{grid-column:span 8}.fieldGrid>.threeQuarter{grid-column:span 9}.fieldGrid>.fieldWide{grid-column:1/-1}.fieldGrid .check{align-self:center;padding:9px 0}.buttonRow{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}.pageSettings{display:grid;grid-template-columns:minmax(0,1fr) minmax(120px,180px);gap:8px 14px;align-items:end;margin:10px 0}.pageSettings label{margin:0}.orderGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px 14px}.orderGrid label{margin:0}");
   html += F("button{background:#00bcd4;color:#001018;border:0;border-radius:8px;padding:12px 18px;font-weight:bold}.danger{background:#ff8597;color:#24050b}.smallButton{padding:7px 10px;font-size:.82rem}.inlineForm{display:inline;margin:0 4px 0 0}.cacheTable{width:100%;border-collapse:collapse}.cacheTable th,.cacheTable td{text-align:left;padding:8px 6px;border-bottom:1px solid #343d50;vertical-align:top}.cacheTable th{color:#aab;font-size:.8rem}.cacheActions{white-space:nowrap}");
   html += F(".status{display:grid;grid-template-columns:minmax(145px,42%) minmax(0,1fr);gap:7px 14px}.status span{color:#aab}.status b{overflow-wrap:anywhere}.statusNote{grid-column:1/-1;margin:2px 0 5px;line-height:1.35}.statusCards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.statusCard{background:#171c26;border:1px solid #343d50;border-radius:12px;padding:14px}.statusCard h3{margin:0 0 12px;font-size:1rem;color:#7ee7f0}.healthbar{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 14px}.pill{border-radius:999px;padding:7px 11px;font-size:.86rem;font-weight:700}.ok{background:#153b2b;color:#74e3aa}.warn{background:#493c16;color:#ffd166}.bad{background:#4a1f29;color:#ff8597}.off{background:#303541;color:#abb3c3}.wide{grid-column:1/-1}details summary{cursor:pointer;font-weight:700;color:#7ee7f0}details .status{margin-top:12px}@media(max-width:650px){body{padding:12px}.fieldGrid>label,.fieldGrid>.third,.fieldGrid>.quarter,.fieldGrid>.twoThird,.fieldGrid>.threeQuarter{grid-column:span 6}.fieldGrid>.fieldWide{grid-column:1/-1}.statusCards{grid-template-columns:1fr}.wide{grid-column:auto}.status{grid-template-columns:1fr}.status b{margin-bottom:7px}}@media(max-width:430px){.fieldGrid>label,.fieldGrid>.third,.fieldGrid>.quarter,.fieldGrid>.twoThird,.fieldGrid>.threeQuarter{grid-column:1/-1}.pageSettings{grid-template-columns:minmax(0,1fr) 112px;gap:8px}.pageSettings label{font-size:.92rem}fieldset{padding:11px}}.muted{color:#aab}</style></head><body>");
-  html += F("<h1>FlightWall MatrixPortal ");
+  html += F("<h1>");
+  html += DEVICE_NAME;
+  html += ' ';
   html += APP_VERSION;
   html += F("</h1><form method='post' action='/save'>");
   html += F("<fieldset><legend>Sprache / Language</legend><div class='fieldGrid'><label class='third'><select name='uiLanguage'>"
@@ -3160,6 +3200,7 @@ String webPage(bool includeRouteCache = true) {
                          ? wifiSetupAccessPointSsid
                          : String(WIFI_SETUP_AP_PREFIX));
   html += F("</b> mit dem Passwort <b>flightwall</b>. Konfiguration: <b>http://192.168.4.1</b></p></fieldset>");
+#if FLIGHTWALL_HAS_MATRIX
   html += F("<fieldset><legend>Display</legend><div class='fieldGrid'><label class='check'><input type='checkbox' name='display' value='1'");
   html += checked(displayEnabled);
   html += F("> Display eingeschaltet</label><label class='check'><input type='checkbox' name='environmentIdle' value='1'");
@@ -3179,7 +3220,17 @@ String webPage(bool includeRouteCache = true) {
   html += F("'></label></div><p class='muted'>Die Nachtruhe darf über Mitternacht reichen. Gleiche Zeiten deaktivieren die Abdunklung.</p><button type='submit' formaction='/display-test'>");
   html += (displayTestActive || displayTestCommand == 1) ?
       "Displaytest beenden" : "Displaytest starten";
-  html += F("</button><p class='muted'>Etwa 23 Sekunden: Matrix-Prüfbilder und alle Typensymbole mit Bedeutung.</p></fieldset><fieldset><legend>Flugzeugdaten</legend><div class='fieldGrid'><label class='third'>Aktive ADS-B-Quelle<select name='activeAdsbSource'><option value='1'");
+  html += F("</button><p class='muted'>Etwa 23 Sekunden: Matrix-Prüfbilder und alle Typensymbole mit Bedeutung.</p></fieldset>");
+#else
+  html += F("<fieldset><legend>Standort und Auswahl</legend><div class='fieldGrid'><label class='third'>Anzeigeradius (km)<input type='number' name='radius' min='1' max='100' step='0.5' value='");
+  html += String(displayRadiusKm, 1);
+  html += F("'></label><label class='third'>Standorthöhe über NHN (m)<input type='number' name='observerElevation' min='-500' max='9000' step='1' value='");
+  html += String(observerElevationM, 0);
+  html += F("'></label><label class='third'>Unter diesem Blickwinkel \"weit\" (°)<input type='number' name='farElevation' min='10' max='45' step='1' value='");
+  html += String(farDirectionElevationDeg, 0);
+  html += F("'></label></div><p class='muted'>Diese Servervariante stellt die Flugdaten über die Weboberfläche und die JSON-APIs bereit; eine HUB75-Matrix wird nicht angesteuert.</p></fieldset>");
+#endif
+  html += F("<fieldset><legend>Flugzeugdaten</legend><div class='fieldGrid'><label class='third'>Aktive ADS-B-Quelle<select name='activeAdsbSource'><option value='1'");
   html += selected(activeAdsbSource == 0);
   html += F(">Quelle 1</option><option value='2'");
   html += selected(activeAdsbSource == 1);
@@ -3238,6 +3289,7 @@ String webPage(bool includeRouteCache = true) {
   html += F("'></label><label>Regen heute (cm)<input type='text' name='rainTopic' maxlength='128' value='");
   html += htmlEscape(rainTopic);
   html += F("'></label></div><p class='muted'>Regen wird für die Anzeige von cm in mm umgerechnet. Ein leeres Passwortfeld behält das gespeicherte Passwort bei.</p></fieldset>");
+#if FLIGHTWALL_HAS_MATRIX
   html += F("<fieldset><legend>Anzeigeseiten</legend><div class='fieldGrid'><label class='check'><input type='checkbox' name='smooth' value='1'");
   html += checked(smoothTransitions);
   html += F("> Sanfte Übergänge</label><label class='fieldWide'>Freitext (maximal 128 Zeichen)<textarea name='customText' maxlength='128' rows='3'>");
@@ -3277,7 +3329,9 @@ String webPage(bool includeRouteCache = true) {
   html += String(lowLuxThreshold, 0);
   html += F("'></label><label class='quarter'>Schwelle hell (Lux)<input type='number' name='highLux' min='50' max='50000' step='10' value='");
   html += String(highLuxThreshold, 0);
-  html += F("'></label></div></fieldset><button type='submit'>Einstellungen speichern</button></form>");
+  html += F("'></label></div></fieldset>");
+#endif
+  html += F("<button type='submit'>Einstellungen speichern</button></form>");
   html += F("<fieldset><legend>Status <small class='muted' id='statusRefresh'>wird automatisch aktualisiert</small></legend><div id='statusData'><div class='healthbar'>");
   html += statusError.length() ? F("<span class='pill warn'>● System eingeschränkt</span>") : F("<span class='pill ok'>● System OK</span>");
   html += lastAdsbError.length() ? F("<span class='pill bad'>● ADS-B Fehler</span>") : F("<span class='pill ok'>● ADS-B OK</span>");
@@ -3285,12 +3339,20 @@ String webPage(bool includeRouteCache = true) {
     html += F("<span class='pill bad'>● TRANSPONDER-NOTFALL</span>");
   html += !mqttWeatherEnabled ? F("<span class='pill off'>● MQTT aus</span>") :
           (mqttConnected ? F("<span class='pill ok'>● MQTT OK</span>") : F("<span class='pill warn'>● MQTT getrennt</span>"));
+#if FLIGHTWALL_HAS_MATRIX
   html += environmentSensorAvailable && lightSensorAvailable
               ? F("<span class='pill ok'>● Sensoren OK</span>")
               : F("<span class='pill warn'>● Sensor prüfen</span>");
+#else
+  html += environmentSensorAvailable
+              ? F("<span class='pill ok'>● BME280 OK</span>")
+              : F("<span class='pill off'>● BME280 nicht verbunden</span>");
+#endif
   html += "<span class='pill " + String(moldRiskCssClass()) +
           "'>● Schimmelrisiko: " + moldRiskText() + "</span>";
-  html += F("</div><div class='statusCards'><section class='statusCard'><h3>Netzwerk</h3><div class='status'><span>Adresse</span><b>http://matrixportal.local</b><span>IP</span><b>");
+  html += F("</div><div class='statusCards'><section class='statusCard'><h3>Netzwerk</h3><div class='status'><span>Adresse</span><b>http://");
+  html += DEVICE_HOSTNAME;
+  html += F(".local</b><span>IP</span><b>");
   html += WiFi.localIP().toString();
   html += F("</b><span>WLAN-Name</span><b>");
   html += htmlEscape(wifiSsid);
@@ -3470,7 +3532,11 @@ String webPage(bool includeRouteCache = true) {
   html += F("</b></div></details><section class='statusCard'><h3>Wetter und Sensoren</h3><div class='status'><span>BME280</span><b>");
   if (environmentSensorAvailable) {
     html += "verbunden / 0x" + String(environmentSensorAddress, HEX) +
+#if FLIGHTWALL_HAS_MATRIX
             (environmentSensorOnStemma ? " / STEMMA QT" : " / GPIO 3/9");
+#else
+            " / GPIO 16/17";
+#endif
   } else {
     html += "nicht gefunden";
   }
@@ -3508,7 +3574,9 @@ String webPage(bool includeRouteCache = true) {
   html += numberOrDash(statusWindGust) + " km/h";
   html += F("</b><span>Regen heute</span><b>");
   html += numberOrDash(statusRain) + " mm";
-  html += F("</b></div></section><section class='statusCard'><h3>Display</h3><div class='status'><span>Helligkeit</span><b>");
+  html += F("</b></div></section><section class='statusCard'><h3>");
+#if FLIGHTWALL_HAS_MATRIX
+  html += F("Display</h3><div class='status'><span>Helligkeit</span><b>");
   html += String(BRIGHTNESS_LEVELS[brightnessIndex]) + "% / " +
           (automaticBrightnessEnabled ? "Automatik" : "manuell");
   html += F("</b><span>Matrix-Farbtiefe</span><b>");
@@ -3518,6 +3586,9 @@ String webPage(bool includeRouteCache = true) {
   html += F("</b><span>Bildübergabe</span><b>");
   html += String(matrixShowLastUs) + " / max. " +
           String(matrixShowMaxUs) + " µs";
+#else
+  html += F("Server</h3><div class='status'><span>Betriebsart</span><b>ESP32-S3 ohne Matrix");
+#endif
   html += F("</b><span>Blickgeometrie</span><b>");
   html += String(observerElevationM, 0) + " m NHN / weit unter " +
           String(farDirectionElevationDeg, 0) + "°";
@@ -3530,12 +3601,20 @@ String webPage(bool includeRouteCache = true) {
   } else {
     html += "warte auf NTP";
   }
+#if FLIGHTWALL_HAS_MATRIX
   html += F("</b><span>Nachtruhe</span><b>");
   html += quietHoursEnabled ?
       (minutesAsTime(quietHoursStartMinutes) + "–" +
        minutesAsTime(quietHoursEndMinutes) +
        (quietHoursAreActive() ? " / aktiv" : " / inaktiv")) : "aus";
-  html += F("</b></div></section><details id='taskDiagnosis' class='statusCard wide'><summary>Task- und Resetdiagnose</summary><div class='status'><span>Tasks</span><b>Netz Core 0 / Display Core 1</b><span>Stackreserve</span><b>");
+#endif
+  html += F("</b></div></section><details id='taskDiagnosis' class='statusCard wide'><summary>Task- und Resetdiagnose</summary><div class='status'><span>Tasks</span><b>");
+#if FLIGHTWALL_HAS_MATRIX
+  html += F("Netz Core 0 / Display Core 1");
+#else
+  html += F("Netz Core 0 / Server Core 1");
+#endif
+  html += F("</b><span>Stackreserve</span><b>");
   html += networkTaskHandle ? String(uxTaskGetStackHighWaterMark(networkTaskHandle) * sizeof(StackType_t)) : "-";
   html += " / ";
   html += displayTaskHandle ? String(uxTaskGetStackHighWaterMark(displayTaskHandle) * sizeof(StackType_t)) : "-";
@@ -3685,9 +3764,12 @@ void applyWebSettings() {
       wifiPassword = nextWifiPassword;
     }
     uiEnglish = webServer.arg("uiLanguage") == "en";
+#if FLIGHTWALL_HAS_MATRIX
     displayEnabled = webServer.hasArg("display");
     environmentIdleDisplayEnabled = webServer.hasArg("environmentIdle");
+#endif
     mqttWeatherEnabled = webServer.hasArg("mqttWeather");
+#if FLIGHTWALL_HAS_MATRIX
     quietHoursEnabled = webServer.hasArg("quietHours");
     uint16_t requestedQuietTime;
     if (parseTimeMinutes(webServer.arg("quietStart"), requestedQuietTime)) {
@@ -3697,11 +3779,13 @@ void applyWebSettings() {
       quietHoursEndMinutes = requestedQuietTime;
     }
     automaticBrightnessEnabled = webServer.hasArg("autoLight");
+#endif
     displayRadiusKm = constrain(webServer.arg("radius").toFloat(), 1.0f, 100.0f);
     observerElevationM = constrain(
         webServer.arg("observerElevation").toFloat(), -500.0f, 9000.0f);
     farDirectionElevationDeg = constrain(
         webServer.arg("farElevation").toFloat(), 10.0f, 45.0f);
+#if FLIGHTWALL_HAS_MATRIX
     lowLuxThreshold = constrain(webServer.arg("lowLux").toFloat(), 1.0f, 500.0f);
     highLuxThreshold = constrain(webServer.arg("highLux").toFloat(), 50.0f, 50000.0f);
     if (highLuxThreshold <= lowLuxThreshold) highLuxThreshold = lowLuxThreshold + 50.0f;
@@ -3714,6 +3798,7 @@ void applyWebSettings() {
                                 requestedCustomScrollSpeed <= 2
                             ? requestedCustomScrollSpeed
                             : 1;
+#endif
     String requestedAdsbUrl1 = webServer.arg("adsbUrl1");
     requestedAdsbUrl1.trim();
     if (requestedAdsbUrl1.startsWith("http://") ||
@@ -3755,6 +3840,7 @@ void applyWebSettings() {
     windSpeedTopic.trim();
     windGustTopic.trim();
     rainTopic.trim();
+#if FLIGHTWALL_HAS_MATRIX
     smoothTransitions = webServer.hasArg("smooth");
     bool anyPageEnabled = false;
     for (uint8_t page = 0; page < PAGE_COUNT; ++page) {
@@ -3781,13 +3867,18 @@ void applyWebSettings() {
     if (requestedBrightness >= 0 && requestedBrightness < BRIGHTNESS_LEVEL_COUNT) {
       manualBrightnessIndex = requestedBrightness;
     }
+#endif
+#if FLIGHTWALL_HAS_MATRIX
     preferences.putBool("displayOn", displayEnabled);
+#endif
     if (wifiSettingsChanged) {
       preferences.putString("wifiSsid", wifiSsid);
       preferences.putString("wifiPass", wifiPassword);
     }
     preferences.putBool("uiEnglish", uiEnglish);
+#if FLIGHTWALL_HAS_MATRIX
     preferences.putBool("envIdle", environmentIdleDisplayEnabled);
+#endif
     preferences.putBool("mqttOn", mqttWeatherEnabled);
     preferences.putString("mqttHost", mqttHost);
     preferences.putUShort("mqttPort", mqttPort);
@@ -3797,6 +3888,7 @@ void applyWebSettings() {
     preferences.putString("windSpdTop", windSpeedTopic);
     preferences.putString("windGstTop", windGustTopic);
     preferences.putString("rainTop", rainTopic);
+#if FLIGHTWALL_HAS_MATRIX
     preferences.putBool("quietOn", quietHoursEnabled);
     preferences.putUShort("quietStart", quietHoursStartMinutes);
     preferences.putUShort("quietEnd", quietHoursEndMinutes);
@@ -3807,6 +3899,7 @@ void applyWebSettings() {
     preferences.putFloat("farAngle", farDirectionElevationDeg);
     preferences.putFloat("lowLux", lowLuxThreshold);
     preferences.putFloat("highLux", highLuxThreshold);
+#endif
     preferences.putString("adsbUrl", adsbUrl1);
     preferences.putString("adsbUrl2", adsbUrl2);
     preferences.putUChar("adsbActive", activeAdsbSource);
@@ -3819,6 +3912,7 @@ void applyWebSettings() {
     preferences.putBool("hideSport", hideSportAircraft);
     preferences.putBool("altFilter", altitudeFilterEnabled);
     preferences.putInt("maxAltFt", maximumAltitudeFt);
+#if FLIGHTWALL_HAS_MATRIX
     preferences.putString("customText", customPageText);
     preferences.putUChar("customSpd", customScrollSpeed);
     preferences.putBool("smooth", smoothTransitions);
@@ -3827,6 +3921,7 @@ void applyWebSettings() {
       preferences.putUInt(("p" + String(page) + "Ms").c_str(), pageDurationMs[page]);
       preferences.putUChar(("order" + String(page)).c_str(), pageOrder[page]);
     }
+#endif
     xSemaphoreGive(preferencesMutex);
   }
   settingsWriteInProgress = false;
@@ -4151,7 +4246,11 @@ void handleStatusApi() {
                                       ? displayRadiusKm * 2.0f
                                       : displayRadiusKm;
   String json = "{\"version\":\"" + jsonEscape(APP_VERSION) +
-      "\",\"language\":\"" + String(uiEnglish ? "en" : "de") +
+      "\",\"device_name\":\"" + jsonEscape(DEVICE_NAME) +
+      "\",\"device_variant\":\"" + jsonEscape(DEVICE_VARIANT) +
+      "\",\"matrix_available\":" +
+          String(FLIGHTWALL_HAS_MATRIX ? "true" : "false") +
+      ",\"language\":\"" + String(uiEnglish ? "en" : "de") +
       "\",\"build\":\"" + jsonEscape(BUILD_TIMESTAMP) +
       "\",\"uptime_seconds\":" + String(millis() / 1000) +
       ",\"free_heap\":" + String(ESP.getFreeHeap()) +
@@ -4390,7 +4489,8 @@ void handleOtaPage() {
   String html = R"HTML(<!doctype html><html lang="de"><meta name="viewport" content="width=device-width">
 <title>Firmware-Update</title><style>body{font:16px system-ui;max-width:600px;margin:40px auto;padding:16px}progress{width:100%;height:24px}button{padding:10px}</style>
 <body><h1>Firmware-Update</h1><p>Installierte Version: <b id="before">%VERSION%</b></p>
-<p>PlatformIO-Datei <b>firmware.bin</b> auswählen. Während des Updates die Stromversorgung nicht trennen.</p>
+<p>Hardwarevariante: <b>%VARIANT%</b></p>
+<p>Nur die zu dieser Hardwarevariante gehörende PlatformIO-Datei <b>firmware.bin</b> auswählen. Während des Updates die Stromversorgung nicht trennen.</p>
 <form id="upload"><input id="file" type="file" name="firmware" accept=".bin" required> <button>Prüfen und installieren</button></form>
 <p><progress id="progress" max="100" value="0"></progress> <span id="percent">0%</span></p><p id="result"></p>
 <script>
@@ -4406,6 +4506,7 @@ function pollVersion(){let tries=0;result.textContent+=' Warte auf Neustart…';
 </script><p><a href="/">Zurück</a></p></body></html>)HTML";
   html.replace("%VERSION%", APP_VERSION);
   html.replace("%VERSION%", APP_VERSION);
+  html.replace("%VARIANT%", DEVICE_VARIANT);
   translateWebPageToEnglish(html);
   webServer.send(200, "text/html; charset=utf-8", html);
 }
@@ -4487,7 +4588,7 @@ void finishOtaUpload() {
 
 void startArduinoOta() {
   if (otaStarted || strlen(OTA_PASSWORD) < 8) return;
-  ArduinoOTA.setHostname("matrixportal");
+  ArduinoOTA.setHostname(DEVICE_HOSTNAME);
   ArduinoOTA.setPassword(OTA_PASSWORD);
   ArduinoOTA.onStart([]() {
     otaPreparing = true;
@@ -4507,7 +4608,7 @@ void startArduinoOta() {
   });
   ArduinoOTA.begin();
   otaStarted = true;
-  Serial.println("PlatformIO OTA enabled for matrixportal.local");
+  Serial.printf("PlatformIO OTA enabled for %s.local\n", DEVICE_HOSTNAME);
 }
 
 
@@ -4623,7 +4724,9 @@ void startWebServer() {
     webServer.on("/route-cache/clear", HTTP_POST, handleRouteCacheClear);
     webServer.on("/test-emergency", HTTP_POST, handleEmergencyTest);
     webServer.on("/stop-emergency-test", HTTP_POST, handleStopEmergencyTest);
+#if FLIGHTWALL_HAS_MATRIX
     webServer.on("/display-test", HTTP_POST, handleDisplayTest);
+#endif
     webServer.on("/restart", HTTP_POST, handleRestart);
     webServer.on("/update", HTTP_GET, handleOtaPage);
     webServer.on("/update", HTTP_POST, finishOtaUpload, handleOtaUpload);
@@ -4638,13 +4741,13 @@ void startWebServer() {
     webServerConfigured = true;
   }
   webServer.begin();
-  if (WiFi.status() == WL_CONNECTED && MDNS.begin("matrixportal"))
+  if (WiFi.status() == WL_CONNECTED && MDNS.begin(DEVICE_HOSTNAME))
     MDNS.addService("http", "tcp", 80);
   webServerStarted = true;
   ++webServerStartCount;
   if (WiFi.status() == WL_CONNECTED) {
     startArduinoOta();
-    Serial.println("Web interface: http://matrixportal.local");
+    Serial.printf("Web interface: http://%s.local\n", DEVICE_HOSTNAME);
   }
 }
 
@@ -4825,18 +4928,23 @@ void setup() {
     Serial.println("Cannot create FreeRTOS mutexes");
     while (true) delay(1000);
   }
+#if FLIGHTWALL_HAS_MATRIX
   const ProtomatterStatus status = matrix.begin();
   if (status != PROTOMATTER_OK) {
     Serial.printf("Protomatter error: %d\n", static_cast<int>(status));
     while (true) delay(1000);
   }
-
   pinMode(BUTTON_UP_PIN, INPUT_PULLUP);
   pinMode(BUTTON_DOWN_PIN, INPUT_PULLUP);
   attachInterrupt(
       digitalPinToInterrupt(BUTTON_UP_PIN), onButtonUpPressed, FALLING);
   attachInterrupt(
       digitalPinToInterrupt(BUTTON_DOWN_PIN), onButtonDownPressed, FALLING);
+#else
+  Serial.println("Headless ESP32-S3 mode: HUB75 output disabled");
+  Serial.printf("Flash: %u bytes, PSRAM: %u bytes\n",
+                ESP.getFlashChipSize(), ESP.getPsramSize());
+#endif
 
   preferences.begin("flightwall", false);
   const uint8_t settingsVersion = preferences.getUChar("settingsVer", 1);
@@ -4972,14 +5080,24 @@ void setup() {
   if (highLuxThreshold <= lowLuxThreshold) highLuxThreshold = lowLuxThreshold + 50.0f;
   updateColors();
 
+#if FLIGHTWALL_HAS_MATRIX
   Wire.begin(LIGHT_SENSOR_SDA_PIN, LIGHT_SENSOR_SCL_PIN);
+#else
+  // The generic N16R8 board has no fixed STEMMA connector. GPIO 16/17 are
+  // the documented default I2C connection for optional sensors.
+  Wire.begin(STEMMA_SDA_PIN, STEMMA_SCL_PIN);
+#endif
   Wire.setTimeOut(50);
+#if FLIGHTWALL_HAS_MATRIX
   environmentWire.begin(STEMMA_SDA_PIN, STEMMA_SCL_PIN);
   environmentWire.setTimeOut(50);
   findLightSensor();
+#endif
   findEnvironmentSensor();
 
+#if FLIGHTWALL_HAS_MATRIX
   drawStatus("FLIGHTWALL", uiText("VERBINDET...", "CONNECTING..."));
+#endif
   if (xTaskCreatePinnedToCore(
           networkTask, "network", 12288, nullptr, tskIDLE_PRIORITY,
           &networkTaskHandle, 0) != pdPASS) {
@@ -5032,9 +5150,12 @@ uint32_t displayDrawIntervalMs() {
 void loop() {
   const uint32_t now = millis();
   syncNetworkState();
+#if FLIGHTWALL_HAS_MATRIX
   handleBrightnessButtons();
   serviceLightSensor();
+#endif
   serviceEnvironmentSensor();
+#if FLIGHTWALL_HAS_MATRIX
   serviceMatrixDiagnostics(now);
   if (!automaticBrightnessEnabled && brightnessIndex != manualBrightnessIndex) {
     applyBrightnessIndex(manualBrightnessIndex, false);
@@ -5045,5 +5166,8 @@ void loop() {
     lastDraw = now;
     drawDisplay();
   }
+#else
+  (void)now;
+#endif
   delay(10);
 }
