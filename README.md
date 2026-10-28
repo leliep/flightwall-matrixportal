@@ -17,7 +17,7 @@ erklärt auch BME280, BH1750, MQTT, Routenauflösung und OTA.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.0-dual-target.1` |
+| Firmware | `3.6.0-dual-target.2` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige | 2 × 64×32 HUB75, horizontal verkettet |
 | Gesamtauflösung | 128×32 Pixel |

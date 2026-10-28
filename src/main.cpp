@@ -41,8 +41,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.0-dual-target.1";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-28 dual MatrixPortal/headless target";
+constexpr char APP_VERSION[] = "3.6.0-dual-target.2";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-28 web aircraft type description";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -3894,12 +3894,12 @@ void applyWebSettings() {
     preferences.putUShort("quietEnd", quietHoursEndMinutes);
     preferences.putBool("autoLight", automaticBrightnessEnabled);
     preferences.putUChar("brightness", manualBrightnessIndex);
-    preferences.putFloat("radiusKm", displayRadiusKm);
-    preferences.putFloat("observerElevM", observerElevationM);
-    preferences.putFloat("farAngle", farDirectionElevationDeg);
     preferences.putFloat("lowLux", lowLuxThreshold);
     preferences.putFloat("highLux", highLuxThreshold);
 #endif
+    preferences.putFloat("radiusKm", displayRadiusKm);
+    preferences.putFloat("observerElevM", observerElevationM);
+    preferences.putFloat("farAngle", farDirectionElevationDeg);
     preferences.putString("adsbUrl", adsbUrl1);
     preferences.putString("adsbUrl2", adsbUrl2);
     preferences.putUChar("adsbActive", activeAdsbSource);
@@ -4195,6 +4195,8 @@ void handleDisplayApi() {
           ",\"emergency_index\":" + String(shown.emergencyIndex) +
           ",\"airline\":\"" + jsonEscape(shown.airline) + "\"" +
           ",\"aircraft_type\":\"" + jsonEscape(shown.type) + "\"" +
+          ",\"aircraft_type_description\":\"" +
+              jsonEscape(shown.typeDescription) + "\"" +
           ",\"special_type\":\"" + jsonEscape(shown.specialType) + "\"" +
           ",\"direction\":\"" + jsonEscape(shown.direction) + "\"" +
           ",\"vertical_motion\":\"" + jsonEscape(shown.verticalMotion) + "\"" +
@@ -4357,6 +4359,8 @@ void handleStatusApi() {
                      ? "true" : "false") +
       ",\"airline\":\"" + jsonEscape(statusFlight.airline) + "\"" +
       ",\"aircraft_type\":\"" + jsonEscape(statusFlight.type) + "\"" +
+      ",\"aircraft_type_description\":\"" +
+          jsonEscape(statusFlight.typeDescription) + "\"" +
       ",\"special_type\":\"" + jsonEscape(statusFlight.specialType) + "\"" +
       ",\"origin\":\"" + jsonEscape(statusFlight.origin) + "\"" +
       ",\"destination\":\"" + jsonEscape(statusFlight.destination) + "\"" +

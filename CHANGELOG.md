@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.6.0-dual-target.2 – 2026-10-28
+
+- Webdisplay zeigt zusätzlich zur Typkennung die ausführliche
+  Flugzeugtypenbezeichnung; fehlende oder identische Angaben werden verborgen
+- additive API-Eigenschaft `aircraft_type_description` in `/api/display` und
+  `/api/status`
+- Airline-Codes `DWW` (DAS Private Jets) und `TLI` (TL Aviation) ergänzt
+- Radius, Standorthöhe und Blickwinkel werden auch in der Headless-Variante
+  dauerhaft gespeichert und bleiben bei OTA-Neustarts erhalten
+
 ## 3.6.0-dual-target.1 – 2026-10-28
 
 - zweites PlatformIO-Buildziel für ESP32-S3-DevKitC-1-N16R8 ohne LED-Matrix

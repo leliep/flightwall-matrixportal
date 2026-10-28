@@ -1,7 +1,7 @@
 # FlightWall – Getting Started
 
 Diese Anleitung beschreibt die grundlegende Einrichtung von FlightWall in der
-Firmwareversion `3.6.0-dual-target.1`. Sie führt vom Hardwareaufbau bis zur
+Firmwareversion `3.6.0-dual-target.2`. Sie führt vom Hardwareaufbau bis zur
 ersten Flugzeuganzeige und erklärt auch alle optionalen Komponenten.
 
 FlightWall arbeitet eigenständig auf dem ESP32-S3. Ein Raspberry Pi oder
