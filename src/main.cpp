@@ -28,6 +28,7 @@
 #include "CallsignClassifier.hpp"
 #include "Geo.hpp"
 #include "RouteClient.hpp"
+#include "StatusLed.hpp"
 #include "UnknownCodes.hpp"
 #include "WebDisplay.hpp"
 #include "secrets.h"
@@ -41,8 +42,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.0-dual-target.2";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-28 web aircraft type description";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.1";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-28 headless status LED and code update";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -317,6 +318,8 @@ volatile bool routeCacheWriteInProgress = false;
 volatile bool settingsWritePreparing = false;
 volatile bool settingsWriteInProgress = false;
 volatile bool buttonSettingsWritePending = false;
+uint8_t statusLedBrightnessMode = 1;
+volatile uint32_t statusLedErrorUntil = 0;
 volatile uint8_t displayTestCommand = 0;
 volatile bool displayTestActive = false;
 uint32_t displayTestStarted = 0;
@@ -3031,6 +3034,11 @@ void translateWebPageToEnglish(String &html) {
     {"Display dunkel ab", "Display off from"},
     {"Display wieder aktiv ab", "Display on again at"},
     {"Die Nachtruhe darf über Mitternacht reichen. Gleiche Zeiten deaktivieren die Abdunklung.", "Night mode may span midnight. Equal times disable it."},
+    {"Status-LED", "Status LED"}, {">aus<", ">off<"},
+    {">schwach<", ">dim<"}, {">normal<", ">normal<"},
+    {"Nachtabsenkung aktiv", "Night dimming enabled"},
+    {"Absenkung ab", "Dim from"}, {"Normalbetrieb ab", "Normal operation from"},
+    {"Grün: normal, Blau: WLAN-Verbindung, Türkis: Setup-WLAN, Orange: ADS-B-Warnung, Violett: Update, Rot: Fehler oder Transpondernotfall. Gelb signalisiert einen Bedienzugriff; regelmäßige Statusabfragen bleiben ruhig.", "Green: normal, blue: Wi-Fi connection, cyan: setup network, orange: ADS-B warning, violet: update, red: error or transponder emergency. Yellow indicates user activity; regular status polling remains quiet."},
     {"Displaytest beenden", "Stop display test"},
     {"Displaytest starten", "Start display test"},
     {"Etwa 23 Sekunden: Matrix-Prüfbilder und alle Typensymbole mit Bedeutung.", "About 23 seconds: matrix test patterns and all type symbols with their meaning."},
@@ -3229,6 +3237,19 @@ String webPage(bool includeRouteCache = true) {
   html += F("'></label><label class='third'>Unter diesem Blickwinkel \"weit\" (°)<input type='number' name='farElevation' min='10' max='45' step='1' value='");
   html += String(farDirectionElevationDeg, 0);
   html += F("'></label></div><p class='muted'>Diese Servervariante stellt die Flugdaten über die Weboberfläche und die JSON-APIs bereit; eine HUB75-Matrix wird nicht angesteuert.</p></fieldset>");
+  html += F("<fieldset><legend>Status-LED</legend><div class='fieldGrid'><label class='third'>Helligkeit<select name='statusLedBrightness'><option value='0'");
+  html += selected(statusLedBrightnessMode == 0);
+  html += F(">aus</option><option value='1'");
+  html += selected(statusLedBrightnessMode == 1);
+  html += F(">schwach</option><option value='2'");
+  html += selected(statusLedBrightnessMode == 2);
+  html += F(">normal</option></select></label><label class='third check'><input type='checkbox' name='quietHours' value='1'");
+  html += checked(quietHoursEnabled);
+  html += F("> Nachtabsenkung aktiv</label><label class='third'>Absenkung ab<input type='time' name='quietStart' value='");
+  html += minutesAsTime(quietHoursStartMinutes);
+  html += F("'></label><label class='third'>Normalbetrieb ab<input type='time' name='quietEnd' value='");
+  html += minutesAsTime(quietHoursEndMinutes);
+  html += F("'></label></div><p class='muted'>Grün: normal, Blau: WLAN-Verbindung, Türkis: Setup-WLAN, Orange: ADS-B-Warnung, Violett: Update, Rot: Fehler oder Transpondernotfall. Gelb signalisiert einen Bedienzugriff; regelmäßige Statusabfragen bleiben ruhig.</p></fieldset>");
 #endif
   html += F("<fieldset><legend>Flugzeugdaten</legend><div class='fieldGrid'><label class='third'>Aktive ADS-B-Quelle<select name='activeAdsbSource'><option value='1'");
   html += selected(activeAdsbSource == 0);
@@ -3588,6 +3609,11 @@ String webPage(bool includeRouteCache = true) {
           String(matrixShowMaxUs) + " µs";
 #else
   html += F("Server</h3><div class='status'><span>Betriebsart</span><b>ESP32-S3 ohne Matrix");
+  html += F("</b><span>Status-LED</span><b>");
+  html += statusLedBrightnessMode == 0
+      ? "aus"
+      : String(statusLedStateName(statusLedState())) +
+            (statusLedBrightnessMode == 1 ? " / schwach" : " / normal");
 #endif
   html += F("</b><span>Blickgeometrie</span><b>");
   html += String(observerElevationM, 0) + " m NHN / weit unter " +
@@ -3601,13 +3627,11 @@ String webPage(bool includeRouteCache = true) {
   } else {
     html += "warte auf NTP";
   }
-#if FLIGHTWALL_HAS_MATRIX
-  html += F("</b><span>Nachtruhe</span><b>");
+  html += F("</b><span>Nachtmodus</span><b>");
   html += quietHoursEnabled ?
       (minutesAsTime(quietHoursStartMinutes) + "–" +
        minutesAsTime(quietHoursEndMinutes) +
        (quietHoursAreActive() ? " / aktiv" : " / inaktiv")) : "aus";
-#endif
   html += F("</b></div></section><details id='taskDiagnosis' class='statusCard wide'><summary>Task- und Resetdiagnose</summary><div class='status'><span>Tasks</span><b>");
 #if FLIGHTWALL_HAS_MATRIX
   html += F("Netz Core 0 / Display Core 1");
@@ -3769,7 +3793,6 @@ void applyWebSettings() {
     environmentIdleDisplayEnabled = webServer.hasArg("environmentIdle");
 #endif
     mqttWeatherEnabled = webServer.hasArg("mqttWeather");
-#if FLIGHTWALL_HAS_MATRIX
     quietHoursEnabled = webServer.hasArg("quietHours");
     uint16_t requestedQuietTime;
     if (parseTimeMinutes(webServer.arg("quietStart"), requestedQuietTime)) {
@@ -3778,7 +3801,12 @@ void applyWebSettings() {
     if (parseTimeMinutes(webServer.arg("quietEnd"), requestedQuietTime)) {
       quietHoursEndMinutes = requestedQuietTime;
     }
+#if FLIGHTWALL_HAS_MATRIX
     automaticBrightnessEnabled = webServer.hasArg("autoLight");
+#else
+    statusLedBrightnessMode = constrain(
+        webServer.arg("statusLedBrightness").toInt(), 0, 2);
+    setStatusLedBrightness(statusLedBrightnessMode);
 #endif
     displayRadiusKm = constrain(webServer.arg("radius").toFloat(), 1.0f, 100.0f);
     observerElevationM = constrain(
@@ -3888,14 +3916,16 @@ void applyWebSettings() {
     preferences.putString("windSpdTop", windSpeedTopic);
     preferences.putString("windGstTop", windGustTopic);
     preferences.putString("rainTop", rainTopic);
-#if FLIGHTWALL_HAS_MATRIX
     preferences.putBool("quietOn", quietHoursEnabled);
     preferences.putUShort("quietStart", quietHoursStartMinutes);
     preferences.putUShort("quietEnd", quietHoursEndMinutes);
+#if FLIGHTWALL_HAS_MATRIX
     preferences.putBool("autoLight", automaticBrightnessEnabled);
     preferences.putUChar("brightness", manualBrightnessIndex);
     preferences.putFloat("lowLux", lowLuxThreshold);
     preferences.putFloat("highLux", highLuxThreshold);
+#else
+    preferences.putUChar("statusLed", statusLedBrightnessMode);
 #endif
     preferences.putFloat("radiusKm", displayRadiusKm);
     preferences.putFloat("observerElevM", observerElevationM);
@@ -4252,6 +4282,11 @@ void handleStatusApi() {
       "\",\"device_variant\":\"" + jsonEscape(DEVICE_VARIANT) +
       "\",\"matrix_available\":" +
           String(FLIGHTWALL_HAS_MATRIX ? "true" : "false") +
+      ",\"status_led_available\":" +
+          String(FLIGHTWALL_HAS_MATRIX ? "false" : "true") +
+      ",\"status_led_brightness\":" + String(statusLedBrightnessMode) +
+      ",\"status_led_state\":\"" +
+          jsonEscape(statusLedStateName(statusLedState())) + "\"" +
       ",\"language\":\"" + String(uiEnglish ? "en" : "de") +
       "\",\"build\":\"" + jsonEscape(BUILD_TIMESTAMP) +
       "\",\"uptime_seconds\":" + String(millis() / 1000) +
@@ -4599,6 +4634,7 @@ void startArduinoOta() {
     vTaskDelay(pdMS_TO_TICKS(900));
     otaPreparing = false;
     otaInProgress = true;
+    setStatusLed(LedStatus::Updating);
     vTaskDelay(pdMS_TO_TICKS(100));
     Serial.println("PlatformIO OTA start");
     setNetworkError("OTA UPDATE");
@@ -4607,6 +4643,8 @@ void startArduinoOta() {
   ArduinoOTA.onError([](ota_error_t error) {
     otaPreparing = false;
     otaInProgress = false;
+    statusLedErrorUntil = millis() + 10000;
+    setStatusLed(LedStatus::Error);
     Serial.printf("PlatformIO OTA error: %u\n", error);
     setNetworkError("OTA FEHLER");
   });
@@ -4713,28 +4751,56 @@ void serviceMqtt() {
 void startWebServer() {
   if (webServerStarted) return;
   if (!webServerConfigured) {
-    webServer.on("/", HTTP_GET, []() { webServer.send(200, "text/html; charset=utf-8", webPage()); });
-    webServer.on("/display", HTTP_GET, handleWebDisplay);
+    webServer.on("/", HTTP_GET, []() {
+      pulseHttpActivity();
+      webServer.send(200, "text/html; charset=utf-8", webPage());
+    });
+    webServer.on("/display", HTTP_GET, []() {
+      pulseHttpActivity();
+      handleWebDisplay();
+    });
     webServer.on("/api/display", HTTP_GET, handleDisplayApi);
     webServer.on("/api/status", HTTP_GET, handleStatusApi);
     webServer.on("/api/status-fragment", HTTP_GET, handleStatusFragment);
-    webServer.on("/unknown-codes.json", HTTP_GET,
-                 handleUnknownCodesDownload);
-    webServer.on("/save", HTTP_POST, handleWebSave);
-    webServer.on("/test-adsb", HTTP_POST, handleAdsbTest);
-    webServer.on("/test-route", HTTP_POST, handleRouteTest);
-    webServer.on("/route-cache/delete", HTTP_POST, handleRouteCacheDelete);
-    webServer.on("/route-cache/refresh", HTTP_POST, handleRouteCacheRefresh);
-    webServer.on("/route-cache/clear", HTTP_POST, handleRouteCacheClear);
-    webServer.on("/test-emergency", HTTP_POST, handleEmergencyTest);
-    webServer.on("/stop-emergency-test", HTTP_POST, handleStopEmergencyTest);
+    webServer.on("/unknown-codes.json", HTTP_GET, []() {
+      pulseHttpActivity(); handleUnknownCodesDownload();
+    });
+    webServer.on("/save", HTTP_POST, []() {
+      pulseHttpActivity(); handleWebSave();
+    });
+    webServer.on("/test-adsb", HTTP_POST, []() {
+      pulseHttpActivity(); handleAdsbTest();
+    });
+    webServer.on("/test-route", HTTP_POST, []() {
+      pulseHttpActivity(); handleRouteTest();
+    });
+    webServer.on("/route-cache/delete", HTTP_POST, []() {
+      pulseHttpActivity(); handleRouteCacheDelete();
+    });
+    webServer.on("/route-cache/refresh", HTTP_POST, []() {
+      pulseHttpActivity(); handleRouteCacheRefresh();
+    });
+    webServer.on("/route-cache/clear", HTTP_POST, []() {
+      pulseHttpActivity(); handleRouteCacheClear();
+    });
+    webServer.on("/test-emergency", HTTP_POST, []() {
+      pulseHttpActivity(); handleEmergencyTest();
+    });
+    webServer.on("/stop-emergency-test", HTTP_POST, []() {
+      pulseHttpActivity(); handleStopEmergencyTest();
+    });
 #if FLIGHTWALL_HAS_MATRIX
     webServer.on("/display-test", HTTP_POST, handleDisplayTest);
 #endif
-    webServer.on("/restart", HTTP_POST, handleRestart);
-    webServer.on("/update", HTTP_GET, handleOtaPage);
+    webServer.on("/restart", HTTP_POST, []() {
+      pulseHttpActivity(); handleRestart();
+    });
+    webServer.on("/update", HTTP_GET, []() {
+      pulseHttpActivity(); handleOtaPage();
+    });
     webServer.on("/update", HTTP_POST, finishOtaUpload, handleOtaUpload);
     webServer.onNotFound([]() {
+      pulseHttpActivity();
       if (wifiSetupAccessPointActive) {
         webServer.sendHeader("Location", "http://192.168.4.1/", true);
         webServer.send(302, "text/plain; charset=utf-8", "FlightWall Setup");
@@ -4922,6 +4988,11 @@ void networkTask(void *) {
 void setup() {
   Serial.begin(115200);
   delay(250);
+#if !FLIGHTWALL_HAS_MATRIX
+  setStatusLedBrightness(1);
+  setStatusLed(LedStatus::Starting);
+  updateStatusLed(false);
+#endif
   initializeNetworkDiagnostics();
   displayTaskHandle = xTaskGetCurrentTaskHandle();
   flightMutex = xSemaphoreCreateMutex();
@@ -5016,6 +5087,11 @@ void setup() {
   quietHoursEndMinutes = constrain(
       preferences.getUShort("quietEnd", 5 * 60 + 55),
       static_cast<uint16_t>(0), static_cast<uint16_t>(1439));
+#if !FLIGHTWALL_HAS_MATRIX
+  statusLedBrightnessMode = constrain(
+      preferences.getUChar("statusLed", 1), 0, 2);
+  setStatusLedBrightness(statusLedBrightnessMode);
+#endif
   displayRadiusKm = preferences.getFloat("radiusKm", DEFAULT_DISPLAY_RADIUS_KM);
   observerElevationM = constrain(
       preferences.getFloat("observerElevM", 0.0f), -500.0f, 9000.0f);
@@ -5151,6 +5227,29 @@ uint32_t displayDrawIntervalMs() {
 }
 
 
+#if !FLIGHTWALL_HAS_MATRIX
+void serviceStatusLed() {
+  LedStatus target = LedStatus::Healthy;
+  const uint32_t now = millis();
+  if (flight.emergency) {
+    target = LedStatus::Emergency;
+  } else if (otaPreparing || otaInProgress) {
+    target = LedStatus::Updating;
+  } else if (static_cast<int32_t>(statusLedErrorUntil - now) > 0) {
+    target = LedStatus::Error;
+  } else if (wifiSetupAccessPointActive) {
+    target = LedStatus::Setup;
+  } else if (WiFi.status() != WL_CONNECTED) {
+    target = LedStatus::Connecting;
+  } else if (lastError.length()) {
+    target = LedStatus::Warning;
+  }
+  setStatusLed(target);
+  updateStatusLed(quietHoursAreActive());
+}
+#endif
+
+
 void loop() {
   const uint32_t now = millis();
   syncNetworkState();
@@ -5172,6 +5271,7 @@ void loop() {
   }
 #else
   (void)now;
+  serviceStatusLed();
 #endif
   delay(10);
 }

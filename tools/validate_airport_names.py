@@ -13,10 +13,12 @@ with SOURCE.open(encoding="utf-8") as handle:
 
 assert isinstance(airports, dict), "airport table must be a JSON object"
 assert len(airports) >= 320, "airport table unexpectedly incomplete"
-assert list(airports) == sorted(airports), "IATA codes must stay sorted"
+assert list(airports) == sorted(airports), "airport codes must stay sorted"
 
 for code, name in airports.items():
-    assert re.fullmatch(r"[A-Z]{3}", code), f"invalid IATA code: {code!r}"
+    # Route providers normally return three-letter IATA codes, while local
+    # and military movements can legitimately expose four-letter ICAO codes.
+    assert re.fullmatch(r"[A-Z]{3,4}", code), f"invalid airport code: {code!r}"
     assert isinstance(name, str) and name.strip() == name and name, (
         f"invalid display name for {code}"
     )
