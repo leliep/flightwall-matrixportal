@@ -42,8 +42,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.1";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-28 headless status LED and code update";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.2";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-28 shared RGB status LED";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -3213,7 +3213,13 @@ String webPage(bool includeRouteCache = true) {
   html += checked(displayEnabled);
   html += F("> Display eingeschaltet</label><label class='check'><input type='checkbox' name='environmentIdle' value='1'");
   html += checked(environmentIdleDisplayEnabled);
-  html += F("> Wetterdaten anzeigen, wenn kein Flugzeug in der Nähe ist</label><label class='third'>Anzeigeradius (km)<input type='number' name='radius' min='1' max='100' step='0.5' value='");
+  html += F("> Wetterdaten anzeigen, wenn kein Flugzeug in der Nähe ist</label><label class='third'>Status-LED<select name='statusLedBrightness'><option value='0'");
+  html += selected(statusLedBrightnessMode == 0);
+  html += F(">aus</option><option value='1'");
+  html += selected(statusLedBrightnessMode == 1);
+  html += F(">schwach</option><option value='2'");
+  html += selected(statusLedBrightnessMode == 2);
+  html += F(">normal</option></select></label><label class='third'>Anzeigeradius (km)<input type='number' name='radius' min='1' max='100' step='0.5' value='");
   html += String(displayRadiusKm, 1);
   html += F("'></label><label class='third'>Standorthöhe über NHN (m)<input type='number' name='observerElevation' min='-500' max='9000' step='1' value='");
   html += String(observerElevationM, 0);
@@ -3609,12 +3615,12 @@ String webPage(bool includeRouteCache = true) {
           String(matrixShowMaxUs) + " µs";
 #else
   html += F("Server</h3><div class='status'><span>Betriebsart</span><b>ESP32-S3 ohne Matrix");
+#endif
   html += F("</b><span>Status-LED</span><b>");
   html += statusLedBrightnessMode == 0
       ? "aus"
       : String(statusLedStateName(statusLedState())) +
             (statusLedBrightnessMode == 1 ? " / schwach" : " / normal");
-#endif
   html += F("</b><span>Blickgeometrie</span><b>");
   html += String(observerElevationM, 0) + " m NHN / weit unter " +
           String(farDirectionElevationDeg, 0) + "°";
@@ -3792,6 +3798,9 @@ void applyWebSettings() {
     displayEnabled = webServer.hasArg("display");
     environmentIdleDisplayEnabled = webServer.hasArg("environmentIdle");
 #endif
+    statusLedBrightnessMode = constrain(
+        webServer.arg("statusLedBrightness").toInt(), 0, 2);
+    setStatusLedBrightness(statusLedBrightnessMode);
     mqttWeatherEnabled = webServer.hasArg("mqttWeather");
     quietHoursEnabled = webServer.hasArg("quietHours");
     uint16_t requestedQuietTime;
@@ -3803,10 +3812,6 @@ void applyWebSettings() {
     }
 #if FLIGHTWALL_HAS_MATRIX
     automaticBrightnessEnabled = webServer.hasArg("autoLight");
-#else
-    statusLedBrightnessMode = constrain(
-        webServer.arg("statusLedBrightness").toInt(), 0, 2);
-    setStatusLedBrightness(statusLedBrightnessMode);
 #endif
     displayRadiusKm = constrain(webServer.arg("radius").toFloat(), 1.0f, 100.0f);
     observerElevationM = constrain(
@@ -3899,6 +3904,7 @@ void applyWebSettings() {
 #if FLIGHTWALL_HAS_MATRIX
     preferences.putBool("displayOn", displayEnabled);
 #endif
+    preferences.putUChar("statusLed", statusLedBrightnessMode);
     if (wifiSettingsChanged) {
       preferences.putString("wifiSsid", wifiSsid);
       preferences.putString("wifiPass", wifiPassword);
@@ -3924,8 +3930,6 @@ void applyWebSettings() {
     preferences.putUChar("brightness", manualBrightnessIndex);
     preferences.putFloat("lowLux", lowLuxThreshold);
     preferences.putFloat("highLux", highLuxThreshold);
-#else
-    preferences.putUChar("statusLed", statusLedBrightnessMode);
 #endif
     preferences.putFloat("radiusKm", displayRadiusKm);
     preferences.putFloat("observerElevM", observerElevationM);
@@ -4283,7 +4287,7 @@ void handleStatusApi() {
       "\",\"matrix_available\":" +
           String(FLIGHTWALL_HAS_MATRIX ? "true" : "false") +
       ",\"status_led_available\":" +
-          String(FLIGHTWALL_HAS_MATRIX ? "false" : "true") +
+          String("true") +
       ",\"status_led_brightness\":" + String(statusLedBrightnessMode) +
       ",\"status_led_state\":\"" +
           jsonEscape(statusLedStateName(statusLedState())) + "\"" +
@@ -4988,11 +4992,9 @@ void networkTask(void *) {
 void setup() {
   Serial.begin(115200);
   delay(250);
-#if !FLIGHTWALL_HAS_MATRIX
   setStatusLedBrightness(1);
   setStatusLed(LedStatus::Starting);
   updateStatusLed(false);
-#endif
   initializeNetworkDiagnostics();
   displayTaskHandle = xTaskGetCurrentTaskHandle();
   flightMutex = xSemaphoreCreateMutex();
@@ -5087,11 +5089,9 @@ void setup() {
   quietHoursEndMinutes = constrain(
       preferences.getUShort("quietEnd", 5 * 60 + 55),
       static_cast<uint16_t>(0), static_cast<uint16_t>(1439));
-#if !FLIGHTWALL_HAS_MATRIX
   statusLedBrightnessMode = constrain(
       preferences.getUChar("statusLed", 1), 0, 2);
   setStatusLedBrightness(statusLedBrightnessMode);
-#endif
   displayRadiusKm = preferences.getFloat("radiusKm", DEFAULT_DISPLAY_RADIUS_KM);
   observerElevationM = constrain(
       preferences.getFloat("observerElevM", 0.0f), -500.0f, 9000.0f);
@@ -5227,7 +5227,6 @@ uint32_t displayDrawIntervalMs() {
 }
 
 
-#if !FLIGHTWALL_HAS_MATRIX
 void serviceStatusLed() {
   LedStatus target = LedStatus::Healthy;
   const uint32_t now = millis();
@@ -5247,12 +5246,12 @@ void serviceStatusLed() {
   setStatusLed(target);
   updateStatusLed(quietHoursAreActive());
 }
-#endif
 
 
 void loop() {
   const uint32_t now = millis();
   syncNetworkState();
+  serviceStatusLed();
 #if FLIGHTWALL_HAS_MATRIX
   handleBrightnessButtons();
   serviceLightSensor();
@@ -5271,7 +5270,6 @@ void loop() {
   }
 #else
   (void)now;
-  serviceStatusLed();
 #endif
   delay(10);
 }

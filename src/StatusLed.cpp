@@ -31,7 +31,7 @@ void writeLed(uint8_t red, uint8_t green, uint8_t blue,
                          (static_cast<uint32_t>(green) << 8) | blue;
   if (color == lastColor) return;
   lastColor = color;
-#if !FLIGHTWALL_HAS_MATRIX && defined(RGB_BUILTIN)
+#if defined(RGB_BUILTIN)
   neopixelWrite(RGB_BUILTIN, red, green, blue);
 #endif
 }
