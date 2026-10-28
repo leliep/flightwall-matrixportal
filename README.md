@@ -19,7 +19,7 @@ erklärt auch BME280, BH1750, MQTT, Routenauflösung und OTA.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.2` |
+| Firmware | `3.6.1-dual-target.3` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -473,9 +473,12 @@ werkseitige Zugangsdaten. Danach können WLAN-Name und Passwort über die
 Konfigurationsseite geändert werden; die gespeicherten Werte bleiben bei
 Firmwareupdates erhalten.
 
-`OTA_PASSWORD` benötigt mindestens acht Zeichen. Ein leerer Wert deaktiviert
-Web-OTA und PlatformIO-OTA. `include/secrets.h` wird von Git ignoriert und darf
-nicht eingecheckt werden.
+`OTA_PASSWORD` benötigt mindestens acht Zeichen und dient nur noch als
+Startwert. Das OTA-Passwort kann anschließend auf der Konfigurationsseite
+gesetzt, geändert oder deaktiviert werden und bleibt in NVS gespeichert. Damit
+können auch die öffentlichen GitHub-Builds ohne eingebettetes privates Passwort
+nach der ersten USB-Installation für OTA eingerichtet werden.
+`include/secrets.h` wird von Git ignoriert und darf nicht eingecheckt werden.
 
 ### WLAN später ändern
 

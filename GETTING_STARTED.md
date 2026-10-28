@@ -104,7 +104,8 @@ constexpr char WIFI_PASSWORD[] = "mein-wlan-passwort";
 Hinweise:
 
 - Das OTA-Passwort ist optional, muss bei Verwendung aber mindestens acht
-  Zeichen lang sein.
+  Zeichen lang sein. Es kann später auch in der Webkonfiguration gesetzt,
+  geändert oder deaktiviert werden.
 - Das MQTT-Passwort ist nur erforderlich, wenn ein geschützter MQTT-Broker
   verwendet wird.
 - `include/secrets.h` wird von Git ignoriert und darf nicht veröffentlicht
@@ -366,7 +367,9 @@ responsiven Browserlayout; die LED-Matrix funktioniert unabhängig davon.
 
 Das erste Image muss per USB installiert werden. Für spätere Updates kann ein
 mindestens acht Zeichen langes `OTA_PASSWORD` in `include/secrets.h` gesetzt
-werden.
+oder unter **Firmware-Updates** in der Webkonfiguration gespeichert werden.
+Öffentliche GitHub-Builds enthalten absichtlich kein privates Startpasswort;
+nach der ersten USB-Installation wird es deshalb einmal im Browser gesetzt.
 
 ### Update über die Webseite
 

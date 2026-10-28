@@ -42,8 +42,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.2";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-28 shared RGB status LED";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.3";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-29 configurable OTA password";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -305,6 +305,9 @@ bool wifiSettingsChanged = false;
 String wifiSettingsError;
 String wifiSsid = WIFI_SSID;
 String wifiPassword = WIFI_PASSWORD;
+bool otaSettingsChanged = false;
+String otaSettingsError;
+String otaPassword = OTA_PASSWORD;
 String wifiSetupAccessPointSsid;
 uint32_t wifiReconnectCount = 0;
 uint32_t webServerStartCount = 0;
@@ -3023,6 +3026,12 @@ void translateWebPageToEnglish(String &html) {
     {"Falls keine Verbindung möglich ist, startet das Einrichtungsnetz", "If no connection is possible, the setup network starts"},
     {"Einrichtungsnetz", "Setup network"},
     {"WLAN-Name", "Wi-Fi name"},
+    {"Firmware-Updates", "Firmware updates"},
+    {"Neues OTA-Passwort", "New OTA password"},
+    {"OTA deaktivieren", "Disable OTA"},
+    {"Mindestens acht Zeichen. Ein leeres Feld behält das gespeicherte OTA-Passwort bei. Änderungen werden nach einem automatischen Neustart aktiv.", "At least eight characters. An empty field keeps the stored OTA password. Changes take effect after an automatic restart."},
+    {"OTA ist konfiguriert.", "OTA is configured."},
+    {"OTA ist noch nicht konfiguriert.", "OTA is not configured yet."},
     {"Sprache / Language", "Language / Sprache"},
     {"Deutsch", "German"},
     {"Display eingeschaltet", "Display enabled"},
@@ -3138,6 +3147,7 @@ void translateWebPageToEnglish(String &html) {
     {"aktualisiert ", "updated "}, {"Aktualisierung fehlgeschlagen", "Update failed"},
     {">verbunden /", ">connected /"}, {">verbunden<", ">connected<"},
     {">nicht gefunden<", ">not found<"}, {">getrennt<", ">disconnected<"},
+    {">konfiguriert<", ">configured<"}, {">nicht konfiguriert<", ">not configured<"},
     {">keiner<", ">none<"}, {">keine<", ">none<"}, {">aktiv<", ">enabled<"}, {">inaktiv<", ">inactive<"},
     {">ja<", ">yes<"}, {">nein<", ">no<"}, {">bis ", ">up to "},
     {"% / Automatik", "% / automatic"}, {">Automatik<", ">automatic<"},
@@ -3208,6 +3218,13 @@ String webPage(bool includeRouteCache = true) {
                          ? wifiSetupAccessPointSsid
                          : String(WIFI_SETUP_AP_PREFIX));
   html += F("</b> mit dem Passwort <b>flightwall</b>. Konfiguration: <b>http://192.168.4.1</b></p></fieldset>");
+  html += F("<fieldset><legend>Firmware-Updates</legend><div class='fieldGrid'><label>Neues OTA-Passwort<input type='password' name='otaPassword' minlength='8' maxlength='63' value='' placeholder='unverändert lassen'></label><label class='check'><input type='checkbox' name='otaDisable' value='1'> OTA deaktivieren</label></div><p class='muted'>Mindestens acht Zeichen. Ein leeres Feld behält das gespeicherte OTA-Passwort bei. Änderungen werden nach einem automatischen Neustart aktiv.</p><p>");
+  if (otaPassword.length() >= 8) {
+    html += F("OTA ist konfiguriert. <a href='/update'>Firmware drahtlos aktualisieren</a>");
+  } else {
+    html += F("OTA ist noch nicht konfiguriert.");
+  }
+  html += F("</p></fieldset>");
 #if FLIGHTWALL_HAS_MATRIX
   html += F("<fieldset><legend>Display</legend><div class='fieldGrid'><label class='check'><input type='checkbox' name='display' value='1'");
   html += checked(displayEnabled);
@@ -3547,6 +3564,8 @@ String webPage(bool includeRouteCache = true) {
   html += lastFeedTimestamp ? String(lastFeedTimestamp) : "-";
   html += F("</b><span>Firmware</span><b>");
   html += APP_VERSION;
+  html += F("</b><span>OTA</span><b>");
+  html += otaPassword.length() >= 8 ? "konfiguriert" : "nicht konfiguriert";
   html += F("</b><span>Erstellt</span><b>");
   html += BUILD_TIMESTAMP;
   html += F("</b><span>Laufzeit</span><b>");
@@ -3713,9 +3732,6 @@ String webPage(bool includeRouteCache = true) {
     html += F("</fieldset>");
   }
   html += F("<p><a href='/display'>Web-Display öffnen</a></p>");
-  if (strlen(OTA_PASSWORD) >= 8) {
-    html += F("<p><a href='/update'>Firmware drahtlos aktualisieren</a></p>");
-  }
   html += F("<p class='muted'>UP/DOWN: manuell; beide Tasten: Automatik.</p>"
             "<script>let statusBusy=false;async function refreshStatus(){"
             "if(statusBusy||document.hidden)return;statusBusy=true;"
@@ -3765,6 +3781,8 @@ bool validFlightWallHost(const String &host) {
 void applyWebSettings() {
   wifiSettingsChanged = false;
   wifiSettingsError = "";
+  otaSettingsChanged = false;
+  otaSettingsError = "";
   settingsWritePreparing = true;
   vTaskDelay(pdMS_TO_TICKS(120));
   settingsWritePreparing = false;
@@ -3792,6 +3810,25 @@ void applyWebSettings() {
                             nextWifiPassword != wifiPassword;
       wifiSsid = requestedWifiSsid;
       wifiPassword = nextWifiPassword;
+    }
+    const String requestedOtaPassword = webServer.arg("otaPassword");
+    const bool requestedOtaDisabled = webServer.hasArg("otaDisable");
+    String nextOtaPassword = otaPassword;
+    if (requestedOtaDisabled) {
+      nextOtaPassword = "";
+    } else if (requestedOtaPassword.length()) {
+      if (requestedOtaPassword.length() < 8 ||
+          requestedOtaPassword.length() > 63) {
+        otaSettingsError = uiText(
+            "Das OTA-Passwort muss 8 bis 63 Zeichen lang sein.",
+            "The OTA password must contain 8 to 63 characters.");
+      } else {
+        nextOtaPassword = requestedOtaPassword;
+      }
+    }
+    if (!otaSettingsError.length() && nextOtaPassword != otaPassword) {
+      otaPassword = nextOtaPassword;
+      otaSettingsChanged = true;
     }
     uiEnglish = webServer.arg("uiLanguage") == "en";
 #if FLIGHTWALL_HAS_MATRIX
@@ -3909,6 +3946,7 @@ void applyWebSettings() {
       preferences.putString("wifiSsid", wifiSsid);
       preferences.putString("wifiPass", wifiPassword);
     }
+    if (otaSettingsChanged) preferences.putString("otaPass", otaPassword);
     preferences.putBool("uiEnglish", uiEnglish);
 #if FLIGHTWALL_HAS_MATRIX
     preferences.putBool("envIdle", environmentIdleDisplayEnabled);
@@ -3963,7 +4001,8 @@ void applyWebSettings() {
   mqttConnected = false;
   lastMqttAttempt = 0;
   resetPageTransition();
-  if (wifiSettingsChanged) manualRebootAt = millis() + 2500;
+  if (wifiSettingsChanged || otaSettingsChanged)
+    manualRebootAt = millis() + 2500;
 }
 
 
@@ -3981,17 +4020,27 @@ void handleWebSave() {
         "</a></p></body></html>");
     return;
   }
-  if (wifiSettingsChanged) {
-    webServer.send(200, "text/html; charset=utf-8",
+  if (otaSettingsError.length()) {
+    webServer.send(400, "text/html; charset=utf-8",
         String("<!doctype html><html lang='") + (uiEnglish ? "en" : "de") +
         "'><meta name='viewport' content='width=device-width'>"
         "<body style='font:18px system-ui;max-width:600px;margin:40px auto'>"
-        "<h1>" + uiText("WLAN gespeichert", "Wi-Fi saved") +
-        "</h1><p>" +
-        uiText("Der ESP startet neu und verbindet sich mit dem neuen WLAN. "
-               "Falls das nicht gelingt, steht das Einrichtungsnetz zur Verfügung.",
-               "The ESP restarts and connects to the new Wi-Fi network. "
-               "If that fails, the setup network will be available.") +
+        "<h1>" + uiText("OTA-Einstellungen ungültig",
+                         "Invalid OTA settings") +
+        "</h1><p>" + htmlEscape(otaSettingsError) +
+        "</p><p><a href='/'>" + uiText("Zurück", "Back") +
+        "</a></p></body></html>");
+    return;
+  }
+  if (wifiSettingsChanged || otaSettingsChanged) {
+    webServer.send(200, "text/html; charset=utf-8",
+        String("<!doctype html><html lang='") + (uiEnglish ? "en" : "de") +
+        "'><meta name='viewport' content='width=device-width'>"
+        "<body style='font:18px system-ui;max-width:600px;margin:40px auto'>" +
+        "<h1>" + uiText("Einstellungen gespeichert", "Settings saved") +
+        "</h1><p>" + uiText(
+            "Der ESP startet neu, damit die Netzwerkdienste die Änderung übernehmen.",
+            "The ESP restarts so the network services can apply the change.") +
         "</p></body></html>");
     return;
   }
@@ -4291,6 +4340,8 @@ void handleStatusApi() {
       ",\"status_led_brightness\":" + String(statusLedBrightnessMode) +
       ",\"status_led_state\":\"" +
           jsonEscape(statusLedStateName(statusLedState())) + "\"" +
+      ",\"ota_configured\":" +
+          String(otaPassword.length() >= 8 ? "true" : "false") +
       ",\"language\":\"" + String(uiEnglish ? "en" : "de") +
       "\",\"build\":\"" + jsonEscape(BUILD_TIMESTAMP) +
       "\",\"uptime_seconds\":" + String(millis() / 1000) +
@@ -4515,11 +4566,11 @@ void handleDisplayTest() {
 
 
 bool otaAuthenticated() {
-  if (strlen(OTA_PASSWORD) < 8) {
+  if (otaPassword.length() < 8) {
     webServer.send(503, "text/plain; charset=utf-8", uiText("OTA ist nicht konfiguriert.", "OTA is not configured."));
     return false;
   }
-  if (!webServer.authenticate("admin", OTA_PASSWORD)) {
+  if (!webServer.authenticate("admin", otaPassword.c_str())) {
     webServer.requestAuthentication();
     return false;
   }
@@ -4556,8 +4607,8 @@ function pollVersion(){let tries=0;result.textContent+=' Warte auf Neustart…';
 
 
 void handleOtaUpload() {
-  if (strlen(OTA_PASSWORD) < 8 ||
-      !webServer.authenticate("admin", OTA_PASSWORD)) return;
+  if (otaPassword.length() < 8 ||
+      !webServer.authenticate("admin", otaPassword.c_str())) return;
   HTTPUpload &upload = webServer.upload();
   if (upload.status == UPLOAD_FILE_START) {
     otaUploadValid = false;
@@ -4630,9 +4681,9 @@ void finishOtaUpload() {
 
 
 void startArduinoOta() {
-  if (otaStarted || strlen(OTA_PASSWORD) < 8) return;
+  if (otaStarted || otaPassword.length() < 8) return;
   ArduinoOTA.setHostname(DEVICE_HOSTNAME);
-  ArduinoOTA.setPassword(OTA_PASSWORD);
+  ArduinoOTA.setPassword(otaPassword.c_str());
   ArduinoOTA.onStart([]() {
     otaPreparing = true;
     vTaskDelay(pdMS_TO_TICKS(900));
@@ -5027,6 +5078,10 @@ void setup() {
   const uint8_t settingsVersion = preferences.getUChar("settingsVer", 1);
   wifiSsid = preferences.getString("wifiSsid", WIFI_SSID);
   wifiPassword = preferences.getString("wifiPass", WIFI_PASSWORD);
+  otaPassword = preferences.getString("otaPass", OTA_PASSWORD);
+  if (otaPassword.length() > 0 && otaPassword.length() < 8)
+    otaPassword = "";
+  if (otaPassword.length() > 63) otaPassword.remove(63);
   if (!wifiSsid.length() || wifiSsid.length() > 32) wifiSsid = WIFI_SSID;
   const uint32_t setupSuffix =
       static_cast<uint32_t>(ESP.getEfuseMac() & 0xFFFFFF);
