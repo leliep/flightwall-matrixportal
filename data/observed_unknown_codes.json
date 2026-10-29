@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-10-29T19:29:08+01:00",
+  "updated_at": "2026-10-29T19:39:51+01:00",
   "status": "pending_lookup_review",
   "airports": [
     "AHO",
@@ -25,6 +25,7 @@
     "CXA",
     "EIS",
     "EJM",
+    "ELI",
     "GRZ",
     "HZA",
     "JSE",
@@ -105,6 +106,25 @@
         "THA",
         "HZA",
         "ALK"
+      ],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "matrixportal_s3",
+      "firmware_version": "3.6.1-dual-target.5",
+      "unknown_airports": [
+        "EDKL",
+        "KSY",
+        "EDLC",
+        "BSL"
+      ],
+      "unknown_airlines": [
+        "CHG",
+        "EIS",
+        "JSE",
+        "STQ",
+        "ELI"
       ],
       "dropped_unknown_airports": 0,
       "dropped_unknown_airlines": 0
