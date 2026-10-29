@@ -43,8 +43,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.5";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-29 localized compass directions";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.6";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-29 lookup table update";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
