@@ -1,0 +1,41 @@
+{
+  "updated_at": "2026-10-29T08:32:58+01:00",
+  "status": "pending_lookup_review",
+  "airports": [
+    "EDRF",
+    "FMM",
+    "LUZ",
+    "XMN"
+  ],
+  "airlines": [
+    "CXA",
+    "EJM"
+  ],
+  "observations": [
+    {
+      "controller": "matrixportal_s3",
+      "firmware_version": "3.6.1-dual-target.4",
+      "unknown_airports": [
+        "EDRF"
+      ],
+      "unknown_airlines": [],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "esp32s3_n16r8_headless",
+      "firmware_version": "3.6.1-dual-target.4",
+      "unknown_airports": [
+        "FMM",
+        "LUZ",
+        "XMN"
+      ],
+      "unknown_airlines": [
+        "CXA",
+        "EJM"
+      ],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    }
+  ]
+}
