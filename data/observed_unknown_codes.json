@@ -1,17 +1,36 @@
 {
-  "updated_at": "2026-10-29T11:51:11+01:00",
-  "status": "integrated",
+  "updated_at": "2026-10-29T19:29:08+01:00",
+  "status": "pending_lookup_review",
   "airports": [
+    "AHO",
+    "BSL",
+    "EDLC",
+    "EDKL",
     "EDRF",
     "FMM",
+    "GRO",
+    "KIR",
+    "KSY",
+    "LCY",
     "LUZ",
+    "TUF",
     "XMN"
   ],
   "airlines": [
+    "ALK",
     "BBB",
+    "CFE",
+    "CHG",
     "CTM",
     "CXA",
-    "EJM"
+    "EIS",
+    "EJM",
+    "GRZ",
+    "HZA",
+    "JSE",
+    "STQ",
+    "SUA",
+    "THA"
   ],
   "observations": [
     {
@@ -47,6 +66,45 @@
       "unknown_airports": [],
       "unknown_airlines": [
         "CTM"
+      ],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "matrixportal_s3",
+      "firmware_version": "3.6.1-dual-target.5",
+      "unknown_airports": [
+        "EDKL",
+        "KSY",
+        "EDLC",
+        "BSL"
+      ],
+      "unknown_airlines": [
+        "CHG",
+        "EIS",
+        "JSE",
+        "STQ"
+      ],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "esp32s3_n16r8_headless",
+      "firmware_version": "3.6.1-dual-target.5",
+      "unknown_airports": [
+        "LCY",
+        "TUF",
+        "KIR",
+        "AHO",
+        "GRO"
+      ],
+      "unknown_airlines": [
+        "SUA",
+        "CFE",
+        "GRZ",
+        "THA",
+        "HZA",
+        "ALK"
       ],
       "dropped_unknown_airports": 0,
       "dropped_unknown_airlines": 0
