@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-10-29T08:32:58+01:00",
-  "status": "pending_lookup_review",
+  "updated_at": "2026-10-29T11:51:11+01:00",
+  "status": "integrated",
   "airports": [
     "EDRF",
     "FMM",
@@ -8,6 +8,8 @@
     "XMN"
   ],
   "airlines": [
+    "BBB",
+    "CTM",
     "CXA",
     "EJM"
   ],
@@ -18,7 +20,9 @@
       "unknown_airports": [
         "EDRF"
       ],
-      "unknown_airlines": [],
+      "unknown_airlines": [
+        "BBB"
+      ],
       "dropped_unknown_airports": 0,
       "dropped_unknown_airlines": 0
     },
@@ -33,6 +37,16 @@
       "unknown_airlines": [
         "CXA",
         "EJM"
+      ],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "esp32s3_n16r8_headless",
+      "firmware_version": "3.6.1-dual-target.4",
+      "unknown_airports": [],
+      "unknown_airlines": [
+        "CTM"
       ],
       "dropped_unknown_airports": 0,
       "dropped_unknown_airlines": 0

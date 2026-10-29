@@ -43,8 +43,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.4";
-constexpr char BUILD_TIMESTAMP[] = "2026-10-29 interactive Wi-Fi scan";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.5";
+constexpr char BUILD_TIMESTAMP[] = "2026-10-29 localized compass directions";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -381,7 +381,7 @@ uint32_t lastMqttAttempt = 0;
 uint32_t lastMqttMessage = 0;
 uint32_t mqttReconnectCount = 0;
 String mqttLastError = "NOCH NICHT VERBUNDEN";
-String windDirection;
+float windDirectionDegrees = NAN;
 float windSpeedKph = NAN;
 float windGustKph = NAN;
 float rain24Mm = NAN;
@@ -1049,12 +1049,18 @@ void drawLookArrowAt(float angle, int16_t x, int16_t y, uint16_t color) {
 }
 
 
+String localizedCompassToken(String direction) {
+  if (!uiEnglish) direction.replace("E", "O");
+  return direction;
+}
+
+
 void drawMainPage() {
   drawHeader();
 
   String metrics;
   if (!isnan(flight.distanceKm)) metrics += String(flight.distanceKm, 1) + "km ";
-  metrics += clipped(flight.direction, 2);
+  metrics += clipped(localizedCompassToken(flight.direction), 2);
   if (!isnan(flight.altitudeFt)) {
     metrics += " " + String(static_cast<int>(round(flight.altitudeFt))) + "ft";
   }
@@ -1711,7 +1717,9 @@ void drawCompactClimateDisplay(bool bmeAvailable, bool mqttAvailable) {
   float rain = NAN;
   if (mqttAvailable &&
       xSemaphoreTake(weatherMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
-    if (weatherValueFresh(windDirectionUpdated)) direction = windDirection;
+    if (weatherValueFresh(windDirectionUpdated) &&
+        isfinite(windDirectionDegrees))
+      direction = weatherCompassDirection(windDirectionDegrees);
     if (weatherValueFresh(windSpeedUpdated)) speed = windSpeedKph;
     if (weatherValueFresh(windGustUpdated)) gust = windGustKph;
     if (weatherValueFresh(rainUpdated)) rain = rain24Mm;
@@ -3189,7 +3197,8 @@ String webPage(bool includeRouteCache = true) {
   float statusWindGust = NAN;
   float statusRain = NAN;
   if (xSemaphoreTake(weatherMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-    statusWindDirection = windDirection;
+    if (isfinite(windDirectionDegrees))
+      statusWindDirection = weatherCompassDirection(windDirectionDegrees);
     statusWindSpeed = windSpeedKph;
     statusWindGust = windGustKph;
     statusRain = rain24Mm;
@@ -4350,7 +4359,8 @@ void handleDisplayApi() {
           ",\"aircraft_type_description\":\"" +
               jsonEscape(shown.typeDescription) + "\"" +
           ",\"special_type\":\"" + jsonEscape(shown.specialType) + "\"" +
-          ",\"direction\":\"" + jsonEscape(shown.direction) + "\"" +
+          ",\"direction\":\"" +
+              jsonEscape(localizedCompassToken(shown.direction)) + "\"" +
           ",\"vertical_motion\":\"" + jsonEscape(shown.verticalMotion) + "\"" +
           ",\"motion\":\"" + jsonEscape(shown.motion) + "\"" +
           ",\"origin\":\"" + jsonEscape(shown.origin) + "\"" +
@@ -4389,7 +4399,8 @@ void handleStatusApi() {
   float statusWindGust = NAN;
   float statusRain = NAN;
   if (xSemaphoreTake(weatherMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-    statusWindDirection = windDirection;
+    if (isfinite(windDirectionDegrees))
+      statusWindDirection = weatherCompassDirection(windDirectionDegrees);
     statusWindSpeed = windSpeedKph;
     statusWindGust = windGustKph;
     statusRain = rain24Mm;
@@ -4922,6 +4933,26 @@ bool parseMqttNumber(const String &payload, float &value) {
 }
 
 
+bool parseMqttCompassDirection(String value, float &degrees) {
+  static const char *directions[] = {
+      "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+      "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"};
+  value.trim();
+  value.toUpperCase();
+  // MQTT may provide either German (O/ONO/OSO) or international English
+  // (E/ENE/ESE) compass tokens. Store one language-neutral angle and only
+  // localize it when it is rendered.
+  value.replace("O", "E");
+  for (uint8_t index = 0; index < 16; ++index) {
+    if (value == directions[index]) {
+      degrees = index * 22.5f;
+      return true;
+    }
+  }
+  return false;
+}
+
+
 void handleMqttMessage(char *topic, byte *payload, unsigned int length) {
   if (length > 48 || weatherMutex == nullptr) return;
   String value;
@@ -4933,13 +4964,11 @@ void handleMqttMessage(char *topic, byte *payload, unsigned int length) {
   if (xSemaphoreTake(weatherMutex, pdMS_TO_TICKS(50)) != pdTRUE) return;
   if (windDirectionTopic == topic) {
     float degrees;
-    if (parseMqttNumber(value, degrees)) {
-      windDirection = weatherCompassDirection(degrees);
-      windDirectionUpdated = now;
-    } else if (value.length() >= 1 && value.length() <= 3) {
-      value.toUpperCase();
-      value.replace("E", "O");
-      windDirection = displayAscii(value);
+    if (parseMqttNumber(value, degrees) ||
+        parseMqttCompassDirection(value, degrees)) {
+      while (degrees < 0.0f) degrees += 360.0f;
+      while (degrees >= 360.0f) degrees -= 360.0f;
+      windDirectionDegrees = degrees;
       windDirectionUpdated = now;
     }
   } else {
