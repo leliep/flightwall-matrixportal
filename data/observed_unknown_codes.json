@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-10-30T22:41:30+01:00",
+  "updated_at": "2026-10-31T18:23:47+01:00",
   "status": "pending_lookup_review",
   "airports": [
     "AES",
@@ -8,6 +8,7 @@
     "BOH",
     "BOO",
     "BSL",
+    "BWI",
     "CEQ",
     "CGK",
     "DAR",
@@ -15,7 +16,9 @@
     "EDLC",
     "EDLH",
     "EDRF",
+    "FAB",
     "FMM",
+    "GHV",
     "GRO",
     "JRO",
     "KIR",
@@ -24,7 +27,9 @@
     "KSY",
     "LBG",
     "LCY",
+    "LLA",
     "LUZ",
+    "NGU",
     "OFF",
     "PMF",
     "REU",
@@ -35,6 +40,7 @@
     "TUF",
     "VKO",
     "VXO",
+    "WNZ",
     "XMN"
   ],
   "airlines": [
@@ -54,6 +60,7 @@
     "EJM",
     "ELI",
     "FYG",
+    "GER",
     "GRZ",
     "HZA",
     "ICL",
@@ -294,6 +301,52 @@
         "AHY",
         "OLI"
       ],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "matrixportal_s3",
+      "firmware_version": "3.6.1-dual-target.6",
+      "unknown_airports": [
+        "RZV",
+        "TSF",
+        "VKO",
+        "BIQ",
+        "AES",
+        "KOA",
+        "SLC",
+        "VXO",
+        "LBG",
+        "CEQ",
+        "KJK",
+        "EDLH",
+        "FAB",
+        "BWI",
+        "NGU"
+      ],
+      "unknown_airlines": [
+        "BOH",
+        "ICL",
+        "OLI",
+        "FYG",
+        "AIH",
+        "DLY",
+        "N9",
+        "SEU",
+        "GER"
+      ],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "esp32s3_n16r8_headless",
+      "firmware_version": "3.6.1-dual-target.6",
+      "unknown_airports": [
+        "WNZ",
+        "GHV",
+        "LLA"
+      ],
+      "unknown_airlines": [],
       "dropped_unknown_airports": 0,
       "dropped_unknown_airlines": 0
     }
