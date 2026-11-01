@@ -1,5 +1,20 @@
 # Changelog
 
+## 3.6.1-dual-target.8 – 2026-11-01
+
+- Gültigkeit regulärer Routen von sieben Tagen auf sechs Stunden reduziert,
+  damit wiederverwendete Callsigns keine alten Strecken übernehmen
+- 468 Flughafenkoordinaten aus dem gemeinfreien OurAirports-Datensatz als
+  kompakte, offline verwendete Firmwaretabelle ergänzt
+- Primär- und ADSBDB-Routen werden gegen aktuelle Position, Höhe,
+  Flugrichtung und Steig-/Sinkbewegung geprüft
+- Rückkehr eines Callsigns nach 30 Minuten Abwesenheit sowie ein Wechsel der
+  Flugzeug-Hex-ID erzwingen eine frische Routenabfrage
+- unplausible Cache- und Dienstergebnisse werden verworfen, nicht angezeigt
+  und nicht erneut im Cache gespeichert
+- reproduzierbare Aktualisierungs-, Generator- und Validierungsskripte für die
+  Koordinatentabelle ergänzt
+
 ## 3.6.0-dual-target.2 – 2026-10-28
 
 - Webdisplay zeigt zusätzlich zur Typkennung die ausführliche

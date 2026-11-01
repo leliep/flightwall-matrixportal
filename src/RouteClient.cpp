@@ -8,14 +8,16 @@
 #include <algorithm>
 #include <cmath>
 
+#include "AirportCoordinates.hpp"
 #include "AirportNames.hpp"
 #include "CallsignClassifier.hpp"
+#include "Geo.hpp"
 #include "UnknownCodes.hpp"
 
 namespace {
 constexpr size_t cacheSlots = 32;
-constexpr uint32_t positiveTtl = 7U * 24U * 60U * 60U;
-constexpr uint32_t adsbDbPositiveTtl = 24U * 60U * 60U;
+constexpr uint32_t positiveTtl = 6U * 60U * 60U;
+constexpr uint32_t adsbDbPositiveTtl = 6U * 60U * 60U;
 constexpr uint32_t negativeTtl = 60U * 60U;
 constexpr uint32_t specialTtl = 30U * 60U;
 constexpr char adsbDbUrl[] = "https://api.adsbdb.com/v0/callsign/";
@@ -216,6 +218,127 @@ void fillNames(RouteResult& route) {
   route.destinationName = airportDisplayName(route.destination);
 }
 
+float angleDifference(float left, float right) {
+  return fabsf(fmodf(left - right + 540.0F, 360.0F) - 180.0F);
+}
+
+void rejectRoute(RouteResult& route, const String& reason) {
+  if (!route.source.endsWith("-rejected")) route.source += "-rejected";
+  route.status = "rejected";
+  route.error = reason;
+  route.routeCodes = "";
+  route.routeNames = "";
+  route.origin = "";
+  route.destination = "";
+  route.originName = "";
+  route.destinationName = "";
+}
+
+bool routePlausible(const RouteResult& route, const RouteContext& context,
+                    String& reason) {
+  if (!route.found() || !context.hasPosition ||
+      !validCoordinates(context.latitude, context.longitude))
+    return true;
+
+  const std::vector<String> codes = split(route.routeCodes, '-');
+  struct RoutePoint {
+    AirportCoordinates coordinates;
+  };
+  std::vector<RoutePoint> points;
+  points.reserve(codes.size());
+  for (const String& rawCode : codes) {
+    AirportCoordinates coordinates;
+    if (airportCoordinates(upperTrimmed(rawCode), coordinates))
+      points.push_back({coordinates});
+  }
+  // Unknown coordinates must not turn a potentially valid route into a false
+  // rejection. The lookup table normally covers every known display code.
+  if (points.size() < 2) return true;
+
+  double bestDetour = HUGE_VAL;
+  double bestDirect = 0.0;
+  double bestStartDistance = 0.0;
+  double bestEndDistance = 0.0;
+  const RoutePoint* bestStart = nullptr;
+  const RoutePoint* bestEnd = nullptr;
+  for (size_t index = 1; index < points.size(); ++index) {
+    const RoutePoint& start = points[index - 1];
+    const RoutePoint& end = points[index];
+    const double direct = greatCircleDistanceKm(
+        start.coordinates.latitude, start.coordinates.longitude,
+        end.coordinates.latitude, end.coordinates.longitude);
+    const double startDistance = greatCircleDistanceKm(
+        start.coordinates.latitude, start.coordinates.longitude,
+        context.latitude, context.longitude);
+    const double endDistance = greatCircleDistanceKm(
+        context.latitude, context.longitude,
+        end.coordinates.latitude, end.coordinates.longitude);
+    const double detour = startDistance + endDistance - direct;
+    if (detour < bestDetour) {
+      bestDetour = detour;
+      bestDirect = direct;
+      bestStartDistance = startDistance;
+      bestEndDistance = endDistance;
+      bestStart = &start;
+      bestEnd = &end;
+    }
+  }
+  if (bestStart == nullptr || bestEnd == nullptr) return true;
+
+  const double corridorAllowance =
+      180.0 + std::min(300.0, bestDirect * 0.12);
+  if (bestDetour > corridorAllowance) {
+    reason = "Route verworfen: Flugposition liegt nicht auf der Route";
+    return false;
+  }
+  if (!context.hasAltitude) return true;
+
+  const float startElevation = bestStart->coordinates.hasElevation
+      ? bestStart->coordinates.elevationFt : 0.0F;
+  const float endElevation = bestEnd->coordinates.hasElevation
+      ? bestEnd->coordinates.elevationFt : 0.0F;
+  const float heightAboveStart =
+      std::max(0.0F, context.altitudeFt - startElevation);
+  const float heightAboveEnd =
+      std::max(0.0F, context.altitudeFt - endElevation);
+
+  if (context.hasVerticalRate && context.verticalRateFpm < -200.0F &&
+      heightAboveEnd < 10000.0F) {
+    const double maximumDistance = 30.0 + heightAboveEnd * 0.012;
+    if (bestEndDistance > maximumDistance) {
+      reason = "Route verworfen: Ziel bei Höhe und Sinkflug unplausibel";
+      return false;
+    }
+    if (context.hasTrack && bestEndDistance > 20.0) {
+      const float destinationBearing = bearingDegrees(
+          context.latitude, context.longitude,
+          bestEnd->coordinates.latitude, bestEnd->coordinates.longitude);
+      if (angleDifference(context.trackDegrees, destinationBearing) > 110.0F) {
+        reason = "Route verworfen: Sinkflug führt vom Ziel weg";
+        return false;
+      }
+    }
+  }
+
+  if (context.hasVerticalRate && context.verticalRateFpm > 200.0F &&
+      heightAboveStart < 10000.0F) {
+    const double maximumDistance = 30.0 + heightAboveStart * 0.012;
+    if (bestStartDistance > maximumDistance) {
+      reason = "Route verworfen: Start bei Höhe und Steigflug unplausibel";
+      return false;
+    }
+  }
+
+  if ((!context.hasVerticalRate ||
+       fabsf(context.verticalRateFpm) <= 200.0F) &&
+      std::min(heightAboveStart, heightAboveEnd) < 3000.0F &&
+      std::min(bestStartDistance, bestEndDistance) > 55.0) {
+    reason = "Route verworfen: niedriger Flug zu weit von Start und Ziel";
+    return false;
+  }
+  return true;
+}
+
 void extractCodes(JsonObjectConst row, RouteResult& route) {
   const char* keys[] = {"_airport_codes_iata", "airport_codes_iata",
                         "_airport_codes_icao", "airport_codes_icao",
@@ -259,6 +382,7 @@ void RouteClient::configure(bool enabled, const String& url,
 }
 
 RouteResult RouteClient::readMemoryCache(const String& callsign,
+                                         const RouteContext& context,
                                          uint32_t now) {
   for (MemoryCacheEntry& entry : memoryCache_) {
     if (entry.callsign != callsign) continue;
@@ -268,6 +392,12 @@ RouteResult RouteClient::readMemoryCache(const String& callsign,
       return {};
     }
     RouteResult result = entry.route;
+    String reason;
+    if (result.found() && !routePlausible(result, context, reason)) {
+      entry = {};
+      rejectRoute(result, reason);
+      return result;
+    }
     result.status = result.found() ? "memory" : "not_found";
     return result;
   }
@@ -419,7 +549,9 @@ void RouteClient::clearCache() {
   preferences.end();
 }
 
-RouteResult RouteClient::readCache(const String& callsign, uint32_t now) {
+RouteResult RouteClient::readCache(const String& callsign,
+                                   const RouteContext& context,
+                                   uint32_t now) {
   Preferences preferences;
   preferences.begin("routecache", true);
   bool haveResult = false;
@@ -447,6 +579,10 @@ RouteResult RouteClient::readCache(const String& callsign, uint32_t now) {
   if (!haveResult) return {};
   newestRoute.status = newestFound ? "cached" : "not_found";
   fillNames(newestRoute);
+  String reason;
+  if (newestRoute.found() &&
+      !routePlausible(newestRoute, context, reason))
+    rejectRoute(newestRoute, reason);
   return newestRoute;
 }
 
@@ -480,8 +616,8 @@ void RouteClient::writeCache(const String& callsign, const RouteResult& route,
   preferences.end();
 }
 
-RouteResult RouteClient::fetchPrimary(const String& callsign, double latitude,
-                                      double longitude) {
+RouteResult RouteClient::fetchPrimary(const String& callsign,
+                                      const RouteContext& context) {
   RouteResult result;
   result.source = primarySourceName(url_);
   WiFiClientSecure client;
@@ -499,8 +635,8 @@ RouteResult RouteClient::fetchPrimary(const String& callsign, double latitude,
   JsonDocument request;
   JsonObject plane = request["planes"].add<JsonObject>();
   plane["callsign"] = callsign;
-  plane["lat"] = latitude;
-  plane["lng"] = longitude;
+  plane["lat"] = context.hasPosition ? context.latitude : 0.0;
+  plane["lng"] = context.hasPosition ? context.longitude : 0.0;
   String body;
   serializeJson(request, body);
   http.addHeader("Content-Type", "application/json");
@@ -536,11 +672,14 @@ RouteResult RouteClient::fetchPrimary(const String& callsign, double latitude,
   }
   fillNames(result);
   result.status = result.found() ? "current" : "not_found";
+  String reason;
+  if (result.found() && !routePlausible(result, context, reason))
+    rejectRoute(result, reason);
   return result;
 }
 
-RouteResult RouteClient::fetchAdsbDb(const String& callsign, double latitude,
-                                     double longitude) {
+RouteResult RouteClient::fetchAdsbDb(const String& callsign,
+                                     const RouteContext& context) {
   RouteResult result;
   result.source = "adsbdb";
   WiFiClientSecure client;
@@ -581,9 +720,11 @@ RouteResult RouteClient::fetchAdsbDb(const String& callsign, double latitude,
   }
   const String returnedCallsign = upperTrimmed(route["callsign"] | "");
   if ((!returnedCallsign.isEmpty() && returnedCallsign != callsign) ||
-      !adsbDbRoutePlausible(route, latitude, longitude)) {
+      (context.hasPosition &&
+       !adsbDbRoutePlausible(route, context.latitude, context.longitude))) {
     result.source = "adsbdb-rejected";
-    result.status = "not_found";
+    result.status = "rejected";
+    result.error = "ADSBDB-Route passt nicht zur Flugposition";
     return result;
   }
 
@@ -599,15 +740,18 @@ RouteResult RouteClient::fetchAdsbDb(const String& callsign, double latitude,
   result.airlineCode = upperTrimmed(route["airline"]["icao"] | "");
   fillNames(result);
   result.status = result.found() ? "current" : "not_found";
+  String reason;
+  if (result.found() && !routePlausible(result, context, reason))
+    rejectRoute(result, reason);
   return result;
 }
 
-RouteResult RouteClient::fetch(const String& callsign, double latitude,
-                               double longitude) {
-  RouteResult primary = fetchPrimary(callsign, latitude, longitude);
+RouteResult RouteClient::fetch(const String& callsign,
+                               const RouteContext& context) {
+  RouteResult primary = fetchPrimary(callsign, context);
   if (primary.found() || !adsbDbFallbackEnabled_) return primary;
 
-  RouteResult fallback = fetchAdsbDb(callsign, latitude, longitude);
+  RouteResult fallback = fetchAdsbDb(callsign, context);
   if (fallback.found()) return fallback;
   if (primary.error.length() && fallback.error.length())
     fallback.error = primary.error + "; " + fallback.error;
@@ -616,25 +760,31 @@ RouteResult RouteClient::fetch(const String& callsign, double latitude,
   return fallback;
 }
 
-RouteResult RouteClient::lookup(const String& callsign, double latitude,
-                                double longitude, uint32_t now) {
+RouteResult RouteClient::lookup(const String& callsign,
+                                const RouteContext& context, uint32_t now) {
   if (!enabled_ || callsign.isEmpty()) {
     lastError_ = "";
     return {};
   }
-  RouteResult cached = readMemoryCache(callsign, now);
+  RouteResult cached = readMemoryCache(callsign, context, now);
+  if (cached.status == "rejected") removeCacheEntry(callsign);
   if (cached.status != "unavailable") {
-    lastError_ = "";
-    return cached;
+    if (cached.status != "rejected") {
+      lastError_ = "";
+      return cached;
+    }
   }
-  cached = readCache(callsign, now);
+  cached = readCache(callsign, context, now);
+  if (cached.status == "rejected") removeCacheEntry(callsign);
   if (cached.status != "unavailable") {
-    rememberInMemory(callsign, cached, now, false);
-    lastError_ = "";
-    return cached;
+    if (cached.status != "rejected") {
+      rememberInMemory(callsign, cached, now, false);
+      lastError_ = "";
+      return cached;
+    }
   }
 
-  RouteResult result = fetch(callsign, latitude, longitude);
+  RouteResult result = fetch(callsign, context);
   lastError_ = result.error;
   if (result.error.isEmpty()) {
     // ADSBDB is a runtime fallback only. Keep its data in RAM and do not copy
@@ -645,15 +795,15 @@ RouteResult RouteClient::lookup(const String& callsign, double latitude,
   return result;
 }
 
-RouteResult RouteClient::test(const String& callsign, double latitude,
-                              double longitude) {
+RouteResult RouteClient::test(const String& callsign,
+                              const RouteContext& context) {
   if (callsign.isEmpty()) {
     lastError_ = "Test-Callsign fehlt";
     RouteResult result;
     result.error = lastError_;
     return result;
   }
-  RouteResult result = fetch(callsign, latitude, longitude);
+  RouteResult result = fetch(callsign, context);
   lastError_ = result.error;
   return result;
 }

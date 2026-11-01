@@ -43,8 +43,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.7";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-01 lookup table update";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.8";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-01 route plausibility update";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -427,6 +427,41 @@ uint32_t emergencyTestUntil = 0;
 uint32_t lastRouteAttempt = 0;
 size_t lastReceivedAircraft = 0;
 size_t lastCandidateAircraft = 0;
+
+struct RouteObservation {
+  String callsign;
+  String hex;
+  uint32_t lastSeenMs = 0;
+};
+constexpr size_t ROUTE_OBSERVATION_SLOTS = 16;
+constexpr uint32_t ROUTE_SESSION_GAP_MS = 30U * 60U * 1000U;
+RouteObservation routeObservations[ROUTE_OBSERVATION_SLOTS];
+size_t nextRouteObservationSlot = 0;
+
+bool routeObservationRequiresRefresh(const Aircraft& aircraft,
+                                     uint32_t nowMs) {
+  if (aircraft.flight.isEmpty()) return false;
+  RouteObservation* observation = nullptr;
+  for (RouteObservation& candidate : routeObservations) {
+    if (candidate.callsign == aircraft.flight) {
+      observation = &candidate;
+      break;
+    }
+  }
+  if (observation == nullptr) {
+    observation = &routeObservations[
+        nextRouteObservationSlot++ % ROUTE_OBSERVATION_SLOTS];
+    *observation = {};
+    observation->callsign = aircraft.flight;
+  }
+  const bool returnedAfterGap = observation->lastSeenMs != 0 &&
+      nowMs - observation->lastSeenMs >= ROUTE_SESSION_GAP_MS;
+  const bool aircraftChanged = !observation->hex.isEmpty() &&
+      !aircraft.hex.isEmpty() && observation->hex != aircraft.hex;
+  observation->hex = aircraft.hex;
+  observation->lastSeenMs = nowMs;
+  return returnedAfterGap || aircraftChanged;
+}
 
 enum class SpecialStatisticCategory : uint8_t {
   Emergency7500,
@@ -2752,19 +2787,31 @@ bool fetchLocalFlight() {
   if (selectAircraft(result.candidates, config, selected,
                      selectedEmergencyHex, advanceEmergency,
                      emergencyCount, emergencyIndex)) {
+    const bool newRouteSession =
+        routeObservationRequiresRefresh(selected, millis());
+    if (newRouteSession) routeClient.removeCacheEntry(selected.flight);
     const bool retryRoute = currentRoute.status == "unavailable" &&
                             millis() - lastRouteAttempt >= 60000;
-    if (selected.flight != routedFlight || retryRoute) {
+    if (selected.flight != routedFlight || retryRoute || newRouteSession) {
       routedFlight = selected.flight;
       lastRouteAttempt = millis();
       if (selected.flight.startsWith("TEST")) currentRoute = {};
       else {
         NetworkPhaseScope phase(NetworkPhase::Route);
-        currentRoute = routeClient.lookup(
-            selected.flight,
-            selected.hasPosition ? selected.latitude : siteLatitude,
-            selected.hasPosition ? selected.longitude : siteLongitude,
-            result.feedTimestamp);
+        RouteContext routeContext;
+        routeContext.hasPosition = true;
+        routeContext.latitude = selected.hasPosition
+                                    ? selected.latitude : siteLatitude;
+        routeContext.longitude = selected.hasPosition
+                                     ? selected.longitude : siteLongitude;
+        routeContext.hasAltitude = selected.hasAltitude;
+        routeContext.altitudeFt = selected.altitudeFt;
+        routeContext.hasTrack = selected.hasTrack;
+        routeContext.trackDegrees = selected.track;
+        routeContext.hasVerticalRate = selected.hasVerticalRate;
+        routeContext.verticalRateFpm = selected.verticalRateFpm;
+        currentRoute = routeClient.lookup(selected.flight, routeContext,
+                                          result.feedTimestamp);
       }
       lastRouteError = routeClient.lastError();
     }
@@ -3112,7 +3159,7 @@ void translateWebPageToEnglish(String &html) {
     {"Vertikalbewegung", "Vertical motion"}, {"Routenstatus", "Route status"},
     {"Routenquelle", "Route source"}, {"ADSBDB-Fallback", "ADSBDB fallback"},
     {"Letzter ADS-B-Erfolg", "Last ADS-B success"},
-    {"Routen des Primärdienstes gelten sieben Tage. ADSBDB-Routen bleiben maximal einen Tag nur im RAM. Negative Ergebnisse gelten eine Stunde und erkannte Einsatzrufzeichen 30 Minuten. Der jüngste Eintrag eines Callsigns wird verwendet. Eine sofortige Neuabfrage ist nur für das aktuell beobachtete Flugzeug möglich.", "Routes from the primary service are valid for seven days. ADSBDB routes remain in RAM only for up to one day. Negative results are valid for one hour and recognised operational callsigns for 30 minutes. The newest entry for a callsign is used. Immediate refresh is available only for the currently observed aircraft."},
+    {"Gefundene Routen gelten sechs Stunden und werden zusätzlich anhand von Position, Höhe und Flugbewegung geprüft. ADSBDB-Routen bleiben nur im RAM. Negative Ergebnisse gelten eine Stunde und erkannte Einsatzrufzeichen 30 Minuten. Unplausible Routen werden verworfen und nicht gespeichert.", "Found routes are valid for six hours and are additionally checked against position, altitude and aircraft motion. ADSBDB routes remain in RAM only. Negative results are valid for one hour and recognised operational callsigns for 30 minutes. Implausible routes are rejected and not stored."},
     {"Gesamten Routencache wirklich löschen?", "Really clear the entire route cache?"},
     {"Diesen Cacheeintrag löschen?", "Delete this cache entry?"},
     {"Aktuelle Route neu laden", "Refresh current route"},
@@ -3698,7 +3745,7 @@ String webPage(bool includeRouteCache = true) {
   if (includeRouteCache) {
     const std::vector<RouteCacheEntryInfo> cacheEntries =
         routeClient.cacheEntries(lastFeedTimestamp);
-    html += F("<fieldset id='routeCache'><legend>Routencache</legend><p class='muted'>Routen des Primärdienstes gelten sieben Tage. ADSBDB-Routen bleiben maximal einen Tag nur im RAM. Negative Ergebnisse gelten eine Stunde und erkannte Einsatzrufzeichen 30 Minuten. Der jüngste Eintrag eines Callsigns wird verwendet. Eine sofortige Neuabfrage ist nur für das aktuell beobachtete Flugzeug möglich.</p>");
+    html += F("<fieldset id='routeCache'><legend>Routencache</legend><p class='muted'>Gefundene Routen gelten sechs Stunden und werden zusätzlich anhand von Position, Höhe und Flugbewegung geprüft. ADSBDB-Routen bleiben nur im RAM. Negative Ergebnisse gelten eine Stunde und erkannte Einsatzrufzeichen 30 Minuten. Unplausible Routen werden verworfen und nicht gespeichert.</p>");
     if (routedFlight.length()) {
       html += F("<form class='inlineForm' method='post' action='/route-cache/refresh'><input type='hidden' name='callsign' value='");
       html += htmlEscape(routedFlight);
@@ -4267,7 +4314,11 @@ void handleRouteTest() {
   RouteResult result;
   {
     NetworkPhaseScope phase(NetworkPhase::Route);
-    result = routeClient.test(callsign, siteLatitude, siteLongitude);
+    RouteContext routeContext;
+    routeContext.hasPosition = true;
+    routeContext.latitude = siteLatitude;
+    routeContext.longitude = siteLongitude;
+    result = routeClient.test(callsign, routeContext);
   }
   routeClient.configure(routesEnabled, routeUrl, adsbDbFallbackEnabled);
   lastRouteError = result.error;

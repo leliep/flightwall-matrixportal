@@ -265,9 +265,14 @@ Der Fallback:
 
 - benötigt kein Konto und keinen API-Schlüssel,
 - wird nur bei fehlender Primärroute abgefragt,
-- prüft Callsign und geografische Plausibilität,
-- hält seine Ergebnisse höchstens einen Tag im RAM,
+- prüft Callsign, Position, Höhe und Flugbewegung auf Plausibilität,
+- hält seine Ergebnisse höchstens sechs Stunden im RAM,
 - schreibt ADSBDB-Routen nicht in den permanenten Cache.
+
+Auch Ergebnisse des Primärdienstes werden geprüft und höchstens sechs Stunden
+verwendet. Unplausible Routen bleiben leer, anstatt eine wahrscheinlich
+falsche Verbindung anzuzeigen. Die Flughafenkoordinaten stammen aus dem
+gemeinfreien OurAirports-Datensatz und sind bereits in der Firmware enthalten.
 
 Mit **Routendienst testen** kann ein Callsign direkt geprüft werden. Die
 Statusseite zeigt anschließend auch die verwendete Routenquelle.

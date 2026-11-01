@@ -19,7 +19,7 @@ erklärt auch BME280, BH1750, MQTT, Routenauflösung und OTA.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.7` |
+| Firmware | `3.6.1-dual-target.8` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -309,12 +309,21 @@ als `DUS<>BUD` beziehungsweise `Duesseldorf <> Budapest` dargestellt. Eine
 normale Route wie `DUS-FRA-JFK` bleibt vollständig `DUS>FRA>JFK`.
 
 Der Routencache besitzt je 32 Plätze im RAM und im nichtflüchtigen Speicher.
+Routen werden zusätzlich anhand der aktuellen Flugposition, Höhe,
+Vertikalbewegung und Flugrichtung geprüft. Die dafür benötigten
+Flughafenkoordinaten werden aus dem täglich aktualisierten, gemeinfreien
+[OurAirports-Datensatz](https://ourairports.com/data/) erzeugt und fest in die
+Firmware eingebaut. Der Controller muss OurAirports nicht zur Laufzeit
+erreichen. Eine unplausible Route wird weder angezeigt noch gespeichert.
+Kehrt dasselbe Callsign nach mindestens 30 Minuten zurück oder wird es von
+einem anderen Flugzeug verwendet, wird sein vorhandener Cacheeintrag vor der
+Abfrage entfernt.
 Gültigkeitszeiten:
 
 | Ergebnis | Gültigkeit |
 |---|---:|
-| gefundene Route des Primärdienstes | 7 Tage |
-| gefundene ADSBDB-Fallbackroute (nur RAM) | maximal 1 Tag |
+| gefundene Route des Primärdienstes | 6 Stunden |
+| gefundene ADSBDB-Fallbackroute (nur RAM) | maximal 6 Stunden |
 | nicht gefundene Route | 1 Stunde |
 | militärisches/behördliches Einsatzrufzeichen | 30 Minuten |
 
@@ -602,6 +611,7 @@ Die editierbaren Quellen liegen hier:
 
 - `data/airport_names.de.json`
 - `data/airline_names.de.json`
+- `data/airport_coordinates.json` (aus OurAirports erzeugt)
 
 Die C++-Dateien in `src/*.generated.cpp` werden daraus erzeugt und sollten
 nicht direkt bearbeitet werden:
@@ -609,10 +619,17 @@ nicht direkt bearbeitet werden:
 ```bash
 python3 tools/validate_airport_names.py
 python3 tools/validate_airline_names.py
+python3 tools/validate_airport_coordinates.py
 python3 tools/generate_airport_names.py
 python3 tools/generate_airline_names.py
+python3 tools/generate_airport_coordinates.py
 pio run
 ```
+
+Nach dem Ergänzen neuer Flughafencodes wird die Koordinatentabelle mit
+`python3 tools/update_airport_coordinates.py` aus dem aktuellen
+OurAirports-Datensatz aktualisiert. Das optionale Argument ist der Pfad zu
+einer bereits heruntergeladenen `airports.csv`.
 
 Unbekannte Codes werden während des Betriebs flüchtig gesammelt – jeweils bis
 zu 32 Airports und Airlines. Die Statusseite und `/api/status` zeigen die
