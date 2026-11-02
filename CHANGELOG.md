@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.6.1-dual-target.11 – 2026-11-02
+
+- Airline-Code `ABP` (ABS Jets) ergänzt
+
 ## 3.6.1-dual-target.10 – 2026-11-02
 
 - mehrere Transpondernotfälle wechseln alle zehn Sekunden unabhängig vom

@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-11-02T08:49:05+01:00",
+  "updated_at": "2026-11-02T12:32:12+01:00",
   "status": "integrated",
   "airports": [
     "ACH",
@@ -53,6 +53,7 @@
     "ZNZ"
   ],
   "airlines": [
+    "ABP",
     "AHY",
     "AIH",
     "AJD",
@@ -453,6 +454,16 @@
         "TEU",
         "AJD",
         "PEA"
+      ],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "matrixportal_s3",
+      "firmware_version": "3.6.1-dual-target.10",
+      "unknown_airports": [],
+      "unknown_airlines": [
+        "ABP"
       ],
       "dropped_unknown_airports": 0,
       "dropped_unknown_airlines": 0
