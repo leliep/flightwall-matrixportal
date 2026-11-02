@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.6.1-dual-target.13 – 2026-11-02
+
+- Headless-Status zeigt die nicht vorhandene Matrix-Wetteranzeige nicht mehr
+  fälschlich als aktiv an
+- `environment_idle_display_enabled` ist beim Headless-Controller immer
+  `false`; BME280- und MQTT-Wetterstatus bleiben unverändert verfügbar
+
 ## 3.6.1-dual-target.12 – 2026-11-02
 
 - Airports `LIL` (Lille), `LSY` (Lismore) und `NYO` (Stockholm-Skavsta)

@@ -43,7 +43,7 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.12";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.13";
 constexpr char BUILD_TIMESTAMP[] = "2026-11-02 ABP lookup update";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
@@ -3701,8 +3701,10 @@ String webPage(bool includeRouteCache = true) {
   html += altitudeFilterEnabled ? "bis " + String(maximumAltitudeFt) + " ft" : "aus";
   html += F("</b><span>Kleinflugzeugfilter</span><b>");
   html += hideSportAircraft ? "aktiv" : "aus";
+#if FLIGHTWALL_HAS_MATRIX
   html += F("</b><span>Wetteranzeige</span><b>");
   html += environmentIdleDisplayEnabled ? "aktiv" : "aus";
+#endif
   html += F("</b></div></section><section class='statusCard wide'><h3>Übersetzungstabellen</h3><div class='status'><span>Unbekannte Flughäfen</span><b>");
   html += unknownCodesText(true);
   html += F("</b><span>Unbekannte Airlines</span><b>");
@@ -3767,8 +3769,10 @@ String webPage(bool includeRouteCache = true) {
   html += numberOrDash(airPressureHpa) + " hPa";
   html += F("</b><span>Stationsdruck (BME280 roh)</span><b>");
   html += numberOrDash(stationPressureHpa) + " hPa";
+#if FLIGHTWALL_HAS_MATRIX
   html += F("</b><span>Wetterdaten-Ruheanzeige</span><b>");
   html += environmentIdleDisplayEnabled ? "aktiv" : "aus";
+#endif
   html += F("</b><span>MQTT</span><b>");
   html += !mqttWeatherEnabled ? "aus" : (mqttConnected ? "verbunden" : "getrennt");
   html += F("</b><span>MQTT-Server</span><b>");
@@ -5518,7 +5522,11 @@ void setup() {
   automaticBrightnessEnabled = preferences.getBool("autoLight", true);
   displayEnabled = preferences.getBool("displayOn", true);
   uiEnglish = preferences.getBool("uiEnglish", false);
+#if FLIGHTWALL_HAS_MATRIX
   environmentIdleDisplayEnabled = preferences.getBool("envIdle", true);
+#else
+  environmentIdleDisplayEnabled = false;
+#endif
   mqttWeatherEnabled = preferences.getBool("mqttOn", true);
   mqttHost = preferences.getString("mqttHost", DEFAULT_MQTT_HOST);
   mqttPort = preferences.getUShort("mqttPort", DEFAULT_MQTT_PORT);
