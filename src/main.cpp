@@ -43,7 +43,7 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.11";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.12";
 constexpr char BUILD_TIMESTAMP[] = "2026-11-02 ABP lookup update";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";

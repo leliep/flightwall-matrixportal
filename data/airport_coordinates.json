@@ -1274,6 +1274,11 @@
     "longitude": -0.459909,
     "elevation_ft": 83
   },
+  "LIL": {
+    "latitude": 50.566564,
+    "longitude": 3.102429,
+    "elevation_ft": 157
+  },
   "LIN": {
     "latitude": 45.445099,
     "longitude": 9.27674,
@@ -1318,6 +1323,11 @@
     "latitude": 18.452222,
     "longitude": -68.911111,
     "elevation_ft": 213
+  },
+  "LSY": {
+    "latitude": -28.830689,
+    "longitude": 153.258419,
+    "elevation_ft": 35
   },
   "LTN": {
     "latitude": 51.874699,
@@ -1558,6 +1568,11 @@
     "latitude": 52.6758,
     "longitude": 1.28278,
     "elevation_ft": 118
+  },
+  "NYO": {
+    "latitude": 58.789656,
+    "longitude": 16.911479,
+    "elevation_ft": 140
   },
   "OFF": {
     "latitude": 41.119307,

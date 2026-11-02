@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.6.1-dual-target.12 – 2026-11-02
+
+- Airports `LIL` (Lille), `LSY` (Lismore) und `NYO` (Stockholm-Skavsta)
+  einschließlich Routenkoordinaten ergänzt
+- Airlines `ABF` (Scanwings), `BSF` (Blue Sky Airways), `CLU`
+  (CargoLogicAir), `LOG` (Loganair) und `POF` (Police Aux Frontières) ergänzt
+
 ## 3.6.1-dual-target.11 – 2026-11-02
 
 - Airline-Code `ABP` (ABS Jets) ergänzt
