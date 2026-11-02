@@ -43,8 +43,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.8";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-01 route plausibility update";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.9";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-02 emergency display update";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -1686,19 +1686,30 @@ String emergencyMeaning(const String &squawk) {
 void drawEmergencyPage() {
   matrix.fillScreen(0);
   const String identity = flight.flight.length() ? flight.flight : flight.hex;
-  drawLine(0, 0, clipped(identity, 13), white);
-  drawCurrentSpecialIcon(80);
-  drawLine(98, 0, flight.squawk, red);
-  const String meaning = emergencyMeaning(flight.squawk);
+  const String position = flight.emergencyCount > 1
+                              ? String(flight.emergencyIndex) + "/" +
+                                    String(flight.emergencyCount)
+                              : "";
+  const uint8_t identityCharacters = position.length()
+                                         ? 20 - position.length()
+                                         : 21;
+  drawLine(0, 0, clipped(identity, identityCharacters), white);
+  if (position.length())
+    drawLine(MATRIX_WIDTH - position.length() * 6, 0, position, white);
+
+  const String squawk = isEmergencySquawk(flight.squawk)
+                            ? flight.squawk
+                            : "7???";
+  const uint16_t alertColor = squawk == "7600" ? yellow : red;
+  const int16_t squawkX = (MATRIX_WIDTH - squawk.length() * 12) / 2;
+  drawLine(squawkX, 8, squawk, alertColor, 2);
+
+  const String meaning = squawk == "7???"
+                             ? "ALARM"
+                             : emergencyMeaning(squawk);
   int16_t meaningX = (MATRIX_WIDTH - meaning.length() * 6) / 2;
   if (meaningX < 0) meaningX = 0;
-  drawLine(meaningX, 11, meaning, flight.squawk == "7600" ? yellow : red);
-  String details;
-  if (flight.hasPosition && !isnan(flight.distanceKm))
-    details = String(flight.distanceKm, 1) + "km";
-  else details = "POSITION?";
-  if (!isnan(flight.altitudeFt)) details += " " + String(flight.altitudeFt, 0) + "ft";
-  drawLine(0, 22, clipped(details, 21), orange);
+  drawLine(meaningX, 24, meaning, alertColor);
 }
 
 

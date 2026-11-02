@@ -439,6 +439,11 @@
     "longitude": 24.150673,
     "elevation_ft": 490
   },
+  "CHR": {
+    "latitude": 46.860221,
+    "longitude": 1.728326,
+    "elevation_ft": 529
+  },
   "CIA": {
     "latitude": 41.798769,
     "longitude": 12.595331,
@@ -2083,6 +2088,11 @@
     "latitude": 59.413246,
     "longitude": 24.83264,
     "elevation_ft": 131
+  },
+  "TLN": {
+    "latitude": 43.097301,
+    "longitude": 6.14603,
+    "elevation_ft": 7
   },
   "TLS": {
     "latitude": 43.629101,

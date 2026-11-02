@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.6.1-dual-target.9 – 2026-11-02
+
+- Transpondercode auf der Matrix-Notfallseite groß und mittig dargestellt
+- eindeutige Notfallbedeutung in der unteren Zeile; `7600` gelb sowie `7500`
+  und `7700` rot hervorgehoben
+- Positionsanzeige bei mehreren gleichzeitigen Transpondernotfällen ergänzt
+- sichere Ersatzanzeige `7???` bei fehlendem Notfallcode
+- Airports `CHR` (Châteauroux) und `TLN` (Toulon-Hyères) ergänzt
+- Airlines `AJD`, `EMC`, `PEA` und `TEU` ergänzt
+
 ## 3.6.1-dual-target.8 – 2026-11-01
 
 - Gültigkeit regulärer Routen von sieben Tagen auf sechs Stunden reduziert,
