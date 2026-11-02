@@ -22,6 +22,18 @@ pio run -e esp32s3_n16r8_headless
 pio run -e esp32s3_n16r8_headless -t upload
 ```
 
+Den Port bei Bedarf explizit auswählen (hier als Beispiel unter macOS):
+
+```bash
+pio device list
+pio run -e esp32s3_n16r8_headless -t upload \
+  --upload-port /dev/cu.usbmodem101
+```
+
+Ein regulärer Upload lässt die NVS-Einstellungen bestehen. Ein bereits
+verwendetes Board behält daher WLAN, Standort, ADS-B-Quellen und weitere
+Konfigurationswerte.
+
 Die Weboberfläche ist anschließend unter
 `http://flightwall-server.local` oder über die ausgegebene IP-Adresse
 erreichbar. Ein optionaler BME280 verwendet SDA GPIO 16 und SCL GPIO 17.
@@ -91,12 +103,10 @@ Start über **Terminal → Aufgabe ausführen… → FlightWall: Git-Update + OT
 ## Stabilität
 
 Der Displaytest zeigt nach den Matrix-Prüfbildern alle Typensymbole mit ihrer
-Bedeutung und dauert insgesamt etwa 23 Sekunden. Der aktuelle Teststand
-verwendet zur Unterdrückung sporadischer Störpixel 2 Bit Farbtiefe. Damit
-stehen drei native Helligkeitsstufen mit 33 %, 66 % und 100 % zur Verfügung.
-Die automatische Regelung verteilt diese logarithmisch zwischen den
-eingestellten Lux-Schwellen. Die räumliche Auflösung bleibt unverändert bei
-128×32 Pixeln.
+Bedeutung und dauert insgesamt etwa 23 Sekunden. Die aktuelle Firmware nutzt
+3 Bit Farbtiefe und sieben native Helligkeitsstufen. Angepasste
+Matrix-Zeitparameter vermeiden die zuvor beobachteten sporadischen Störpixel.
+Die räumliche Auflösung bleibt unverändert bei 128×32 Pixeln.
 
 ## Datenschutz
 

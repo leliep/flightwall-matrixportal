@@ -1,7 +1,7 @@
 # FlightWall – Getting Started
 
 Diese Anleitung beschreibt die grundlegende Einrichtung von FlightWall in der
-Firmwareversion `3.6.0-dual-target.2`. Sie führt vom Hardwareaufbau bis zur
+Firmwareversion `3.6.1-dual-target.11`. Sie führt vom Hardwareaufbau bis zur
 ersten Flugzeuganzeige und erklärt auch alle optionalen Komponenten.
 
 FlightWall arbeitet eigenständig auf dem ESP32-S3. Ein Raspberry Pi oder
@@ -127,6 +127,21 @@ pio run -e esp32s3_n16r8_headless
 pio run -e esp32s3_n16r8_headless -t upload
 ```
 
+Wenn mehrere USB-Geräte angeschlossen sind, den Port zuerst anzeigen und beim
+Upload ausdrücklich angeben (hier als Beispiel unter macOS):
+
+```bash
+pio device list
+pio run -e esp32s3_n16r8_headless -t upload \
+  --upload-port /dev/cu.usbmodem101
+```
+
+Der normale Upload behält bereits gespeicherte WLAN- und
+Anwendungseinstellungen. Ein zuvor verwendetes Board startet deshalb nach dem
+Flashen gegebenenfalls sofort mit seiner alten Konfiguration. Ein vollständiges
+Löschen ist nur für eine bewusst fabrikneue Einrichtung erforderlich und
+entfernt alle gespeicherten Einstellungen.
+
 Bei Problemen liefert der serielle Monitor weitere Informationen:
 
 ```bash
@@ -229,6 +244,11 @@ Für den Einstieg empfiehlt sich:
 Transpondernotfälle mit `7500`, `7600` oder `7700` umgehen Radius und Filter
 immer. Erkannte Special Types werden innerhalb des doppelten normalen Radius
 bevorzugt berücksichtigt.
+
+Sind mehrere Transpondernotfälle gleichzeitig vorhanden, wechselt die zentrale
+Auswahl ungefähr alle zehn Sekunden. Matrix und Web-Display zeigen dadurch
+dieselbe wechselnde Auswahl; die Rotation funktioniert auch auf einem
+Headless-Controller.
 
 ### Matrixseiten
 
@@ -371,6 +391,13 @@ Die wichtigsten Adressen sind:
 
 Das Web-Display ist optional. Es zeigt dieselben aktuellen Flugdaten in einem
 responsiven Browserlayout; die LED-Matrix funktioniert unabhängig davon.
+Bei mehreren Headless-Controllern mit identischem mDNS-Namen sollte jeweils die
+IP-Adresse aus dem Router verwendet werden.
+
+Die Statusseite enthält außerdem eine flüchtige Tagesstatistik. Sie zählt bis
+zu 4096 eindeutige, frische Flugzeuge und gliedert bis zu 256 Specials nach
+Art. Gesamtzahl, Special-Anteil, Erfassungsbeginn und Kapazitätsgrenzen werden
+angezeigt. Der Reset erfolgt bei lokalem Datumswechsel und bei jedem Neustart.
 
 ## 11. OTA optional aktivieren
 

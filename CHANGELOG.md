@@ -3,6 +3,8 @@
 ## 3.6.1-dual-target.11 – 2026-11-02
 
 - Airline-Code `ABP` (ABS Jets) ergänzt
+- README, Getting-Started- und PlatformIO-Anleitung auf den aktuellen Stand
+  der beiden Controller-Varianten, Notfallrotation und Tagesstatistik gebracht
 
 ## 3.6.1-dual-target.10 – 2026-11-02
 

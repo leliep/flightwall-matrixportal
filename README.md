@@ -19,7 +19,7 @@ erklärt auch BME280, BH1750, MQTT, Routenauflösung und OTA.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.8` |
+| Firmware | `3.6.1-dual-target.11` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -51,6 +51,9 @@ Wesentliche Funktionen:
 - Auswahl des nächsten geeigneten Flugzeugs einschließlich CPA-Berechnung
 - konfigurierbare Filter für Kleinflugzeuge und Maximalhöhe
 - bevorzugte Behandlung interessanter Flugzeuge und Transpondernotfälle
+- große Notfallseite und automatische Rotation mehrerer Notfallflugzeuge in
+  Matrix- und Webanzeige
+- tägliche Statistik eindeutiger Flugzeuge, Specials und Transpondernotfälle
 - Routenauflösung über adsb.im mit kostenlosem ADSBDB-Fallback und
   verwaltetem RAM-/Flash-Cache
 - vollständige Multi-Hop-Routen und kompakte Darstellung geschlossener Umläufe
@@ -435,6 +438,9 @@ Nach erfolgreicher WLAN-Verbindung antwortet der Server auf Port 80:
 
 Falls mDNS im Netz nicht funktioniert, kann statt des jeweiligen Namens die im
 seriellen Monitor oder Router angezeigte IP-Adresse verwendet werden.
+Werden mehrere Headless-Controller gleichzeitig betrieben, verwenden sie
+denselben mDNS-Namen. In diesem Fall sollten die numerischen IP-Adressen oder
+feste DHCP-Zuordnungen im Router verwendet werden.
 
 Die Konfigurationsseite ist für iPhone, Tablet und Desktop optimiert. Kurze
 Werte und zusammengehörige Optionen werden in einem kompakten, responsiven
@@ -535,6 +541,21 @@ Headless-Server für das ESP32-S3-N16R8-Board kompilieren und übertragen:
 pio run -e esp32s3_n16r8_headless
 pio run -e esp32s3_n16r8_headless -t upload
 ```
+
+Bei mehreren angeschlossenen seriellen Geräten zuerst den USB-Port ermitteln
+und ausdrücklich angeben (hier als Beispiel unter macOS):
+
+```bash
+pio device list
+pio run -e esp32s3_n16r8_headless -t upload \
+  --upload-port /dev/cu.usbmodem101
+```
+
+Ein normaler USB-Upload ersetzt Bootloader, Partitionstabelle und Firmware,
+lässt aber die im NVS gespeicherte WLAN- und Anwendungskonfiguration bestehen.
+Das ist für Updates und Ersatzcontroller meist erwünscht. Soll ein bereits
+benutztes Board vollständig neu eingerichtet werden, muss es vor dem Upload
+gezielt gelöscht werden; dabei gehen alle gespeicherten Einstellungen verloren.
 
 Die beiden Firmwaredateien liegen anschließend unter:
 
@@ -664,6 +685,12 @@ Verfügbare Tests:
 - Transpondernotfalltest mit einem bis drei Flugzeugen
 - etwa 23 Sekunden langer Matrixtest mit Farben, Raster, Linien, Text,
   Farbbalken und allen Special-Type-Symbolen
+
+Die Tagesstatistik zählt jedes frische Flugzeug anhand ICAO-Hexadresse,
+Registrierung oder Callsign nur einmal. Bis zu 4096 Flugzeuge und 256 Specials
+werden im RAM verfolgt. Der Reset erfolgt um Mitternacht lokaler NTP-Zeit und
+zusätzlich bei jedem Neustart; die Statusseite zeigt den tatsächlichen
+Erfassungsbeginn und beide Kapazitätsgrenzen.
 
 Der Netzwerk-Task läuft mit niedriger Priorität und kurzen Scheduler-Pausen,
 damit synchrone HTTP-, TLS- und MQTT-Aufrufe den ESP32-Task-Watchdog nicht
