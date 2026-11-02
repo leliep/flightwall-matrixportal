@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-11-02T12:32:12+01:00",
-  "status": "integrated",
+  "updated_at": "2026-11-02T19:57:34+01:00",
+  "status": "pending",
   "airports": [
     "ACH",
     "AES",
@@ -30,10 +30,13 @@
     "KSY",
     "LBG",
     "LCY",
+    "LIL",
     "LLA",
+    "LSY",
     "LUZ",
     "NGU",
     "NKT",
+    "NYO",
     "OFF",
     "OUD",
     "PMF",
@@ -53,6 +56,7 @@
     "ZNZ"
   ],
   "airlines": [
+    "ABF",
     "ABP",
     "AHY",
     "AIH",
@@ -60,10 +64,12 @@
     "ALK",
     "BBB",
     "BOH",
+    "BSF",
     "CAL",
     "CAT",
     "CFE",
     "CHG",
+    "CLU",
     "CTM",
     "CXA",
     "DLY",
@@ -81,10 +87,12 @@
     "ICL",
     "JSE",
     "LZB",
+    "LOG",
     "N9",
     "NAF",
     "OLI",
     "PEA",
+    "POF",
     "SEU",
     "STQ",
     "SUA",
@@ -464,6 +472,35 @@
       "unknown_airports": [],
       "unknown_airlines": [
         "ABP"
+      ],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "matrixportal_s3",
+      "firmware_version": "3.6.1-dual-target.10",
+      "unknown_airports": [
+        "NYO"
+      ],
+      "unknown_airlines": [
+        "ABP",
+        "CLU"
+      ],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "esp32s3_n16r8_headless",
+      "firmware_version": "3.6.1-dual-target.10",
+      "unknown_airports": [
+        "LSY",
+        "LIL"
+      ],
+      "unknown_airlines": [
+        "LOG",
+        "POF",
+        "ABF",
+        "BSF"
       ],
       "dropped_unknown_airports": 0,
       "dropped_unknown_airlines": 0
