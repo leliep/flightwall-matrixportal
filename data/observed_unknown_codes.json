@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-11-01T20:06:23+01:00",
-  "status": "integrated",
+  "updated_at": "2026-11-02T08:49:05+01:00",
+  "status": "pending_lookup_review",
   "airports": [
     "ACH",
     "AES",
@@ -12,6 +12,7 @@
     "BWI",
     "CEQ",
     "CGK",
+    "CHR",
     "DAR",
     "EDKL",
     "EDLC",
@@ -41,6 +42,7 @@
     "RZV",
     "SLC",
     "SVG",
+    "TLN",
     "TPA",
     "TSF",
     "TUF",
@@ -53,6 +55,7 @@
   "airlines": [
     "AHY",
     "AIH",
+    "AJD",
     "ALK",
     "BBB",
     "BOH",
@@ -66,6 +69,7 @@
     "EIS",
     "EJM",
     "ELI",
+    "EMC",
     "FLI",
     "FYG",
     "GER",
@@ -79,10 +83,12 @@
     "N9",
     "NAF",
     "OLI",
+    "PEA",
     "SEU",
     "STQ",
     "SUA",
     "TDR",
+    "TEU",
     "THA",
     "TRK",
     "UAG"
@@ -418,6 +424,35 @@
         "FLI",
         "LZB",
         "UAG"
+      ],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "matrixportal_s3",
+      "firmware_version": "3.6.1-dual-target.8",
+      "unknown_airports": [
+        "TLN"
+      ],
+      "unknown_airlines": [
+        "TEU",
+        "PEA"
+      ],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "esp32s3_n16r8_headless",
+      "firmware_version": "3.6.1-dual-target.8",
+      "unknown_airports": [
+        "CHR",
+        "TLN"
+      ],
+      "unknown_airlines": [
+        "EMC",
+        "TEU",
+        "AJD",
+        "PEA"
       ],
       "dropped_unknown_airports": 0,
       "dropped_unknown_airlines": 0
