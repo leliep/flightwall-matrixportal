@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.6.1-dual-target.10 – 2026-11-02
+
+- mehrere Transpondernotfälle wechseln alle zehn Sekunden unabhängig vom
+  Matrixseitenzyklus; Webdisplay und Headless-Controller wechseln nun ebenfalls
+- tägliche Zählung von bis zu 4096 eindeutigen, frischen ADS-B-Flugzeugen
+- Special- und Notfallstatistik wird bei lokalem Datumswechsel zurückgesetzt
+- Statusseite zeigt Gesamtzahl, Special-Anteil, Erfassungsbeginn und beide
+  Kapazitätsgrenzen
+- additive Tagesstatistik in `/api/status` ergänzt
+
 ## 3.6.1-dual-target.9 – 2026-11-02
 
 - Transpondercode auf der Matrix-Notfallseite groß und mittig dargestellt

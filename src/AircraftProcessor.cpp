@@ -14,6 +14,18 @@ String upperTrimmed(const char* value) {
   return result;
 }
 
+uint64_t identityHash(const String& identifier, uint8_t identifierKind) {
+  if (!identifier.length()) return 0;
+  uint64_t hash = 1469598103934665603ULL;
+  hash ^= identifierKind;
+  hash *= 1099511628211ULL;
+  for (size_t index = 0; index < identifier.length(); ++index) {
+    hash ^= static_cast<uint8_t>(identifier[index]);
+    hash *= 1099511628211ULL;
+  }
+  return hash ? hash : 1;
+}
+
 String normalizedRegistration(const String& value) {
   String result;
   for (size_t index = 0; index < value.length(); ++index) {
@@ -111,6 +123,21 @@ bool readAltitude(JsonObjectConst raw, int& altitude) {
 }
 
 }  // namespace
+
+uint64_t aircraftIdentity(const Aircraft& aircraft) {
+  if (aircraft.hex.length()) return identityHash(aircraft.hex, 1);
+  if (aircraft.registration.length())
+    return identityHash(aircraft.registration, 2);
+  return identityHash(aircraft.flight, 3);
+}
+
+uint64_t aircraftIdentityFromJson(JsonObjectConst raw) {
+  const String hex = upperTrimmed(raw["hex"] | "");
+  if (hex.length()) return identityHash(hex, 1);
+  const String registration = upperTrimmed(raw["r"] | "");
+  if (registration.length()) return identityHash(registration, 2);
+  return identityHash(upperTrimmed(raw["flight"] | ""), 3);
+}
 
 bool isEmergencySquawk(const String& squawk) {
   return squawk == "7500" || squawk == "7600" || squawk == "7700";

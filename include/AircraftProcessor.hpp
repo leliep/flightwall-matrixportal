@@ -15,6 +15,8 @@ struct ProcessingConfig {
 
 bool aircraftFromJson(JsonObjectConst raw, const ProcessingConfig& config,
                       Aircraft& aircraft);
+uint64_t aircraftIdentity(const Aircraft& aircraft);
+uint64_t aircraftIdentityFromJson(JsonObjectConst raw);
 bool isEmergencySquawk(const String& squawk);
 bool selectAircraft(const std::vector<Aircraft>& aircraft,
                     const ProcessingConfig& config, Aircraft& selected,

@@ -86,8 +86,16 @@ AdsbResult AdsbClient::fetch(const ProcessingConfig& config) {
                                    ? document["aircraft"].as<JsonArrayConst>()
                                    : document["ac"].as<JsonArrayConst>();
   result.receivedAircraft = rawAircraft.size();
+  result.observedAircraftIdentities.reserve(
+      std::min<size_t>(rawAircraft.size(), 128));
   result.candidates.reserve(std::min<size_t>(rawAircraft.size(), 64));
   for (JsonObjectConst raw : rawAircraft) {
+    const bool fresh = raw["seen"].isNull() ||
+        raw["seen"].as<float>() <= config.maxPositionAgeSeconds;
+    if (fresh) {
+      const uint64_t identity = aircraftIdentityFromJson(raw);
+      if (identity) result.observedAircraftIdentities.push_back(identity);
+    }
     Aircraft aircraft;
     if (aircraftFromJson(raw, config, aircraft))
       result.candidates.push_back(std::move(aircraft));

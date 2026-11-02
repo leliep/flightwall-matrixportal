@@ -255,9 +255,11 @@ Flugzeugseiten mit eigenen Symbolen dargestellt. Die Erkennung verwendet
 ADS-B-Metadaten und bekannte Callsign-Muster, beispielsweise `GAF…`, `BPO…`,
 `VADER…`, `SHOCK…`, `SONIC…` und `FELON…`.
 
-Seit dem letzten Neustart zählt die Statusseite eindeutige Special-Flugzeuge
-nach Kategorie. Bis zu 256 Identitäten werden über ICAO-Hexadresse,
-Registrierung oder Callsign unterschieden.
+Die Statusseite zählt pro Kalendertag eindeutige Flugzeuge und weist den
+Anteil der Specials aus. Specials werden zusätzlich nach Kategorie aufgeteilt.
+Bis zu 4096 Flugzeug- und 256 Special-Identitäten werden über ICAO-Hexadresse,
+Registrierung oder Callsign unterschieden. Die flüchtige Statistik wird um
+Mitternacht Ortszeit sowie bei einem Neustart zurückgesetzt.
 
 ### Transpondernotfälle
 
@@ -271,8 +273,10 @@ Die Squawk-Codes erhalten immer höchste Priorität:
 
 Diese Flugzeuge umgehen Anzeigeradius, Maximalhöhe und Kleinflugzeugfilter.
 Eine zusätzliche, nicht abschaltbare Alarmseite zeigt Identität, Code,
-Bedeutung, Entfernung und Höhe. Sind mehrere Notfälle vorhanden, wechselt die
-Anzeige nach jedem vollständigen Seitenzyklus zum nächsten Flugzeug.
+Bedeutung und bei mehreren Notfällen deren Position in der Auswahl. Sind
+mehrere Notfälle vorhanden, wechselt der Server alle zehn Sekunden zum
+nächsten Flugzeug. Matrix und Webdisplay verwenden dieselbe Auswahl; der
+Wechsel funktioniert daher auch in der Headless-Variante.
 
 Das Webinterface kann ein bis drei Testflugzeuge für höchstens zwei Minuten
 simulieren. Der Test verändert weder ADS-B-Daten noch gespeicherte
@@ -648,7 +652,7 @@ Die Statusseite zeigt unter anderem:
 - aktive ADS-B-Quelle, Abrufalter, empfangene und geeignete Flugzeuge
 - aktuelles Flugzeug, Route, CPA, Filter und Routencache
 - unbekannte Airport-/Airline-Codes
-- Special- und Notfallstatistik seit dem Neustart
+- tägliche Gesamt-, Special- und Notfallstatistik mit Erfassungsbeginn
 - BME280-, Schimmel-, MQTT- und BH1750-Werte
 - Matrix-Farbtiefe, Bildwiederholrate sowie letzte/maximale `show()`-Dauer
 - maximale Laufzeiten einzelner Netzwerkphasen und Taskdiagnose

@@ -43,8 +43,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.9";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-02 emergency display update";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.10";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-02 daily statistics update";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -65,6 +65,7 @@ constexpr uint32_t DEFAULT_PAGE_INTERVAL_MS = 5000;
 constexpr uint32_t PAGE_TRANSITION_MS = 350;
 constexpr uint32_t STALE_AFTER_MS = 20000;
 constexpr uint32_t EMERGENCY_PAGE_DURATION_MS = 5000;
+constexpr uint32_t EMERGENCY_ROTATION_MS = 10000;
 constexpr uint32_t EMERGENCY_TEST_DURATION_MS = 120000;
 constexpr uint32_t BUTTON_DEBOUNCE_MS = 150;
 constexpr uint32_t BRIGHTNESS_MESSAGE_MS = 1200;
@@ -420,7 +421,7 @@ RouteClient routeClient;
 String routedFlight;
 RouteResult currentRoute;
 String selectedEmergencyHex;
-volatile bool emergencyAdvanceRequested = false;
+uint32_t emergencySelectionStarted = 0;
 String emergencyTestCode;
 uint8_t emergencyTestCount = 0;
 uint32_t emergencyTestUntil = 0;
@@ -490,6 +491,12 @@ size_t seenSpecialAircraftCount = 0;
 uint32_t specialAircraftCounts[
     static_cast<size_t>(SpecialStatisticCategory::Count)] = {};
 bool specialAircraftTrackingLimitReached = false;
+constexpr size_t OBSERVED_AIRCRAFT_TRACKING_LIMIT = 4096;
+uint64_t seenAircraft[OBSERVED_AIRCRAFT_TRACKING_LIMIT];
+size_t seenAircraftCount = 0;
+bool aircraftTrackingLimitReached = false;
+uint32_t dailyStatisticsDate = 0;
+time_t dailyStatisticsStarted = 0;
 
 String customPageText;
 uint8_t customScrollSpeed = 1;
@@ -1844,12 +1851,8 @@ bool selectEnabledPage() {
 
 
 void advancePage() {
-  const uint8_t previousSlot = currentPageSlot;
   currentPageSlot = (currentPageSlot + 1) % PAGE_COUNT;
   selectEnabledPage();
-  if (flight.emergency && flight.emergencyCount > 1 &&
-      currentPageSlot <= previousSlot)
-    emergencyAdvanceRequested = true;
 }
 
 
@@ -2068,7 +2071,6 @@ void drawDisplay() {
     matrix.fillScreen(0);
     if (flight.emergency) {
       drawEmergencyPage();
-      if (flight.emergencyCount > 1) emergencyAdvanceRequested = true;
     }
     showMatrix();
     return;
@@ -2652,26 +2654,7 @@ bool specialStatisticCategory(const Aircraft &aircraft,
 
 
 uint64_t specialAircraftIdentity(const Aircraft &aircraft) {
-  const String *identifier = &aircraft.hex;
-  uint8_t identifierKind = 1;
-  if (!identifier->length()) {
-    identifier = &aircraft.registration;
-    identifierKind = 2;
-  }
-  if (!identifier->length()) {
-    identifier = &aircraft.flight;
-    identifierKind = 3;
-  }
-  if (!identifier->length()) return 0;
-
-  uint64_t hash = 1469598103934665603ULL;
-  hash ^= identifierKind;
-  hash *= 1099511628211ULL;
-  for (size_t index = 0; index < identifier->length(); ++index) {
-    hash ^= static_cast<uint8_t>((*identifier)[index]);
-    hash *= 1099511628211ULL;
-  }
-  return hash ? hash : 1;
+  return aircraftIdentity(aircraft);
 }
 
 
@@ -2715,6 +2698,74 @@ void updateSpecialAircraftStatistics(const std::vector<Aircraft> &aircraft) {
 
 uint32_t specialAircraftCount(SpecialStatisticCategory category) {
   return specialAircraftCounts[static_cast<size_t>(category)];
+}
+
+
+uint32_t statisticsDateKey(const struct tm &localClock) {
+  return static_cast<uint32_t>(localClock.tm_year + 1900) * 10000UL +
+         static_cast<uint32_t>(localClock.tm_mon + 1) * 100UL +
+         static_cast<uint32_t>(localClock.tm_mday);
+}
+
+
+void resetDailyAircraftStatistics(const struct tm &localClock) {
+  seenAircraftCount = 0;
+  aircraftTrackingLimitReached = false;
+  seenSpecialAircraftCount = 0;
+  specialAircraftTrackingLimitReached = false;
+  for (size_t index = 0;
+       index < static_cast<size_t>(SpecialStatisticCategory::Count); ++index)
+    specialAircraftCounts[index] = 0;
+  dailyStatisticsDate = statisticsDateKey(localClock);
+  dailyStatisticsStarted = time(nullptr);
+  Serial.println("Daily aircraft statistics reset");
+}
+
+
+void serviceDailyAircraftStatistics() {
+  static uint32_t lastCheck = 0;
+  const uint32_t nowMs = millis();
+  if (lastCheck && nowMs - lastCheck < 1000) return;
+  lastCheck = nowMs;
+
+  struct tm localClock;
+  if (!readLocalClock(localClock)) return;
+  const uint32_t date = statisticsDateKey(localClock);
+  if (!dailyStatisticsDate) {
+    dailyStatisticsDate = date;
+    dailyStatisticsStarted = time(nullptr) - nowMs / 1000;
+  } else if (date != dailyStatisticsDate) {
+    resetDailyAircraftStatistics(localClock);
+  }
+}
+
+
+void updateObservedAircraftStatistics(
+    const std::vector<uint64_t> &identities) {
+  for (const uint64_t identity : identities) {
+    if (!identity) continue;
+    size_t index = 0;
+    for (; index < seenAircraftCount; ++index) {
+      if (seenAircraft[index] == identity) break;
+    }
+    if (index < seenAircraftCount) continue;
+    if (seenAircraftCount >= OBSERVED_AIRCRAFT_TRACKING_LIMIT) {
+      aircraftTrackingLimitReached = true;
+      continue;
+    }
+    seenAircraft[seenAircraftCount++] = identity;
+  }
+}
+
+
+String dailyStatisticsStartedText() {
+  if (!dailyStatisticsStarted)
+    return uiText("Neustart / warte auf NTP", "restart / waiting for NTP");
+  struct tm localClock;
+  localtime_r(&dailyStatisticsStarted, &localClock);
+  char text[24];
+  strftime(text, sizeof(text), "%d.%m.%Y %H:%M", &localClock);
+  return String(text);
 }
 
 
@@ -2777,7 +2828,10 @@ bool fetchLocalFlight() {
   lastReceivedAircraft = result.receivedAircraft;
   lastCandidateAircraft = result.candidates.size();
   lastFeedTimestamp = result.feedTimestamp;
-  if (result.ok) updateSpecialAircraftStatistics(result.candidates);
+  if (result.ok) {
+    updateObservedAircraftStatistics(result.observedAircraftIdentities);
+    updateSpecialAircraftStatistics(result.candidates);
+  }
   appendEmergencyTestAircraft(result);
   if (!result.ok && emergencyTestCount) {
     result.ok = true;
@@ -2793,11 +2847,21 @@ bool fetchLocalFlight() {
   Aircraft selected;
   size_t emergencyCount = 0;
   size_t emergencyIndex = 0;
-  const bool advanceEmergency = emergencyAdvanceRequested;
-  emergencyAdvanceRequested = false;
+  const uint32_t now = millis();
+  const bool advanceEmergency = selectedEmergencyHex.length() &&
+      networkFlight.emergencyCount > 1 && emergencySelectionStarted &&
+      now - emergencySelectionStarted >= EMERGENCY_ROTATION_MS;
+  const String previousEmergencyHex = selectedEmergencyHex;
   if (selectAircraft(result.candidates, config, selected,
                      selectedEmergencyHex, advanceEmergency,
                      emergencyCount, emergencyIndex)) {
+    if (selected.emergency) {
+      if (emergencyCount <= 1 || !emergencySelectionStarted ||
+          selectedEmergencyHex != previousEmergencyHex)
+        emergencySelectionStarted = now;
+    } else {
+      emergencySelectionStarted = 0;
+    }
     const bool newRouteSession =
         routeObservationRequiresRefresh(selected, millis());
     if (newRouteSession) routeClient.removeCacheEntry(selected.flight);
@@ -2893,6 +2957,7 @@ bool fetchLocalFlight() {
                                ? relativeBearing(selected.bearing, viewHeading)
                                : NAN;
   } else {
+    emergencySelectionStarted = 0;
     routedFlight = "";
     currentRoute = {};
   }
@@ -3540,10 +3605,23 @@ String webPage(bool includeRouteCache = true) {
                     String(statusFlight.specialType.length()
                                ? displayRadiusKm * 2.0f : displayRadiusKm, 1) + " km";
   html += "</b></div></section><section class='statusCard wide'><h3>";
-  html += uiText("Specials seit Neustart", "Specials since restart");
+  html += uiText("Tagesstatistik Flugzeuge", "Daily aircraft statistics");
   html += "</h3><div class='status'><span>";
-  html += uiText("Gesamt", "Total");
+  html += uiText("Flugzeuge gesamt", "Unique aircraft");
+  html += "</span><b>" + String(seenAircraftCount);
+  html += "</b><span>";
+  html += uiText("Specials gesamt", "Total specials");
   html += "</span><b>" + String(seenSpecialAircraftCount);
+  html += "</b><span>";
+  html += uiText("Special-Anteil", "Special share");
+  html += "</span><b>";
+  html += seenAircraftCount
+              ? String(100.0f * seenSpecialAircraftCount /
+                           static_cast<float>(seenAircraftCount), 1) + " %"
+              : "-";
+  html += "</b><span>";
+  html += uiText("Erfassung seit", "Tracking since");
+  html += "</span><b>" + dailyStatisticsStartedText();
   html += F("</b><span>7500 · Hijack</span><b>");
   html += String(specialAircraftCount(SpecialStatisticCategory::Emergency7500));
   html += F("</b><span>7600 · Radio</span><b>");
@@ -3581,12 +3659,19 @@ String webPage(bool includeRouteCache = true) {
   html += "</span><b>" +
           String(specialAircraftCount(SpecialStatisticCategory::Other));
   html += "</b><span>";
-  html += uiText("Erfassung", "Tracking");
+  html += uiText("Special-Erfassung", "Special tracking");
   html += "</span><b>";
   html += specialAircraftTrackingLimitReached
               ? uiText("Limit erreicht", "limit reached")
               : String(seenSpecialAircraftCount) + " / " +
                     String(SPECIAL_AIRCRAFT_TRACKING_LIMIT);
+  html += "</b><span>";
+  html += uiText("Flugzeug-Erfassung", "Aircraft tracking");
+  html += "</span><b>";
+  html += aircraftTrackingLimitReached
+              ? uiText("Limit erreicht", "limit reached")
+              : String(seenAircraftCount) + " / " +
+                    String(OBSERVED_AIRCRAFT_TRACKING_LIMIT);
   html += F("</b></div></section><section class='statusCard'><h3>ADS-B und Route</h3><div class='status'><span>ADS-B</span><b>");
   html += statusError.length() ? displayAscii(statusError) : "OK";
   html += F("</b><span>ADS-B-Fehler</span><b>");
@@ -4288,7 +4373,7 @@ void handleEmergencyTest() {
   emergencyTestCount = constrain(webServer.arg("emergencyTestCount").toInt(), 1, 3);
   emergencyTestUntil = millis() + EMERGENCY_TEST_DURATION_MS;
   selectedEmergencyHex = "";
-  emergencyAdvanceRequested = false;
+  emergencySelectionStarted = 0;
   fetchLocalFlight();
   webServer.sendHeader("Location", "/");
   webServer.send(303, "text/plain; charset=utf-8", uiText("Notfalltest gestartet", "Emergency test started"));
@@ -4300,7 +4385,7 @@ void handleStopEmergencyTest() {
   emergencyTestCode = "";
   emergencyTestUntil = 0;
   selectedEmergencyHex = "";
-  emergencyAdvanceRequested = false;
+  emergencySelectionStarted = 0;
   fetchLocalFlight();
   webServer.sendHeader("Location", "/");
   webServer.send(303, "text/plain; charset=utf-8", uiText("Notfalltest beendet", "Emergency test stopped"));
@@ -4611,6 +4696,16 @@ void handleStatusApi() {
       ",\"bearing\":" + jsonNumberOrNull(statusFlight.bearing, 0) +
       ",\"relative_bearing\":" +
           jsonNumberOrNull(statusFlight.relativeBearing) +
+      ",\"daily_aircraft_statistics\":{\"unique_aircraft\":" +
+          String(seenAircraftCount) +
+          ",\"tracking_limit\":" +
+          String(OBSERVED_AIRCRAFT_TRACKING_LIMIT) +
+          ",\"tracking_limit_reached\":" +
+          String(aircraftTrackingLimitReached ? "true" : "false") +
+          ",\"period_started_epoch\":" +
+          (dailyStatisticsStarted
+               ? String(static_cast<uint32_t>(dailyStatisticsStarted))
+               : "null") + "}" +
       ",\"special_statistics\":{\"total\":" +
           String(seenSpecialAircraftCount) +
           ",\"tracking_limit\":" + String(SPECIAL_AIRCRAFT_TRACKING_LIMIT) +
@@ -5281,6 +5376,7 @@ void networkTask(void *) {
   }
   for (;;) {
     const uint32_t now = millis();
+    serviceDailyAircraftStatistics();
     const bool wifiConnected = WiFi.status() == WL_CONNECTED;
     if (!wifiConnected && wifiWasConnected) {
       wifiWasConnected = false;

@@ -10,6 +10,7 @@ struct AdsbResult {
   bool ok = false;
   uint32_t feedTimestamp = 0;
   size_t receivedAircraft = 0;
+  std::vector<uint64_t> observedAircraftIdentities;
   std::vector<Aircraft> candidates;
   String error;
 };
