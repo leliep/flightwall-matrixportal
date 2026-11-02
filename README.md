@@ -19,7 +19,7 @@ erklärt auch BME280, BH1750, MQTT, Routenauflösung und OTA.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.13` |
+| Firmware | `3.6.1-dual-target.14` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -669,7 +669,9 @@ Die Statusseite zeigt unter anderem:
 
 - Firmwareversion, Build, Laufzeit und Neustartgrund
 - Hardwarevariante sowie Zustand und Helligkeitsmodus der RGB-Status-LED
-- freien Heap, WLAN-Name, Verbindungsstatus, Einrichtungsnetz und Wiederverbindungen
+- freien Heap, aktuelle IP, Hostname, verbundene und gespeicherte SSID,
+  Signalqualität, Gateway, Subnetz, DNS, WLAN-Kanal, MAC-Adresse,
+  Einrichtungsnetz und Wiederverbindungen
 - aktive ADS-B-Quelle, Abrufalter, empfangene und geeignete Flugzeuge
 - aktuelles Flugzeug, Route, CPA, Filter und Routencache
 - unbekannte Airport-/Airline-Codes

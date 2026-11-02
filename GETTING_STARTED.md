@@ -1,7 +1,7 @@
 # FlightWall – Getting Started
 
 Diese Anleitung beschreibt die grundlegende Einrichtung von FlightWall in der
-Firmwareversion `3.6.1-dual-target.13`. Sie führt vom Hardwareaufbau bis zur
+Firmwareversion `3.6.1-dual-target.14`. Sie führt vom Hardwareaufbau bis zur
 ersten Flugzeuganzeige und erklärt auch alle optionalen Komponenten.
 
 FlightWall arbeitet eigenständig auf dem ESP32-S3. Ein Raspberry Pi oder
@@ -391,6 +391,10 @@ Die wichtigsten Adressen sind:
 
 Das Web-Display ist optional. Es zeigt dieselben aktuellen Flugdaten in einem
 responsiven Browserlayout; die LED-Matrix funktioniert unabhängig davon.
+Die Konfigurationsseite zeigt die aktuelle IP-Adresse bereits im WLAN-Bereich.
+Im Netzwerkstatus stehen zusätzlich Hostname, tatsächlich verbundenes und
+gespeichertes WLAN, Signalqualität, Gateway, Subnetz, DNS, Kanal und
+MAC-Adresse. Dieselben Angaben sind auch in `/api/status` verfügbar.
 Bei mehreren Headless-Controllern mit identischem mDNS-Namen sollte jeweils die
 IP-Adresse aus dem Router verwendet werden.
 

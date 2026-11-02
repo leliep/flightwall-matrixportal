@@ -43,8 +43,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.13";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-02 ABP lookup update";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.14";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-02 network status update";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -3144,6 +3144,25 @@ String elevatedHumidityDurationText() {
 }
 
 
+String currentNetworkIpText() {
+  if (WiFi.status() == WL_CONNECTED) return WiFi.localIP().toString();
+  if (wifiSetupAccessPointActive) return WiFi.softAPIP().toString();
+  return "-";
+}
+
+
+String wifiSignalQualityText() {
+  if (WiFi.status() != WL_CONNECTED)
+    return uiText("getrennt", "disconnected");
+  const int32_t rssi = WiFi.RSSI();
+  const char *quality = rssi >= -55 ? uiText("sehr gut", "excellent")
+                        : rssi >= -67 ? uiText("gut", "good")
+                        : rssi >= -75 ? uiText("ausreichend", "fair")
+                                      : uiText("schwach", "weak");
+  return String(rssi) + " dBm · " + quality;
+}
+
+
 void translateWebPageToEnglish(String &html) {
   if (!uiEnglish) return;
   struct Translation { const char *de; const char *en; };
@@ -3154,6 +3173,17 @@ void translateWebPageToEnglish(String &html) {
     {"Nur die ausgewählte Quelle wird abgefragt. Quelle 2 darf unkonfiguriert bleiben. Der Radius von adsb.fi wird automatisch aus dem Anzeigeradius berechnet.", "Only the selected source is queried. Source 2 may remain unconfigured. The adsb.fi radius is calculated automatically from the display radius."},
     {"Regen wird für die Anzeige von cm in mm umgerechnet. Ein leeres Passwortfeld behält das gespeicherte Passwort bei.", "Rain is converted from cm to mm for display. An empty password field keeps the saved password."},
     {"WLAN-Zugang", "Wi-Fi access"},
+    {"Aktuelle Netzwerkadresse", "Current network address"},
+    {"Verbindungsstatus", "Connection status"},
+    {"Verbundenes WLAN", "Connected Wi-Fi"},
+    {"Gespeichertes WLAN", "Stored Wi-Fi"},
+    {"IP-Adresse", "IP address"},
+    {"Gateway / Router", "Gateway / router"},
+    {"Subnetzmaske", "Subnet mask"},
+    {"DNS-Server", "DNS server"},
+    {"WLAN-Kanal", "Wi-Fi channel"},
+    {"MAC-Adresse", "MAC address"},
+    {"Hostname", "Hostname"},
     {"WLAN-Name (SSID)", "Wi-Fi name (SSID)"},
     {"WLANs suchen", "Scan for Wi-Fi networks"},
     {"Erkannte WLANs", "Detected Wi-Fi networks"},
@@ -3340,7 +3370,7 @@ String webPage(bool includeRouteCache = true) {
   html += F("body{font:16px system-ui;background:#10131a;color:#eef2ff;margin:auto;max-width:920px;padding:20px}");
   html += F("h1{font-size:1.5rem}fieldset{border:1px solid #445;border-radius:10px;margin:14px 0;padding:14px;min-width:0}");
   html += F("label{display:block;margin:12px 0}input[type=number],input[type=text],input[type=password],input[type=url],input[type=time],select,textarea{width:100%;box-sizing:border-box;padding:9px;min-height:42px}input[type=checkbox]{width:auto;min-height:auto}.fieldGrid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:10px 14px;align-items:end;margin:10px 0}.fieldGrid>label{grid-column:span 6;margin:0;min-width:0}.fieldGrid>.third{grid-column:span 4}.fieldGrid>.quarter{grid-column:span 3}.fieldGrid>.twoThird{grid-column:span 8}.fieldGrid>.threeQuarter{grid-column:span 9}.fieldGrid>.fieldWide{grid-column:1/-1}.fieldGrid .check{align-self:center;padding:9px 0}.buttonRow{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}.pageSettings{display:grid;grid-template-columns:minmax(0,1fr) minmax(120px,180px);gap:8px 14px;align-items:end;margin:10px 0}.pageSettings label{margin:0}.orderGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px 14px}.orderGrid label{margin:0}");
-  html += F("button{background:#00bcd4;color:#001018;border:0;border-radius:8px;padding:12px 18px;font-weight:bold}.danger{background:#ff8597;color:#24050b}.smallButton{padding:7px 10px;font-size:.82rem}.inlineForm{display:inline;margin:0 4px 0 0}.cacheTable{width:100%;border-collapse:collapse}.cacheTable th,.cacheTable td{text-align:left;padding:8px 6px;border-bottom:1px solid #343d50;vertical-align:top}.cacheTable th{color:#aab;font-size:.8rem}.cacheActions{white-space:nowrap}");
+  html += F("button{background:#00bcd4;color:#001018;border:0;border-radius:8px;padding:12px 18px;font-weight:bold}.danger{background:#ff8597;color:#24050b}.smallButton{padding:7px 10px;font-size:.82rem}.inlineForm{display:inline;margin:0 4px 0 0}.networkSummary{background:#172533;border:1px solid #31546b;border-radius:10px;padding:11px 13px;margin:0 0 13px;overflow-wrap:anywhere}.networkSummary a{color:#7ee7f0;font-weight:700}.cacheTable{width:100%;border-collapse:collapse}.cacheTable th,.cacheTable td{text-align:left;padding:8px 6px;border-bottom:1px solid #343d50;vertical-align:top}.cacheTable th{color:#aab;font-size:.8rem}.cacheActions{white-space:nowrap}");
   html += F(".status{display:grid;grid-template-columns:minmax(145px,42%) minmax(0,1fr);gap:7px 14px}.status span{color:#aab}.status b{overflow-wrap:anywhere}.statusNote{grid-column:1/-1;margin:2px 0 5px;line-height:1.35}.statusCards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.statusCard{background:#171c26;border:1px solid #343d50;border-radius:12px;padding:14px}.statusCard h3{margin:0 0 12px;font-size:1rem;color:#7ee7f0}.healthbar{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 14px}.pill{border-radius:999px;padding:7px 11px;font-size:.86rem;font-weight:700}.ok{background:#153b2b;color:#74e3aa}.warn{background:#493c16;color:#ffd166}.bad{background:#4a1f29;color:#ff8597}.off{background:#303541;color:#abb3c3}.wide{grid-column:1/-1}details summary{cursor:pointer;font-weight:700;color:#7ee7f0}details .status{margin-top:12px}@media(max-width:650px){body{padding:12px}.fieldGrid>label,.fieldGrid>.third,.fieldGrid>.quarter,.fieldGrid>.twoThird,.fieldGrid>.threeQuarter{grid-column:span 6}.fieldGrid>.fieldWide{grid-column:1/-1}.statusCards{grid-template-columns:1fr}.wide{grid-column:auto}.status{grid-template-columns:1fr}.status b{margin-bottom:7px}}@media(max-width:430px){.fieldGrid>label,.fieldGrid>.third,.fieldGrid>.quarter,.fieldGrid>.twoThird,.fieldGrid>.threeQuarter{grid-column:1/-1}.pageSettings{grid-template-columns:minmax(0,1fr) 112px;gap:8px}.pageSettings label{font-size:.92rem}fieldset{padding:11px}}.muted{color:#aab}</style></head><body>");
   html += F("<h1>");
   html += DEVICE_NAME;
@@ -3353,7 +3383,17 @@ String webPage(bool includeRouteCache = true) {
   html += F(">Deutsch</option><option value='en'");
   html += selected(uiEnglish);
   html += F(">English</option></select></label></div></fieldset>");
-  html += F("<fieldset><legend>WLAN-Zugang</legend><div class='fieldGrid'><label>WLAN-Name (SSID)<input id='wifiSsid' type='text' name='wifiSsid' maxlength='32' value='");
+  html += F("<fieldset><legend>WLAN-Zugang</legend><div class='networkSummary'>Aktuelle Netzwerkadresse: <a href='http://");
+  html += currentNetworkIpText();
+  html += F("/'>http://");
+  html += currentNetworkIpText();
+  html += F("/</a> · ");
+  html += WiFi.status() == WL_CONNECTED
+              ? uiText("verbunden", "connected")
+              : (wifiSetupAccessPointActive
+                     ? uiText("Einrichtungsnetz aktiv", "setup network active")
+                     : uiText("getrennt", "disconnected"));
+  html += F("</div><div class='fieldGrid'><label>WLAN-Name (SSID)<input id='wifiSsid' type='text' name='wifiSsid' maxlength='32' value='");
   html += htmlEscape(wifiSsid);
   html += F("' required></label><label>Neues WLAN-Passwort<input type='password' name='wifiPassword' minlength='8' maxlength='63' value='' placeholder='unverändert lassen'></label><label class='fieldWide check'><input type='checkbox' name='wifiOpen' value='1'");
   html += checked(!wifiPassword.length());
@@ -3538,15 +3578,30 @@ String webPage(bool includeRouteCache = true) {
 #endif
   html += "<span class='pill " + String(moldRiskCssClass()) +
           "'>● Schimmelrisiko: " + moldRiskText() + "</span>";
-  html += F("</div><div class='statusCards'><section class='statusCard'><h3>Netzwerk</h3><div class='status'><span>Adresse</span><b>http://");
+  html += F("</div><div class='statusCards'><section class='statusCard'><h3>Netzwerk</h3><div class='status'><span>Verbindungsstatus</span><b>");
+  html += WiFi.status() == WL_CONNECTED
+              ? uiText("verbunden", "connected")
+              : uiText("getrennt", "disconnected");
+  html += F("</b><span>Hostname</span><b>http://");
   html += DEVICE_HOSTNAME;
-  html += F(".local</b><span>IP</span><b>");
-  html += WiFi.localIP().toString();
-  html += F("</b><span>WLAN-Name</span><b>");
+  html += F(".local</b><span>IP-Adresse</span><b>");
+  html += currentNetworkIpText();
+  html += F("</b><span>Verbundenes WLAN</span><b>");
+  html += WiFi.status() == WL_CONNECTED ? htmlEscape(WiFi.SSID()) : "-";
+  html += F("</b><span>Gespeichertes WLAN</span><b>");
   html += htmlEscape(wifiSsid);
-  html += F("</b><span>WLAN</span><b>");
-  html += WiFi.status() == WL_CONNECTED ? String(WiFi.RSSI()) + " dBm"
-                                        : uiText("getrennt", "disconnected");
+  html += F("</b><span>Signal</span><b>");
+  html += wifiSignalQualityText();
+  html += F("</b><span>Gateway / Router</span><b>");
+  html += WiFi.status() == WL_CONNECTED ? WiFi.gatewayIP().toString() : "-";
+  html += F("</b><span>Subnetzmaske</span><b>");
+  html += WiFi.status() == WL_CONNECTED ? WiFi.subnetMask().toString() : "-";
+  html += F("</b><span>DNS-Server</span><b>");
+  html += WiFi.status() == WL_CONNECTED ? WiFi.dnsIP(0).toString() : "-";
+  html += F("</b><span>WLAN-Kanal</span><b>");
+  html += WiFi.status() == WL_CONNECTED ? String(WiFi.channel()) : "-";
+  html += F("</b><span>MAC-Adresse</span><b>");
+  html += WiFi.macAddress();
   html += F("</b><span>Einrichtungsnetz</span><b>");
   html += wifiSetupAccessPointActive
               ? htmlEscape(wifiSetupAccessPointSsid + " / 192.168.4.1")
@@ -4608,12 +4663,34 @@ void handleStatusApi() {
       ",\"wind_gust_kph\":" + jsonNumberOrNull(statusWindGust) +
       ",\"rain24_mm\":" + jsonNumberOrNull(statusRain) +
       ",\"wifi_ssid\":\"" + jsonEscape(wifiSsid) + "\"" +
+      ",\"wifi_connected_ssid\":\"" +
+          jsonEscape(WiFi.status() == WL_CONNECTED ? WiFi.SSID() : String("")) +
+          "\"" +
       ",\"wifi_connected\":" +
           String(WiFi.status() == WL_CONNECTED ? "true" : "false") +
+      ",\"hostname\":\"" + String(DEVICE_HOSTNAME) + ".local\"" +
+      ",\"local_ip\":\"" + currentNetworkIpText() + "\"" +
+      ",\"gateway_ip\":\"" +
+          (WiFi.status() == WL_CONNECTED ? WiFi.gatewayIP().toString() : "") +
+          "\"" +
+      ",\"subnet_mask\":\"" +
+          (WiFi.status() == WL_CONNECTED ? WiFi.subnetMask().toString() : "") +
+          "\"" +
+      ",\"dns_server\":\"" +
+          (WiFi.status() == WL_CONNECTED ? WiFi.dnsIP(0).toString() : "") +
+          "\"" +
+      ",\"wifi_channel\":" +
+          (WiFi.status() == WL_CONNECTED ? String(WiFi.channel()) : "null") +
+      ",\"mac_address\":\"" + WiFi.macAddress() + "\"" +
+      ",\"wifi_signal_quality\":\"" +
+          jsonEscape(wifiSignalQualityText()) + "\"" +
       ",\"wifi_setup_ap_active\":" +
           String(wifiSetupAccessPointActive ? "true" : "false") +
       ",\"wifi_setup_ap_ssid\":\"" +
           jsonEscape(wifiSetupAccessPointSsid) + "\"" +
+      ",\"wifi_setup_ap_ip\":\"" +
+          (wifiSetupAccessPointActive ? WiFi.softAPIP().toString() : "") +
+          "\"" +
       ",\"rssi\":" + String(WiFi.RSSI()) +
       ",\"wifi_reconnects\":" + String(wifiReconnectCount) +
       ",\"webserver_starts\":" + String(webServerStartCount) +

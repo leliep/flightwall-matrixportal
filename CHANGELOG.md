@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.6.1-dual-target.14 – 2026-11-02
+
+- aktuelle IP-Adresse und Verbindungszustand im WLAN-Konfigurationsbereich
+  hervorgehoben
+- Netzwerkstatus um tatsächliche und gespeicherte SSID, Signalbewertung,
+  Gateway, Subnetzmaske, DNS-Server, WLAN-Kanal und MAC-Adresse erweitert
+- `/api/status` liefert die zusätzlichen Netzwerk- und Setup-WLAN-Daten auch
+  für externe Diagnosewerkzeuge
+
 ## 3.6.1-dual-target.13 – 2026-11-02
 
 - Headless-Status zeigt die nicht vorhandene Matrix-Wetteranzeige nicht mehr
