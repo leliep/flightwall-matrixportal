@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-11-02T19:57:34+01:00",
-  "status": "integrated",
+  "updated_at": "2026-11-03T18:55:11+01:00",
+  "status": "pending",
   "airports": [
     "ACH",
     "AES",
@@ -17,12 +17,14 @@
     "EDKL",
     "EDLC",
     "EDLH",
+    "EDLS",
     "EDRF",
     "EDRK",
     "FAB",
     "FMM",
     "GHV",
     "GRO",
+    "JER",
     "JRO",
     "KIR",
     "KJK",
@@ -43,6 +45,7 @@
     "PXO",
     "REU",
     "RZV",
+    "SJD",
     "SLC",
     "SVG",
     "TLN",
@@ -86,14 +89,17 @@
     "HZA",
     "ICL",
     "JSE",
+    "KLJ",
     "LZB",
     "LOG",
     "N9",
     "NAF",
+    "NIT",
     "OLI",
     "PEA",
     "POF",
     "SEU",
+    "SPA",
     "STQ",
     "SUA",
     "TDR",
@@ -501,6 +507,35 @@
         "POF",
         "ABF",
         "BSF"
+      ],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "matrixportal_s3",
+      "firmware_version": "3.6.1-dual-target.14",
+      "unknown_airports": [
+        "EDLS",
+        "JER"
+      ],
+      "unknown_airlines": [
+        "NIT",
+        "SPA",
+        "KLJ"
+      ],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "esp32s3_n16r8_headless",
+      "firmware_version": "3.6.1-dual-target.14",
+      "unknown_airports": [
+        "SJD",
+        "JER"
+      ],
+      "unknown_airlines": [
+        "NIT",
+        "KLJ"
       ],
       "dropped_unknown_airports": 0,
       "dropped_unknown_airlines": 0
