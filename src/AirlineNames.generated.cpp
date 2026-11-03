@@ -178,6 +178,7 @@ const AirlineName names[] = {
   {"JOK", "Betreiber JOK"},
   {"JSD", "B. J. Aviation"},
   {"JSE", "Jets y Servicios Ejecutivos"},
+  {"JSF", "Jet Stream Charter"},
   {"JTD", "Jettime"},
   {"KAC", "Kuwait Airways"},
   {"KAL", "Korean Air"},

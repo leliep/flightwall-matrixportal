@@ -89,6 +89,7 @@
     "HZA",
     "ICL",
     "JSE",
+    "JSF",
     "KLJ",
     "LZB",
     "LOG",
@@ -521,7 +522,8 @@
       "unknown_airlines": [
         "NIT",
         "SPA",
-        "KLJ"
+        "KLJ",
+        "JSF"
       ],
       "dropped_unknown_airports": 0,
       "dropped_unknown_airlines": 0

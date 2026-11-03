@@ -9,8 +9,8 @@
 - Journalanzeige im Status und Download über `/journal.json` und
   `/journal.csv`; automatischer Reset bei lokalem Datumswechsel
 - Flughäfen EDLS (Stadtlohn-Vreden), JER (Jersey) und SJD (Los Cabos) sowie
-  Airlines KLJ (KlasJet), NIT (Middle Georgia State University) und SPA
-  (Sierra Pacific Airlines) ergänzt
+  Airlines JSF (Jet Stream Charter), KLJ (KlasJet), NIT (Middle Georgia State
+  University) und SPA (Sierra Pacific Airlines) ergänzt
 
 ## 3.6.1-dual-target.14 – 2026-11-02
 
