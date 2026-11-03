@@ -387,6 +387,8 @@ Die wichtigsten Adressen sind:
 | `http://matrixportal.local/api/display` | aktuelle Anzeigedaten als JSON |
 | `http://matrixportal.local/api/status` | vollständige Diagnose als JSON |
 | `http://matrixportal.local/unknown-codes.json` | unbekannte Airport-/Airline-Codes herunterladen |
+| `http://matrixportal.local/journal.json` | heutiges Flugzeugjournal als JSON herunterladen |
+| `http://matrixportal.local/journal.csv` | heutiges Flugzeugjournal als CSV herunterladen |
 | `http://matrixportal.local/update` | Web-OTA, sofern aktiviert |
 
 Das Web-Display ist optional. Es zeigt dieselben aktuellen Flugdaten in einem
@@ -402,6 +404,10 @@ Die Statusseite enthält außerdem eine flüchtige Tagesstatistik. Sie zählt bi
 zu 4096 eindeutige, frische Flugzeuge und gliedert bis zu 256 Specials nach
 Art. Gesamtzahl, Special-Anteil, Erfassungsbeginn und Kapazitätsgrenzen werden
 angezeigt. Der Reset erfolgt bei lokalem Datumswechsel und bei jedem Neustart.
+Zusätzlich führt die Software ein flüchtiges Journal mit bis zu 64 tatsächlich
+angezeigten Flugzeugen einschließlich Zeit, Route, Klassifizierung,
+Minimalentfernung und Minimal-CPA. Es kann über die Statusseite als JSON oder
+CSV heruntergeladen werden und wird zusammen mit der Tagesstatistik gelöscht.
 
 ## 11. OTA optional aktivieren
 

@@ -43,8 +43,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.14";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-02 network status update";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.15";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-03 CPA countdown and daily journal";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -184,6 +184,7 @@ struct FlightData {
   float speedKmh = NAN;
   float cpaKm = NAN;
   float cpaMinutes = NAN;
+  uint32_t cpaReferenceMs = 0;
   float verticalRateFpm = NAN;
   float bearing = NAN;
   float relativeBearing = NAN;
@@ -193,6 +194,29 @@ struct FlightData {
 
 FlightData flight;
 FlightData networkFlight;
+
+constexpr int32_t CPA_COUNTDOWN_HORIZON_SECONDS = 3 * 60;
+
+int32_t cpaCountdownSeconds(const FlightData &value) {
+  if (!value.available || value.motion == "departing" ||
+      isnan(value.cpaMinutes) || !value.cpaReferenceMs) return -1;
+  const int32_t initial = static_cast<int32_t>(roundf(value.cpaMinutes * 60.0f));
+  if (initial < 0 || initial > CPA_COUNTDOWN_HORIZON_SECONDS) return -1;
+  const int32_t elapsed = static_cast<int32_t>(
+      (millis() - value.cpaReferenceMs) / 1000UL);
+  const int32_t remaining = initial - elapsed;
+  return remaining >= 0 ? remaining : -1;
+}
+
+String cpaCountdownText(const FlightData &value, bool compact = false) {
+  const int32_t seconds = cpaCountdownSeconds(value);
+  if (seconds < 0) return "";
+  if (seconds < 60) return String(seconds) + "s";
+  const int32_t minutes = seconds / 60;
+  const int32_t rest = seconds % 60;
+  if (compact) return String(minutes) + "m" + String(rest) + "s";
+  return String(minutes) + ":" + (rest < 10 ? "0" : "") + String(rest);
+}
 uint32_t lastWiFiAttempt = 0;
 uint32_t lastPoll = 0;
 uint32_t lastSuccessfulPoll = 0;
@@ -497,6 +521,29 @@ size_t seenAircraftCount = 0;
 bool aircraftTrackingLimitReached = false;
 uint32_t dailyStatisticsDate = 0;
 time_t dailyStatisticsStarted = 0;
+
+struct DailyJournalEntry {
+  uint64_t identity = 0;
+  time_t firstSeen = 0;
+  time_t lastSeen = 0;
+  String hex;
+  String flight;
+  String airline;
+  String type;
+  String typeDescription;
+  String specialType;
+  String squawk;
+  String routeCodes;
+  String routeNames;
+  float minimumDistanceKm = NAN;
+  float minimumCpaKm = NAN;
+  float altitudeFt = NAN;
+};
+
+constexpr size_t DAILY_JOURNAL_LIMIT = 64;
+DailyJournalEntry dailyJournal[DAILY_JOURNAL_LIMIT];
+size_t dailyJournalCount = 0;
+bool dailyJournalLimitReached = false;
 
 String customPageText;
 uint8_t customScrollSpeed = 1;
@@ -1222,7 +1269,10 @@ void drawCpaPage() {
       cpa += uiText(" geht", " away");
     }
   } else if (!isnan(flight.cpaMinutes)) {
-    cpa += " in " + String(static_cast<int>(round(flight.cpaMinutes))) + "min";
+    const String countdown = cpaCountdownText(flight);
+    cpa += " in " + (countdown.length()
+                         ? countdown
+                         : String(static_cast<int>(round(flight.cpaMinutes))) + "min");
   }
   drawLine(0, 16, clipped(cpa, 21), departing ? orange : green);
 
@@ -1335,8 +1385,10 @@ void drawCompactPage() {
   } else if (!isnan(flight.cpaKm)) {
     cpa = "CPA " + String(flight.cpaKm, 1);
     if (!isnan(flight.cpaMinutes)) {
+      const String countdown = cpaCountdownText(flight, true);
       const String withMinutes = cpa + "/" +
-          String(static_cast<int>(round(flight.cpaMinutes))) + "m";
+          (countdown.length() ? countdown :
+           String(static_cast<int>(round(flight.cpaMinutes))) + "m");
       if (bottom.length() + 1 + withMinutes.length() <= 21) cpa = withMinutes;
     }
   }
@@ -2708,6 +2760,71 @@ uint32_t statisticsDateKey(const struct tm &localClock) {
 }
 
 
+void resetDailyJournal() {
+  for (size_t index = 0; index < dailyJournalCount; ++index)
+    dailyJournal[index] = {};
+  dailyJournalCount = 0;
+  dailyJournalLimitReached = false;
+}
+
+
+void updateDailyJournal(const Aircraft &selected, const FlightData &shown) {
+  const uint64_t identity = aircraftIdentity(selected);
+  if (!identity || selected.flight.startsWith("TEST")) return;
+
+  size_t index = 0;
+  for (; index < dailyJournalCount; ++index) {
+    if (dailyJournal[index].identity == identity) break;
+  }
+  if (index == dailyJournalCount) {
+    if (dailyJournalCount >= DAILY_JOURNAL_LIMIT) {
+      dailyJournalLimitReached = true;
+      return;
+    }
+    ++dailyJournalCount;
+    dailyJournal[index].identity = identity;
+    dailyJournal[index].firstSeen = time(nullptr);
+  }
+
+  DailyJournalEntry &entry = dailyJournal[index];
+  entry.lastSeen = time(nullptr);
+  if (shown.hex.length()) entry.hex = shown.hex;
+  if (shown.flight.length()) entry.flight = shown.flight;
+  if (shown.airline.length()) entry.airline = shown.airline;
+  if (shown.type.length()) entry.type = shown.type;
+  if (shown.typeDescription.length()) entry.typeDescription = shown.typeDescription;
+  if (shown.specialType.length()) entry.specialType = shown.specialType;
+  if (shown.squawk.length()) entry.squawk = shown.squawk;
+  if (shown.routeCodes.length()) entry.routeCodes = shown.routeCodes;
+  if (shown.routeNames.length()) entry.routeNames = shown.routeNames;
+  if (!isnan(shown.distanceKm) &&
+      (isnan(entry.minimumDistanceKm) || shown.distanceKm < entry.minimumDistanceKm))
+    entry.minimumDistanceKm = shown.distanceKm;
+  if (!isnan(shown.cpaKm) &&
+      (isnan(entry.minimumCpaKm) || shown.cpaKm < entry.minimumCpaKm))
+    entry.minimumCpaKm = shown.cpaKm;
+  if (!isnan(shown.altitudeFt)) entry.altitudeFt = shown.altitudeFt;
+}
+
+
+String journalClassification(const DailyJournalEntry &entry) {
+  if (isEmergencySquawk(entry.squawk)) return emergencyMeaning(entry.squawk);
+  if (entry.specialType.length()) return specialTypeDisplayName(entry.specialType);
+  return uiText("Normal", "Normal");
+}
+
+
+String journalTimeText(time_t timestamp, bool includeDate = false) {
+  if (timestamp <= 0) return "-";
+  struct tm localClock;
+  localtime_r(&timestamp, &localClock);
+  char text[24];
+  strftime(text, sizeof(text), includeDate ? "%Y-%m-%d %H:%M:%S" : "%H:%M:%S",
+           &localClock);
+  return String(text);
+}
+
+
 void resetDailyAircraftStatistics(const struct tm &localClock) {
   seenAircraftCount = 0;
   aircraftTrackingLimitReached = false;
@@ -2716,6 +2833,7 @@ void resetDailyAircraftStatistics(const struct tm &localClock) {
   for (size_t index = 0;
        index < static_cast<size_t>(SpecialStatisticCategory::Count); ++index)
     specialAircraftCounts[index] = 0;
+  resetDailyJournal();
   dailyStatisticsDate = statisticsDateKey(localClock);
   dailyStatisticsStarted = time(nullptr);
   Serial.println("Daily aircraft statistics reset");
@@ -2950,12 +3068,15 @@ bool fetchLocalFlight() {
     next.cpaKm = selected.hasCpa ? selected.cpaKm : NAN;
     next.cpaMinutes = selected.hasCpaMinutes && selected.cpaMinutes >= 0.0f
                           ? selected.cpaMinutes : NAN;
+    next.cpaReferenceMs = !isnan(next.cpaMinutes) && next.motion != "departing"
+                              ? millis() : 0;
     next.verticalRateFpm = selected.hasVerticalRate
                                ? selected.verticalRateFpm : NAN;
     next.bearing = selected.hasPosition ? selected.bearing : NAN;
     next.relativeBearing = selected.hasPosition
                                ? relativeBearing(selected.bearing, viewHeading)
                                : NAN;
+    updateDailyJournal(selected, next);
   } else {
     emergencySelectionStarted = 0;
     routedFlight = "";
@@ -3242,6 +3363,10 @@ void translateWebPageToEnglish(String &html) {
     {"Benutzer", "User"}, {"Passwort", "Password"}, {"unverändert lassen", "leave unchanged"},
     {"Windrichtung", "Wind direction"}, {"Windgeschwindigkeit", "Wind speed"}, {"Windböen", "Wind gusts"},
     {"Regen heute", "Rain today"},
+    {">Zeit<", ">Time<"}, {">Flug<", ">Flight<"},
+    {">Typ<", ">Type<"}, {">Klasse<", ">Class<"},
+    {"JSON herunterladen", "Download JSON"},
+    {"CSV herunterladen", "Download CSV"},
     {"Anzeigeseiten", "Display pages"}, {"Sanfte Übergänge", "Smooth transitions"},
     {"Freitext (maximal 128 Zeichen)", "Custom text (maximum 128 characters)"},
     {"Freitext-Scrollgeschwindigkeit", "Custom text scroll speed"}, {">schnell<", ">fast<"},
@@ -3361,7 +3486,7 @@ String webPage(bool includeRouteCache = true) {
   String html;
   // The complete configuration page is currently about 18 KiB. Reserving its
   // real size avoids several large heap reallocations while it is assembled.
-  html.reserve(includeRouteCache ? 30000 : 22000);
+  html.reserve(includeRouteCache ? 44000 : 36000);
   html += F("<!doctype html><html lang='de'><head><meta charset='utf-8'>");
   html += F("<meta name='viewport' content='width=device-width,initial-scale=1'>");
   html += F("<title>");
@@ -3370,7 +3495,7 @@ String webPage(bool includeRouteCache = true) {
   html += F("body{font:16px system-ui;background:#10131a;color:#eef2ff;margin:auto;max-width:920px;padding:20px}");
   html += F("h1{font-size:1.5rem}fieldset{border:1px solid #445;border-radius:10px;margin:14px 0;padding:14px;min-width:0}");
   html += F("label{display:block;margin:12px 0}input[type=number],input[type=text],input[type=password],input[type=url],input[type=time],select,textarea{width:100%;box-sizing:border-box;padding:9px;min-height:42px}input[type=checkbox]{width:auto;min-height:auto}.fieldGrid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:10px 14px;align-items:end;margin:10px 0}.fieldGrid>label{grid-column:span 6;margin:0;min-width:0}.fieldGrid>.third{grid-column:span 4}.fieldGrid>.quarter{grid-column:span 3}.fieldGrid>.twoThird{grid-column:span 8}.fieldGrid>.threeQuarter{grid-column:span 9}.fieldGrid>.fieldWide{grid-column:1/-1}.fieldGrid .check{align-self:center;padding:9px 0}.buttonRow{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}.pageSettings{display:grid;grid-template-columns:minmax(0,1fr) minmax(120px,180px);gap:8px 14px;align-items:end;margin:10px 0}.pageSettings label{margin:0}.orderGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px 14px}.orderGrid label{margin:0}");
-  html += F("button{background:#00bcd4;color:#001018;border:0;border-radius:8px;padding:12px 18px;font-weight:bold}.danger{background:#ff8597;color:#24050b}.smallButton{padding:7px 10px;font-size:.82rem}.inlineForm{display:inline;margin:0 4px 0 0}.networkSummary{background:#172533;border:1px solid #31546b;border-radius:10px;padding:11px 13px;margin:0 0 13px;overflow-wrap:anywhere}.networkSummary a{color:#7ee7f0;font-weight:700}.cacheTable{width:100%;border-collapse:collapse}.cacheTable th,.cacheTable td{text-align:left;padding:8px 6px;border-bottom:1px solid #343d50;vertical-align:top}.cacheTable th{color:#aab;font-size:.8rem}.cacheActions{white-space:nowrap}");
+  html += F("button{background:#00bcd4;color:#001018;border:0;border-radius:8px;padding:12px 18px;font-weight:bold}.danger{background:#ff8597;color:#24050b}.smallButton{padding:7px 10px;font-size:.82rem}.inlineForm{display:inline;margin:0 4px 0 0}.networkSummary{background:#172533;border:1px solid #31546b;border-radius:10px;padding:11px 13px;margin:0 0 13px;overflow-wrap:anywhere}.networkSummary a{color:#7ee7f0;font-weight:700}.tableScroll{overflow-x:auto}.cacheTable{width:100%;border-collapse:collapse}.cacheTable th,.cacheTable td{text-align:left;padding:8px 6px;border-bottom:1px solid #343d50;vertical-align:top}.cacheTable th{color:#aab;font-size:.8rem}.cacheActions{white-space:nowrap}");
   html += F(".status{display:grid;grid-template-columns:minmax(145px,42%) minmax(0,1fr);gap:7px 14px}.status span{color:#aab}.status b{overflow-wrap:anywhere}.statusNote{grid-column:1/-1;margin:2px 0 5px;line-height:1.35}.statusCards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.statusCard{background:#171c26;border:1px solid #343d50;border-radius:12px;padding:14px}.statusCard h3{margin:0 0 12px;font-size:1rem;color:#7ee7f0}.healthbar{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 14px}.pill{border-radius:999px;padding:7px 11px;font-size:.86rem;font-weight:700}.ok{background:#153b2b;color:#74e3aa}.warn{background:#493c16;color:#ffd166}.bad{background:#4a1f29;color:#ff8597}.off{background:#303541;color:#abb3c3}.wide{grid-column:1/-1}details summary{cursor:pointer;font-weight:700;color:#7ee7f0}details .status{margin-top:12px}@media(max-width:650px){body{padding:12px}.fieldGrid>label,.fieldGrid>.third,.fieldGrid>.quarter,.fieldGrid>.twoThird,.fieldGrid>.threeQuarter{grid-column:span 6}.fieldGrid>.fieldWide{grid-column:1/-1}.statusCards{grid-template-columns:1fr}.wide{grid-column:auto}.status{grid-template-columns:1fr}.status b{margin-bottom:7px}}@media(max-width:430px){.fieldGrid>label,.fieldGrid>.third,.fieldGrid>.quarter,.fieldGrid>.twoThird,.fieldGrid>.threeQuarter{grid-column:1/-1}.pageSettings{grid-template-columns:minmax(0,1fr) 112px;gap:8px}.pageSettings label{font-size:.92rem}fieldset{padding:11px}}.muted{color:#aab}</style></head><body>");
   html += F("<h1>");
   html += DEVICE_NAME;
@@ -3646,10 +3771,15 @@ String webPage(bool includeRouteCache = true) {
                     numberOrDash(statusFlight.altitudeFt, 0) + " ft"
               : "-";
   html += F("</b><span>CPA</span><b>");
-  html += statusFlight.available
-              ? numberOrDash(statusFlight.cpaKm) + " km / " +
-                    numberOrDash(statusFlight.cpaMinutes, 0) + " min"
-              : "-";
+  if (statusFlight.available) {
+    html += numberOrDash(statusFlight.cpaKm) + " km / ";
+    const String countdown = cpaCountdownText(statusFlight);
+    html += countdown.length()
+                ? uiText("noch ", "in ") + countdown
+                : numberOrDash(statusFlight.cpaMinutes, 0) + " min";
+  } else {
+    html += "-";
+  }
   html += F("</b><span>Special Type</span><b>");
   html += statusFlight.specialType.length()
               ? htmlEscape(statusFlight.specialType) : "nein";
@@ -3727,7 +3857,34 @@ String webPage(bool includeRouteCache = true) {
               ? uiText("Limit erreicht", "limit reached")
               : String(seenAircraftCount) + " / " +
                     String(OBSERVED_AIRCRAFT_TRACKING_LIMIT);
-  html += F("</b></div></section><section class='statusCard'><h3>ADS-B und Route</h3><div class='status'><span>ADS-B</span><b>");
+  html += F("</b></div></section><section class='statusCard wide'><h3>");
+  html += uiText("Tagesjournal", "Daily journal");
+  html += " · " + String(dailyJournalCount) + " / " +
+          String(DAILY_JOURNAL_LIMIT) + "</h3>";
+  if (!dailyJournalCount) {
+    html += "<p class='muted'>" +
+            String(uiText("Heute wurde noch kein angezeigtes Flugzeug erfasst.",
+                          "No displayed aircraft has been recorded today.")) +
+            "</p>";
+  } else {
+    html += F("<div class='tableScroll'><table class='cacheTable'><thead><tr><th>Zeit</th><th>Flug</th><th>Typ</th><th>Route</th><th>Klasse</th><th>min. CPA</th></tr></thead><tbody>");
+    for (size_t offset = 0; offset < dailyJournalCount; ++offset) {
+      const DailyJournalEntry &entry =
+          dailyJournal[dailyJournalCount - 1 - offset];
+      html += "<tr><td>" + journalTimeText(entry.lastSeen) + "</td><td><b>" +
+              htmlEscape(entry.flight.length() ? entry.flight : entry.hex) +
+              "</b></td><td>" + htmlEscape(entry.type) + "</td><td>" +
+              htmlEscape(entry.routeCodes.length() ? entry.routeCodes : "-") +
+              "</td><td>" + htmlEscape(journalClassification(entry)) +
+              "</td><td>" + numberOrDash(entry.minimumCpaKm) + " km</td></tr>";
+    }
+    html += F("</tbody></table></div>");
+  }
+  if (dailyJournalLimitReached)
+    html += "<p class='pill warn'>" +
+            String(uiText("Journal-Limit erreicht", "Journal limit reached")) +
+            "</p>";
+  html += F("<div class='buttonRow'><form class='inlineForm' method='get' action='/journal.json'><button type='submit'>JSON herunterladen</button></form><form class='inlineForm' method='get' action='/journal.csv'><button type='submit'>CSV herunterladen</button></form></div></section><section class='statusCard'><h3>ADS-B und Route</h3><div class='status'><span>ADS-B</span><b>");
   html += statusError.length() ? displayAscii(statusError) : "OK";
   html += F("</b><span>ADS-B-Fehler</span><b>");
   html += lastAdsbError.length() ? htmlEscape(lastAdsbError) : "keiner";
@@ -4580,6 +4737,9 @@ void handleDisplayApi() {
           ",\"speed_kmh\":" + jsonNumberOrNull(shown.speedKmh, 0) +
           ",\"cpa_km\":" + jsonNumberOrNull(shown.cpaKm) +
           ",\"cpa_minutes\":" + jsonNumberOrNull(shown.cpaMinutes, 0) +
+          ",\"cpa_seconds\":" +
+              (cpaCountdownSeconds(shown) >= 0
+                   ? String(cpaCountdownSeconds(shown)) : "null") +
           ",\"vertical_rate_fpm\":" +
               jsonNumberOrNull(shown.verticalRateFpm, 0) +
           ",\"bearing\":" + jsonNumberOrNull(shown.bearing, 0) +
@@ -4769,6 +4929,9 @@ void handleStatusApi() {
       ",\"speed_kmh\":" + jsonNumberOrNull(statusFlight.speedKmh, 0) +
       ",\"cpa_km\":" + jsonNumberOrNull(statusFlight.cpaKm) +
       ",\"cpa_minutes\":" + jsonNumberOrNull(statusFlight.cpaMinutes, 0) +
+      ",\"cpa_seconds\":" +
+          (cpaCountdownSeconds(statusFlight) >= 0
+               ? String(cpaCountdownSeconds(statusFlight)) : "null") +
       ",\"vertical_rate_fpm\":" +
           jsonNumberOrNull(statusFlight.verticalRateFpm, 0) +
       ",\"vertical_motion\":\"" +
@@ -4816,6 +4979,10 @@ void handleStatusApi() {
           String(specialAircraftCount(SpecialStatisticCategory::A380)) +
           ",\"other\":" +
           String(specialAircraftCount(SpecialStatisticCategory::Other)) + "}}" +
+      ",\"daily_journal\":{\"entries\":" + String(dailyJournalCount) +
+          ",\"limit\":" + String(DAILY_JOURNAL_LIMIT) +
+          ",\"limit_reached\":" +
+          String(dailyJournalLimitReached ? "true" : "false") + "}" +
       ",\"unknown_airports\":" + unknownCodesJson(true) +
       ",\"unknown_airlines\":" + unknownCodesJson(false) +
       ",\"unknown_code_limit\":" + String(unknownCodeLimit) +
@@ -4861,6 +5028,86 @@ void handleUnknownCodesDownload() {
       "attachment; filename=\"flightwall-unknown-codes.json\"");
   webServer.sendHeader("Connection", "close");
   webServer.send(200, "application/json; charset=utf-8", json);
+}
+
+
+String csvEscape(String value) {
+  value.replace("\"", "\"\"");
+  value.replace("\r", " ");
+  value.replace("\n", " ");
+  return "\"" + value + "\"";
+}
+
+
+void handleJournalJsonDownload() {
+  String json;
+  json.reserve(18000);
+  json = "{\n  \"firmware_version\":\"" + jsonEscape(APP_VERSION) +
+         "\",\n  \"period_started\":\"" +
+         jsonEscape(journalTimeText(dailyStatisticsStarted, true)) +
+         "\",\n  \"entries_count\":" + String(dailyJournalCount) +
+         ",\n  \"limit\":" + String(DAILY_JOURNAL_LIMIT) +
+         ",\n  \"limit_reached\":" +
+         String(dailyJournalLimitReached ? "true" : "false") +
+         ",\n  \"entries\":[";
+  for (size_t index = 0; index < dailyJournalCount; ++index) {
+    const DailyJournalEntry &entry = dailyJournal[index];
+    if (index) json += ',';
+    json += "\n    {\"first_seen\":\"" +
+            jsonEscape(journalTimeText(entry.firstSeen, true)) +
+            "\",\"last_seen\":\"" +
+            jsonEscape(journalTimeText(entry.lastSeen, true)) +
+            "\",\"hex\":\"" + jsonEscape(entry.hex) +
+            "\",\"flight\":\"" + jsonEscape(entry.flight) +
+            "\",\"airline\":\"" + jsonEscape(entry.airline) +
+            "\",\"type\":\"" + jsonEscape(entry.type) +
+            "\",\"type_description\":\"" +
+            jsonEscape(entry.typeDescription) +
+            "\",\"route_codes\":\"" + jsonEscape(entry.routeCodes) +
+            "\",\"route_names\":\"" + jsonEscape(entry.routeNames) +
+            "\",\"classification\":\"" +
+            jsonEscape(journalClassification(entry)) +
+            "\",\"squawk\":\"" + jsonEscape(entry.squawk) +
+            "\",\"minimum_distance_km\":" +
+            jsonNumberOrNull(entry.minimumDistanceKm) +
+            ",\"minimum_cpa_km\":" + jsonNumberOrNull(entry.minimumCpaKm) +
+            ",\"last_altitude_ft\":" +
+            jsonNumberOrNull(entry.altitudeFt, 0) + "}";
+  }
+  json += "\n  ]\n}\n";
+  webServer.sendHeader("Cache-Control", "no-store");
+  webServer.sendHeader(
+      "Content-Disposition",
+      "attachment; filename=\"flightwall-daily-journal.json\"");
+  webServer.sendHeader("Connection", "close");
+  webServer.send(200, "application/json; charset=utf-8", json);
+}
+
+
+void handleJournalCsvDownload() {
+  String csv;
+  csv.reserve(14000);
+  csv = "First seen,Last seen,Hex,Flight,Airline,Type,Type description,Route codes,Route names,Classification,Squawk,Minimum distance km,Minimum CPA km,Last altitude ft\r\n";
+  for (size_t index = 0; index < dailyJournalCount; ++index) {
+    const DailyJournalEntry &entry = dailyJournal[index];
+    csv += csvEscape(journalTimeText(entry.firstSeen, true)) + ',' +
+           csvEscape(journalTimeText(entry.lastSeen, true)) + ',' +
+           csvEscape(entry.hex) + ',' + csvEscape(entry.flight) + ',' +
+           csvEscape(entry.airline) + ',' + csvEscape(entry.type) + ',' +
+           csvEscape(entry.typeDescription) + ',' +
+           csvEscape(entry.routeCodes) + ',' + csvEscape(entry.routeNames) + ',' +
+           csvEscape(journalClassification(entry)) + ',' +
+           csvEscape(entry.squawk) + ',' +
+           numberOrDash(entry.minimumDistanceKm) + ',' +
+           numberOrDash(entry.minimumCpaKm) + ',' +
+           numberOrDash(entry.altitudeFt, 0) + "\r\n";
+  }
+  webServer.sendHeader("Cache-Control", "no-store");
+  webServer.sendHeader(
+      "Content-Disposition",
+      "attachment; filename=\"flightwall-daily-journal.csv\"");
+  webServer.sendHeader("Connection", "close");
+  webServer.send(200, "text/csv; charset=utf-8", csv);
 }
 
 
@@ -5293,6 +5540,12 @@ void startWebServer() {
     webServer.on("/api/wifi-scan", HTTP_GET, handleWifiScanResult);
     webServer.on("/unknown-codes.json", HTTP_GET, []() {
       pulseHttpActivity(); handleUnknownCodesDownload();
+    });
+    webServer.on("/journal.json", HTTP_GET, []() {
+      pulseHttpActivity(); handleJournalJsonDownload();
+    });
+    webServer.on("/journal.csv", HTTP_GET, []() {
+      pulseHttpActivity(); handleJournalCsvDownload();
     });
     webServer.on("/save", HTTP_POST, []() {
       pulseHttpActivity(); handleWebSave();

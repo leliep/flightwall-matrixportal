@@ -19,7 +19,7 @@ erklärt auch BME280, BH1750, MQTT, Routenauflösung und OTA.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.14` |
+| Firmware | `3.6.1-dual-target.15` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -49,11 +49,13 @@ Wesentliche Funktionen:
 - direkte Verarbeitung lokaler readsb-/dump1090-Daten und der externen
   adsb.fi-API
 - Auswahl des nächsten geeigneten Flugzeugs einschließlich CPA-Berechnung
+  und sekundengenauem Countdown in den letzten drei Minuten
 - konfigurierbare Filter für Kleinflugzeuge und Maximalhöhe
 - bevorzugte Behandlung interessanter Flugzeuge und Transpondernotfälle
 - große Notfallseite und automatische Rotation mehrerer Notfallflugzeuge in
   Matrix- und Webanzeige
-- tägliche Statistik eindeutiger Flugzeuge, Specials und Transpondernotfälle
+- tägliche Statistik und herunterladbares Tagesjournal der angezeigten
+  Flugzeuge, Specials und Transpondernotfälle
 - Routenauflösung über adsb.im mit kostenlosem ADSBDB-Fallback und
   verwaltetem RAM-/Flash-Cache
 - vollständige Multi-Hop-Routen und kompakte Darstellung geschlossener Umläufe
@@ -248,7 +250,8 @@ Type wird nicht allein wegen des Kleinflugzeugfilters verworfen.
 
 Für Flugzeuge mit Geschwindigkeit und Track berechnet der ESP32 den Closest
 Point of Approach (CPA), die Zeit bis zum CPA und ob sich das Flugzeug nähert
-oder entfernt.
+oder entfernt. In den letzten drei Minuten vor dem CPA wird die Restzeit auf
+Matrix, Webdisplay, Statusseite und in den APIs sekundengenau heruntergezählt.
 
 ### Special Types
 
@@ -434,6 +437,8 @@ Nach erfolgreicher WLAN-Verbindung antwortet der Server auf Port 80:
 | `/api/display` | verfügbar | verfügbar | aktuelle Displaydaten als JSON |
 | `/api/status` | verfügbar | verfügbar | vollständige Statusdaten einschließlich RGB-LED als JSON |
 | `/unknown-codes.json` | verfügbar | verfügbar | unbekannte Airport-/Airline-Codes herunterladen |
+| `/journal.json` | verfügbar | verfügbar | heutiges Flugzeugjournal als JSON herunterladen |
+| `/journal.csv` | verfügbar | verfügbar | heutiges Flugzeugjournal als CSV herunterladen |
 | `/update` | verfügbar | verfügbar | passwortgeschütztes Web-OTA |
 
 Falls mDNS im Netz nicht funktioniert, kann statt des jeweiligen Namens die im
@@ -693,6 +698,13 @@ Registrierung oder Callsign nur einmal. Bis zu 4096 Flugzeuge und 256 Specials
 werden im RAM verfolgt. Der Reset erfolgt um Mitternacht lokaler NTP-Zeit und
 zusätzlich bei jedem Neustart; die Statusseite zeigt den tatsächlichen
 Erfassungsbeginn und beide Kapazitätsgrenzen.
+
+Das Tagesjournal hält zusätzlich bis zu 64 tatsächlich zur Anzeige ausgewählte
+Flugzeuge im RAM. Für jeden Eintrag werden erster und letzter Sichtzeitpunkt,
+Flug, Typ, Route, Klassifizierung sowie kleinste Entfernung und kleinster CPA
+fortgeschrieben. Die Statusseite zeigt die Einträge in umgekehrter zeitlicher
+Reihenfolge und bietet Downloads als JSON und CSV. Journal und Tagesstatistik
+werden gemeinsam bei lokalem Datumswechsel oder Neustart gelöscht.
 
 Der Netzwerk-Task läuft mit niedriger Priorität und kurzen Scheduler-Pausen,
 damit synchrone HTTP-, TLS- und MQTT-Aufrufe den ESP32-Task-Watchdog nicht

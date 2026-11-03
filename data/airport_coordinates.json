@@ -699,6 +699,11 @@
     "longitude": 7.816111,
     "elevation_ft": 190
   },
+  "EDLS": {
+    "latitude": 51.995834,
+    "longitude": 6.840556,
+    "elevation_ft": 157
+  },
   "EDO": {
     "latitude": 39.552533,
     "longitude": 27.010192,
@@ -1063,6 +1068,11 @@
     "latitude": 21.680241,
     "longitude": 39.157436,
     "elevation_ft": 48
+  },
+  "JER": {
+    "latitude": 49.207901,
+    "longitude": -2.19551,
+    "elevation_ft": 277
   },
   "JFK": {
     "latitude": 40.639447,
@@ -1933,6 +1943,11 @@
     "latitude": 1.35019,
     "longitude": 103.994003,
     "elevation_ft": 22
+  },
+  "SJD": {
+    "latitude": 23.151919,
+    "longitude": -109.720731,
+    "elevation_ft": 374
   },
   "SJJ": {
     "latitude": 43.8246,

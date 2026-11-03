@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.6.1-dual-target.15 – 2026-11-03
+
+- sekundengenauer CPA-Countdown in den letzten drei Minuten auf Matrix,
+  Webdisplay, Statusseite sowie in `/api/display` und `/api/status`
+- flüchtiges Tagesjournal für bis zu 64 tatsächlich angezeigte Flugzeuge mit
+  Zeit, Typ, Route, Klassifizierung, Minimalentfernung und Minimal-CPA
+- Journalanzeige im Status und Download über `/journal.json` und
+  `/journal.csv`; automatischer Reset bei lokalem Datumswechsel
+- Flughäfen EDLS (Stadtlohn-Vreden), JER (Jersey) und SJD (Los Cabos) sowie
+  Airlines KLJ (KlasJet), NIT (Middle Georgia State University) und SPA
+  (Sierra Pacific Airlines) ergänzt
+
 ## 3.6.1-dual-target.14 – 2026-11-02
 
 - aktuelle IP-Adresse und Verbindungszustand im WLAN-Konfigurationsbereich
