@@ -11,6 +11,8 @@
   APIs; Begründung zusätzlich im Tagesjournal und in beiden Downloadformaten
 - Auswahlgrund unterscheidet Transponderpriorität, Special im doppelten Radius
   und geringste Entfernung unter allen geeigneten Kandidaten
+- taggesteuerte GitHub Releases mit eindeutig benannten Matrix-/Headless-
+  Images, SHA-256-Prüfsummen, Firmwaremanifest und generierten Release Notes
 
 ## 3.6.1-dual-target.15 – 2026-11-03
 

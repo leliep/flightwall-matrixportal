@@ -419,6 +419,12 @@ zeigen außerdem die Begründung für die aktuelle Flugzeugauswahl.
 Das erste Image muss per USB installiert werden. Für spätere Updates kann ein
 mindestens acht Zeichen langes `OTA_PASSWORD` in `include/secrets.h` gesetzt
 oder unter **Firmware-Updates** in der Webkonfiguration gespeichert werden.
+
+Fertige Images stabiler Versionen stehen auf GitHub unter **Releases → Latest**
+bereit. Für den Matrixcontroller die Datei mit `matrixportal`, für den
+Headless-Controller die Datei mit `headless` im Namen verwenden. Die ebenfalls
+angebotene `SHA256SUMS.txt` ermöglicht eine Integritätsprüfung; die beiden
+Images dürfen nicht vertauscht werden.
 Öffentliche GitHub-Builds enthalten absichtlich kein privates Startpasswort;
 nach der ersten USB-Installation wird es deshalb einmal im Browser gesetzt.
 
@@ -427,7 +433,7 @@ nach der ersten USB-Installation wird es deshalb einmal im Browser gesetzt.
 1. Neue Firmware bauen: `pio run`
 2. `http://matrixportal.local/update` öffnen.
 3. Mit Benutzer `admin` und dem OTA-Passwort anmelden.
-4. `.pio/build/adafruit_matrixportal_esp32s3/firmware.bin` auswählen.
+4. Das passende Release-Image oder die lokal gebaute `firmware.bin` auswählen.
 5. Upload und automatischen Neustart abwarten.
 
 ### Update direkt mit PlatformIO

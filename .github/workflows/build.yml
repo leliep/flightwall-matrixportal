@@ -5,6 +5,9 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -31,3 +34,67 @@ jobs:
         with:
           name: flightwall-esp32s3-n16r8-headless
           path: .pio/build/esp32s3_n16r8_headless/firmware.bin
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate release tag
+        shell: bash
+        run: |
+          VERSION=$(sed -n 's/constexpr char APP_VERSION\[\] = "\([^"]*\)";/\1/p' src/main.cpp)
+          test -n "$VERSION"
+          test "$GITHUB_REF_NAME" = "v$VERSION"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+      - name: Download MatrixPortal image
+        uses: actions/download-artifact@v5
+        with:
+          name: flightwall-matrixportal-s3
+          path: release/matrixportal
+      - name: Download headless image
+        uses: actions/download-artifact@v5
+        with:
+          name: flightwall-esp32s3-n16r8-headless
+          path: release/headless
+      - name: Prepare release files
+        shell: bash
+        run: |
+          mv release/matrixportal/firmware.bin "release/flightwall-matrixportal-$VERSION.bin"
+          mv release/headless/firmware.bin "release/flightwall-headless-$VERSION.bin"
+          cd release
+          sha256sum "flightwall-matrixportal-$VERSION.bin" \
+                    "flightwall-headless-$VERSION.bin" > SHA256SUMS.txt
+          MATRIX_SHA=$(awk '/matrixportal/{print $1}' SHA256SUMS.txt)
+          HEADLESS_SHA=$(awk '/headless/{print $1}' SHA256SUMS.txt)
+          MATRIX_SIZE=$(stat -c%s "flightwall-matrixportal-$VERSION.bin")
+          HEADLESS_SIZE=$(stat -c%s "flightwall-headless-$VERSION.bin")
+          jq -n \
+            --arg version "$VERSION" \
+            --arg tag "$GITHUB_REF_NAME" \
+            --arg commit "$GITHUB_SHA" \
+            --arg matrix_file "flightwall-matrixportal-$VERSION.bin" \
+            --arg matrix_sha256 "$MATRIX_SHA" \
+            --argjson matrix_size "$MATRIX_SIZE" \
+            --arg headless_file "flightwall-headless-$VERSION.bin" \
+            --arg headless_sha256 "$HEADLESS_SHA" \
+            --argjson headless_size "$HEADLESS_SIZE" \
+            '{version:$version,tag:$tag,commit:$commit,firmware:[
+              {variant:"matrixportal_s3",file:$matrix_file,sha256:$matrix_sha256,size_bytes:$matrix_size},
+              {variant:"esp32s3_n16r8_headless",file:$headless_file,sha256:$headless_sha256,size_bytes:$headless_size}
+            ]}' > firmware-manifest.json
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            release/flightwall-matrixportal-$VERSION.bin \
+            release/flightwall-headless-$VERSION.bin \
+            release/SHA256SUMS.txt \
+            release/firmware-manifest.json \
+            --verify-tag \
+            --title "FlightWall $VERSION" \
+            --generate-notes

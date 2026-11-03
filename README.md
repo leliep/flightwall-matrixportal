@@ -602,6 +602,24 @@ Build“-Lauf → Artifacts** das zum Controller passende ZIP auswählen. Die
 Build-Artefakte sind nicht direkt als Binärdateien im Git-Repository
 eingecheckt.
 
+### Fertige Release-Images
+
+Für stabile Versionen ist **Releases → Latest** der bevorzugte Downloadweg.
+Ein Versionstag im Format `v<APP_VERSION>`, beispielsweise
+`v3.6.1-dual-target.16`, veröffentlicht nach zwei erfolgreichen Builds
+automatisch:
+
+- `flightwall-matrixportal-<VERSION>.bin`
+- `flightwall-headless-<VERSION>.bin`
+- `SHA256SUMS.txt`
+- `firmware-manifest.json`
+
+Der Workflow bricht ab, wenn Tag und `APP_VERSION` nicht exakt übereinstimmen.
+Das Manifest nennt für beide Hardwarevarianten Dateiname, Größe, SHA-256-Wert
+und Quell-Commit. Dadurch lassen sich vertauschte oder beschädigte Images vor
+dem Web-OTA erkennen. Normale Build-Artefakte bleiben zusätzlich für jeden
+erfolgreichen Commit verfügbar.
+
 ## OTA-Updates
 
 Das erste OTA-fähige Image muss per USB installiert werden. Danach gibt es
@@ -611,7 +629,8 @@ zwei Wege.
 
 1. `http://matrixportal.local/update` öffnen.
 2. Mit Benutzer `admin` und dem `OTA_PASSWORD` anmelden.
-3. `.pio/build/adafruit_matrixportal_esp32s3/firmware.bin` auswählen.
+3. Das MatrixPortal-Image aus dem aktuellen GitHub Release oder lokal
+   `.pio/build/adafruit_matrixportal_esp32s3/firmware.bin` auswählen.
 4. Upload bestätigen und den automatischen Neustart abwarten.
 
 Die Seite prüft Dateiendung und ESP32-Dateikopf, zeigt den Fortschritt und
@@ -619,8 +638,9 @@ vergleicht nach dem Neustart alte und neue Firmwareversion.
 
 Für den Headless-Server lautet die Adresse
 `http://flightwall-server.local/update`; dort muss die Datei aus
-`.pio/build/esp32s3_n16r8_headless/` verwendet werden. Die Update-Seite zeigt
-die installierte Hardwarevariante ausdrücklich an. Images der beiden Varianten
+`.pio/build/esp32s3_n16r8_headless/` beziehungsweise das mit `headless`
+bezeichnete Release-Image verwendet werden. Die Update-Seite zeigt die
+installierte Hardwarevariante ausdrücklich an. Images der beiden Varianten
 dürfen nicht miteinander vertauscht werden.
 
 ### PlatformIO-OTA
