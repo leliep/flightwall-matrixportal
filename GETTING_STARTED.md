@@ -389,6 +389,8 @@ Die wichtigsten Adressen sind:
 | `http://matrixportal.local/unknown-codes.json` | unbekannte Airport-/Airline-Codes herunterladen |
 | `http://matrixportal.local/journal.json` | heutiges Flugzeugjournal als JSON herunterladen |
 | `http://matrixportal.local/journal.csv` | heutiges Flugzeugjournal als CSV herunterladen |
+| `http://matrixportal.local/specials.json` | heutige Special-Chronik als JSON herunterladen |
+| `http://matrixportal.local/specials.csv` | heutige Special-Chronik als CSV herunterladen |
 | `http://matrixportal.local/update` | Web-OTA, sofern aktiviert |
 
 Das Web-Display ist optional. Es zeigt dieselben aktuellen Flugdaten in einem
@@ -408,6 +410,9 @@ Zusätzlich führt die Software ein flüchtiges Journal mit bis zu 64 tatsächli
 angezeigten Flugzeugen einschließlich Zeit, Route, Klassifizierung,
 Minimalentfernung und Minimal-CPA. Es kann über die Statusseite als JSON oder
 CSV heruntergeladen werden und wird zusammen mit der Tagesstatistik gelöscht.
+Die zusätzliche Special-Chronik erfasst alle erkannten Sonderflugzeuge – auch
+wenn ein anderes Flugzeug ausgewählt wurde. Status, Webdisplay und Downloads
+zeigen außerdem die Begründung für die aktuelle Flugzeugauswahl.
 
 ## 11. OTA optional aktivieren
 

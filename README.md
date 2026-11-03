@@ -19,7 +19,7 @@ erklärt auch BME280, BH1750, MQTT, Routenauflösung und OTA.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.15` |
+| Firmware | `3.6.1-dual-target.16` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -56,6 +56,8 @@ Wesentliche Funktionen:
   Matrix- und Webanzeige
 - tägliche Statistik und herunterladbares Tagesjournal der angezeigten
   Flugzeuge, Specials und Transpondernotfälle
+- tägliche Special-Chronik für alle erkannten Sonderflugzeuge sowie eine
+  nachvollziehbare Auswahlbegründung
 - Routenauflösung über adsb.im mit kostenlosem ADSBDB-Fallback und
   verwaltetem RAM-/Flash-Cache
 - vollständige Multi-Hop-Routen und kompakte Darstellung geschlossener Umläufe
@@ -439,6 +441,8 @@ Nach erfolgreicher WLAN-Verbindung antwortet der Server auf Port 80:
 | `/unknown-codes.json` | verfügbar | verfügbar | unbekannte Airport-/Airline-Codes herunterladen |
 | `/journal.json` | verfügbar | verfügbar | heutiges Flugzeugjournal als JSON herunterladen |
 | `/journal.csv` | verfügbar | verfügbar | heutiges Flugzeugjournal als CSV herunterladen |
+| `/specials.json` | verfügbar | verfügbar | heutige Special-Chronik als JSON herunterladen |
+| `/specials.csv` | verfügbar | verfügbar | heutige Special-Chronik als CSV herunterladen |
 | `/update` | verfügbar | verfügbar | passwortgeschütztes Web-OTA |
 
 Falls mDNS im Netz nicht funktioniert, kann statt des jeweiligen Namens die im
@@ -705,6 +709,15 @@ Flug, Typ, Route, Klassifizierung sowie kleinste Entfernung und kleinster CPA
 fortgeschrieben. Die Statusseite zeigt die Einträge in umgekehrter zeitlicher
 Reihenfolge und bietet Downloads als JSON und CSV. Journal und Tagesstatistik
 werden gemeinsam bei lokalem Datumswechsel oder Neustart gelöscht.
+
+Die Special-Chronik erfasst unabhängig von der Anzeige bis zu 64 Specials und
+Transpondernotfälle, die der aktive ADS-B-Empfänger innerhalb des
+Verarbeitungsbereichs liefert. Sie enthält Klassifizierung, ersten und letzten
+Zeitpunkt, Typ, minimale Entfernung und CPA sowie die Information, ob das
+Flugzeug tatsächlich angezeigt wurde. Für das aktuelle Flugzeug und jeden
+angezeigten Journaleintrag nennt FlightWall außerdem den Auswahlgrund:
+Transpondernotfall, nächstes Special im doppelten Radius oder geringste
+Entfernung unter den geeigneten Kandidaten.
 
 Der Netzwerk-Task läuft mit niedriger Priorität und kurzen Scheduler-Pausen,
 damit synchrone HTTP-, TLS- und MQTT-Aufrufe den ESP32-Task-Watchdog nicht

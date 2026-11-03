@@ -43,8 +43,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.15";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-03 CPA countdown and daily journal";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.16";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-03 special chronicle and selection reason";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -173,6 +173,7 @@ struct FlightData {
   String direction;
   String verticalMotion;
   String motion;
+  String selectionReason;
   String origin;
   String destination;
   String routeCodes;
@@ -535,6 +536,7 @@ struct DailyJournalEntry {
   String squawk;
   String routeCodes;
   String routeNames;
+  String selectionReason;
   float minimumDistanceKm = NAN;
   float minimumCpaKm = NAN;
   float altitudeFt = NAN;
@@ -544,6 +546,28 @@ constexpr size_t DAILY_JOURNAL_LIMIT = 64;
 DailyJournalEntry dailyJournal[DAILY_JOURNAL_LIMIT];
 size_t dailyJournalCount = 0;
 bool dailyJournalLimitReached = false;
+
+struct SpecialChronicleEntry {
+  uint64_t identity = 0;
+  time_t firstSeen = 0;
+  time_t lastSeen = 0;
+  String hex;
+  String flight;
+  String type;
+  String typeDescription;
+  String specialType;
+  String squawk;
+  String routeCodes;
+  String selectionReason;
+  float minimumDistanceKm = NAN;
+  float minimumCpaKm = NAN;
+  bool displayed = false;
+};
+
+constexpr size_t SPECIAL_CHRONICLE_LIMIT = 64;
+SpecialChronicleEntry specialChronicle[SPECIAL_CHRONICLE_LIMIT];
+size_t specialChronicleCount = 0;
+bool specialChronicleLimitReached = false;
 
 String customPageText;
 uint8_t customScrollSpeed = 1;
@@ -2705,6 +2729,105 @@ bool specialStatisticCategory(const Aircraft &aircraft,
 }
 
 
+String specialCategoryName(const Aircraft &aircraft) {
+  if (aircraft.emergency) return emergencyMeaning(aircraft.squawk);
+  if (!aircraft.specialTypes.empty())
+    return specialTypeDisplayName(aircraft.specialTypes.front());
+  return uiText("Sonstige", "Other");
+}
+
+
+void updateSpecialChronicleObservation(const Aircraft &aircraft) {
+  const uint64_t identity = aircraftIdentity(aircraft);
+  if (!identity || aircraft.flight.startsWith("TEST")) return;
+  size_t index = 0;
+  for (; index < specialChronicleCount; ++index) {
+    if (specialChronicle[index].identity == identity) break;
+  }
+  if (index == specialChronicleCount) {
+    if (specialChronicleCount >= SPECIAL_CHRONICLE_LIMIT) {
+      specialChronicleLimitReached = true;
+      return;
+    }
+    ++specialChronicleCount;
+    specialChronicle[index].identity = identity;
+    specialChronicle[index].firstSeen = time(nullptr);
+  }
+  SpecialChronicleEntry &entry = specialChronicle[index];
+  entry.lastSeen = time(nullptr);
+  if (aircraft.hex.length()) entry.hex = aircraft.hex;
+  if (aircraft.flight.length()) entry.flight = aircraft.flight;
+  if (aircraft.type.length()) entry.type = aircraft.type;
+  if (aircraft.description.length()) entry.typeDescription = aircraft.description;
+  entry.specialType = specialCategoryName(aircraft);
+  if (aircraft.squawk.length()) entry.squawk = aircraft.squawk;
+  if (aircraft.hasPosition &&
+      (isnan(entry.minimumDistanceKm) ||
+       aircraft.distanceKm < entry.minimumDistanceKm))
+    entry.minimumDistanceKm = aircraft.distanceKm;
+  if (aircraft.hasCpa &&
+      (isnan(entry.minimumCpaKm) || aircraft.cpaKm < entry.minimumCpaKm))
+    entry.minimumCpaKm = aircraft.cpaKm;
+}
+
+
+String aircraftSelectionReason(const Aircraft &selected,
+                               const std::vector<Aircraft> &aircraft,
+                               const ProcessingConfig &config,
+                               size_t emergencyCount,
+                               size_t emergencyIndex) {
+  if (selected.emergency) {
+    String reason = uiText("Transpondernotfall ", "Transponder emergency ") +
+                    selected.squawk +
+                    uiText(" – höchste Priorität", " – highest priority");
+    if (emergencyCount > 1)
+      reason += " (" + String(emergencyIndex + 1) + "/" +
+                String(emergencyCount) + ")";
+    return reason;
+  }
+
+  size_t eligible = 0;
+  for (const Aircraft &candidate : aircraft) {
+    if (!candidate.hasPosition || candidate.emergency) continue;
+    if (config.hideSportAircraft && candidate.sportAircraft &&
+        candidate.specialTypes.empty()) continue;
+    const float radius = candidate.specialTypes.empty()
+                             ? config.radiusKm : config.radiusKm * 2.0f;
+    if (candidate.distanceKm <= radius) ++eligible;
+  }
+  const bool special = !selected.specialTypes.empty();
+  if (special && selected.distanceKm > config.radiusKm) {
+    return uiText("Nächstes Special im doppelten Radius: ",
+                  "Nearest special within double radius: ") +
+           specialCategoryName(selected);
+  }
+  String reason = uiText("Geringste Entfernung", "Shortest distance");
+  if (eligible > 1)
+    reason += uiText(" unter ", " among ") + String(eligible) +
+              uiText(" geeigneten Flugzeugen", " eligible aircraft");
+  if (special)
+    reason += " · " + specialCategoryName(selected);
+  return reason;
+}
+
+
+void markSpecialChronicleDisplayed(const Aircraft &selected,
+                                   const FlightData &shown) {
+  const uint64_t identity = aircraftIdentity(selected);
+  for (size_t index = 0; index < specialChronicleCount; ++index) {
+    SpecialChronicleEntry &entry = specialChronicle[index];
+    if (entry.identity != identity) continue;
+    entry.displayed = true;
+    entry.selectionReason = shown.selectionReason;
+    if (shown.routeCodes.length()) entry.routeCodes = shown.routeCodes;
+    if (!isnan(shown.cpaKm) &&
+        (isnan(entry.minimumCpaKm) || shown.cpaKm < entry.minimumCpaKm))
+      entry.minimumCpaKm = shown.cpaKm;
+    return;
+  }
+}
+
+
 uint64_t specialAircraftIdentity(const Aircraft &aircraft) {
   return aircraftIdentity(aircraft);
 }
@@ -2714,6 +2837,7 @@ void updateSpecialAircraftStatistics(const std::vector<Aircraft> &aircraft) {
   for (const Aircraft &candidate : aircraft) {
     SpecialStatisticCategory category;
     if (!specialStatisticCategory(candidate, category)) continue;
+    updateSpecialChronicleObservation(candidate);
     const uint64_t identity = specialAircraftIdentity(candidate);
     if (!identity) continue;
 
@@ -2768,6 +2892,14 @@ void resetDailyJournal() {
 }
 
 
+void resetSpecialChronicle() {
+  for (size_t index = 0; index < specialChronicleCount; ++index)
+    specialChronicle[index] = {};
+  specialChronicleCount = 0;
+  specialChronicleLimitReached = false;
+}
+
+
 void updateDailyJournal(const Aircraft &selected, const FlightData &shown) {
   const uint64_t identity = aircraftIdentity(selected);
   if (!identity || selected.flight.startsWith("TEST")) return;
@@ -2797,6 +2929,8 @@ void updateDailyJournal(const Aircraft &selected, const FlightData &shown) {
   if (shown.squawk.length()) entry.squawk = shown.squawk;
   if (shown.routeCodes.length()) entry.routeCodes = shown.routeCodes;
   if (shown.routeNames.length()) entry.routeNames = shown.routeNames;
+  if (shown.selectionReason.length())
+    entry.selectionReason = shown.selectionReason;
   if (!isnan(shown.distanceKm) &&
       (isnan(entry.minimumDistanceKm) || shown.distanceKm < entry.minimumDistanceKm))
     entry.minimumDistanceKm = shown.distanceKm;
@@ -2834,6 +2968,7 @@ void resetDailyAircraftStatistics(const struct tm &localClock) {
        index < static_cast<size_t>(SpecialStatisticCategory::Count); ++index)
     specialAircraftCounts[index] = 0;
   resetDailyJournal();
+  resetSpecialChronicle();
   dailyStatisticsDate = statisticsDateKey(localClock);
   dailyStatisticsStarted = time(nullptr);
   Serial.println("Daily aircraft statistics reset");
@@ -3076,6 +3211,10 @@ bool fetchLocalFlight() {
     next.relativeBearing = selected.hasPosition
                                ? relativeBearing(selected.bearing, viewHeading)
                                : NAN;
+    next.selectionReason = aircraftSelectionReason(
+        selected, result.candidates, config, emergencyCount, emergencyIndex);
+    if (selected.emergency || !selected.specialTypes.empty())
+      markSpecialChronicleDisplayed(selected, next);
     updateDailyJournal(selected, next);
   } else {
     emergencySelectionStarted = 0;
@@ -3365,6 +3504,9 @@ void translateWebPageToEnglish(String &html) {
     {"Regen heute", "Rain today"},
     {">Zeit<", ">Time<"}, {">Flug<", ">Flight<"},
     {">Typ<", ">Type<"}, {">Klasse<", ">Class<"},
+    {"Auswahlbegründung", "Selection reason"},
+    {"min. Entfernung", "min. distance"},
+    {">Angezeigt<", ">Displayed<"},
     {"JSON herunterladen", "Download JSON"},
     {"CSV herunterladen", "Download CSV"},
     {"Anzeigeseiten", "Display pages"}, {"Sanfte Übergänge", "Smooth transitions"},
@@ -3486,7 +3628,7 @@ String webPage(bool includeRouteCache = true) {
   String html;
   // The complete configuration page is currently about 18 KiB. Reserving its
   // real size avoids several large heap reallocations while it is assembled.
-  html.reserve(includeRouteCache ? 44000 : 36000);
+  html.reserve(includeRouteCache ? 56000 : 48000);
   html += F("<!doctype html><html lang='de'><head><meta charset='utf-8'>");
   html += F("<meta name='viewport' content='width=device-width,initial-scale=1'>");
   html += F("<title>");
@@ -3783,6 +3925,9 @@ String webPage(bool includeRouteCache = true) {
   html += F("</b><span>Special Type</span><b>");
   html += statusFlight.specialType.length()
               ? htmlEscape(statusFlight.specialType) : "nein";
+  html += F("</b><span>Auswahlbegründung</span><b>");
+  html += statusFlight.selectionReason.length()
+              ? htmlEscape(statusFlight.selectionReason) : "-";
   html += F("</b><span>Radius normal / aktuell</span><b>");
   html += statusFlight.emergency
               ? String(displayRadiusKm, 1) + " km / unbegrenzt"
@@ -3867,7 +4012,7 @@ String webPage(bool includeRouteCache = true) {
                           "No displayed aircraft has been recorded today.")) +
             "</p>";
   } else {
-    html += F("<div class='tableScroll'><table class='cacheTable'><thead><tr><th>Zeit</th><th>Flug</th><th>Typ</th><th>Route</th><th>Klasse</th><th>min. CPA</th></tr></thead><tbody>");
+    html += F("<div class='tableScroll'><table class='cacheTable'><thead><tr><th>Zeit</th><th>Flug</th><th>Typ</th><th>Route</th><th>Klasse</th><th>min. CPA</th><th>Auswahlbegründung</th></tr></thead><tbody>");
     for (size_t offset = 0; offset < dailyJournalCount; ++offset) {
       const DailyJournalEntry &entry =
           dailyJournal[dailyJournalCount - 1 - offset];
@@ -3876,7 +4021,8 @@ String webPage(bool includeRouteCache = true) {
               "</b></td><td>" + htmlEscape(entry.type) + "</td><td>" +
               htmlEscape(entry.routeCodes.length() ? entry.routeCodes : "-") +
               "</td><td>" + htmlEscape(journalClassification(entry)) +
-              "</td><td>" + numberOrDash(entry.minimumCpaKm) + " km</td></tr>";
+              "</td><td>" + numberOrDash(entry.minimumCpaKm) +
+              " km</td><td>" + htmlEscape(entry.selectionReason) + "</td></tr>";
     }
     html += F("</tbody></table></div>");
   }
@@ -3884,7 +4030,41 @@ String webPage(bool includeRouteCache = true) {
     html += "<p class='pill warn'>" +
             String(uiText("Journal-Limit erreicht", "Journal limit reached")) +
             "</p>";
-  html += F("<div class='buttonRow'><form class='inlineForm' method='get' action='/journal.json'><button type='submit'>JSON herunterladen</button></form><form class='inlineForm' method='get' action='/journal.csv'><button type='submit'>CSV herunterladen</button></form></div></section><section class='statusCard'><h3>ADS-B und Route</h3><div class='status'><span>ADS-B</span><b>");
+  html += F("<div class='buttonRow'><form class='inlineForm' method='get' action='/journal.json'><button type='submit'>JSON herunterladen</button></form><form class='inlineForm' method='get' action='/journal.csv'><button type='submit'>CSV herunterladen</button></form></div></section><section class='statusCard wide'><h3>");
+  html += uiText("Special-Chronik", "Special chronicle");
+  html += " · " + String(specialChronicleCount) + " / " +
+          String(SPECIAL_CHRONICLE_LIMIT) + "</h3>";
+  if (!specialChronicleCount) {
+    html += "<p class='muted'>" +
+            String(uiText("Heute wurde noch kein Special erkannt.",
+                          "No special aircraft has been detected today.")) +
+            "</p>";
+  } else {
+    html += F("<div class='tableScroll'><table class='cacheTable'><thead><tr><th>Zeit</th><th>Flug</th><th>Klasse</th><th>Typ</th><th>min. Entfernung</th><th>min. CPA</th><th>Angezeigt</th><th>Auswahlbegründung</th></tr></thead><tbody>");
+    for (size_t offset = 0; offset < specialChronicleCount; ++offset) {
+      const SpecialChronicleEntry &entry =
+          specialChronicle[specialChronicleCount - 1 - offset];
+      html += "<tr><td>" + journalTimeText(entry.lastSeen) + "</td><td><b>" +
+              htmlEscape(entry.flight.length() ? entry.flight : entry.hex) +
+              "</b></td><td>" + htmlEscape(entry.specialType) +
+              "</td><td>" + htmlEscape(entry.type) + "</td><td>" +
+              numberOrDash(entry.minimumDistanceKm) + " km</td><td>" +
+              numberOrDash(entry.minimumCpaKm) + " km</td><td>" +
+              uiText(entry.displayed ? "ja" : "nein",
+                     entry.displayed ? "yes" : "no") +
+              "</td><td>" +
+              htmlEscape(entry.selectionReason.length()
+                             ? entry.selectionReason
+                             : uiText("nicht ausgewählt", "not selected")) +
+              "</td></tr>";
+    }
+    html += F("</tbody></table></div>");
+  }
+  if (specialChronicleLimitReached)
+    html += "<p class='pill warn'>" +
+            String(uiText("Chronik-Limit erreicht", "Chronicle limit reached")) +
+            "</p>";
+  html += F("<div class='buttonRow'><form class='inlineForm' method='get' action='/specials.json'><button type='submit'>JSON herunterladen</button></form><form class='inlineForm' method='get' action='/specials.csv'><button type='submit'>CSV herunterladen</button></form></div></section><section class='statusCard'><h3>ADS-B und Route</h3><div class='status'><span>ADS-B</span><b>");
   html += statusError.length() ? displayAscii(statusError) : "OK";
   html += F("</b><span>ADS-B-Fehler</span><b>");
   html += lastAdsbError.length() ? htmlEscape(lastAdsbError) : "keiner";
@@ -4726,6 +4906,8 @@ void handleDisplayApi() {
               jsonEscape(localizedCompassToken(shown.direction)) + "\"" +
           ",\"vertical_motion\":\"" + jsonEscape(shown.verticalMotion) + "\"" +
           ",\"motion\":\"" + jsonEscape(shown.motion) + "\"" +
+          ",\"selection_reason\":\"" +
+              jsonEscape(shown.selectionReason) + "\"" +
           ",\"origin\":\"" + jsonEscape(shown.origin) + "\"" +
           ",\"destination\":\"" + jsonEscape(shown.destination) + "\"" +
           ",\"route_codes\":\"" + jsonEscape(shown.routeCodes) + "\"" +
@@ -4937,6 +5119,8 @@ void handleStatusApi() {
       ",\"vertical_motion\":\"" +
           jsonEscape(statusFlight.verticalMotion) + "\"" +
       ",\"motion\":\"" + jsonEscape(statusFlight.motion) + "\"" +
+      ",\"selection_reason\":\"" +
+          jsonEscape(statusFlight.selectionReason) + "\"" +
       ",\"bearing\":" + jsonNumberOrNull(statusFlight.bearing, 0) +
       ",\"relative_bearing\":" +
           jsonNumberOrNull(statusFlight.relativeBearing) +
@@ -4983,6 +5167,11 @@ void handleStatusApi() {
           ",\"limit\":" + String(DAILY_JOURNAL_LIMIT) +
           ",\"limit_reached\":" +
           String(dailyJournalLimitReached ? "true" : "false") + "}" +
+      ",\"special_chronicle\":{\"entries\":" +
+          String(specialChronicleCount) +
+          ",\"limit\":" + String(SPECIAL_CHRONICLE_LIMIT) +
+          ",\"limit_reached\":" +
+          String(specialChronicleLimitReached ? "true" : "false") + "}" +
       ",\"unknown_airports\":" + unknownCodesJson(true) +
       ",\"unknown_airlines\":" + unknownCodesJson(false) +
       ",\"unknown_code_limit\":" + String(unknownCodeLimit) +
@@ -5067,6 +5256,8 @@ void handleJournalJsonDownload() {
             "\",\"route_names\":\"" + jsonEscape(entry.routeNames) +
             "\",\"classification\":\"" +
             jsonEscape(journalClassification(entry)) +
+            "\",\"selection_reason\":\"" +
+            jsonEscape(entry.selectionReason) +
             "\",\"squawk\":\"" + jsonEscape(entry.squawk) +
             "\",\"minimum_distance_km\":" +
             jsonNumberOrNull(entry.minimumDistanceKm) +
@@ -5087,7 +5278,7 @@ void handleJournalJsonDownload() {
 void handleJournalCsvDownload() {
   String csv;
   csv.reserve(14000);
-  csv = "First seen,Last seen,Hex,Flight,Airline,Type,Type description,Route codes,Route names,Classification,Squawk,Minimum distance km,Minimum CPA km,Last altitude ft\r\n";
+  csv = "First seen,Last seen,Hex,Flight,Airline,Type,Type description,Route codes,Route names,Classification,Selection reason,Squawk,Minimum distance km,Minimum CPA km,Last altitude ft\r\n";
   for (size_t index = 0; index < dailyJournalCount; ++index) {
     const DailyJournalEntry &entry = dailyJournal[index];
     csv += csvEscape(journalTimeText(entry.firstSeen, true)) + ',' +
@@ -5097,6 +5288,7 @@ void handleJournalCsvDownload() {
            csvEscape(entry.typeDescription) + ',' +
            csvEscape(entry.routeCodes) + ',' + csvEscape(entry.routeNames) + ',' +
            csvEscape(journalClassification(entry)) + ',' +
+           csvEscape(entry.selectionReason) + ',' +
            csvEscape(entry.squawk) + ',' +
            numberOrDash(entry.minimumDistanceKm) + ',' +
            numberOrDash(entry.minimumCpaKm) + ',' +
@@ -5106,6 +5298,76 @@ void handleJournalCsvDownload() {
   webServer.sendHeader(
       "Content-Disposition",
       "attachment; filename=\"flightwall-daily-journal.csv\"");
+  webServer.sendHeader("Connection", "close");
+  webServer.send(200, "text/csv; charset=utf-8", csv);
+}
+
+
+void handleSpecialsJsonDownload() {
+  String json;
+  json.reserve(18000);
+  json = "{\n  \"firmware_version\":\"" + jsonEscape(APP_VERSION) +
+         "\",\n  \"period_started\":\"" +
+         jsonEscape(journalTimeText(dailyStatisticsStarted, true)) +
+         "\",\n  \"entries_count\":" + String(specialChronicleCount) +
+         ",\n  \"limit\":" + String(SPECIAL_CHRONICLE_LIMIT) +
+         ",\n  \"limit_reached\":" +
+         String(specialChronicleLimitReached ? "true" : "false") +
+         ",\n  \"entries\":[";
+  for (size_t index = 0; index < specialChronicleCount; ++index) {
+    const SpecialChronicleEntry &entry = specialChronicle[index];
+    if (index) json += ',';
+    json += "\n    {\"first_seen\":\"" +
+            jsonEscape(journalTimeText(entry.firstSeen, true)) +
+            "\",\"last_seen\":\"" +
+            jsonEscape(journalTimeText(entry.lastSeen, true)) +
+            "\",\"hex\":\"" + jsonEscape(entry.hex) +
+            "\",\"flight\":\"" + jsonEscape(entry.flight) +
+            "\",\"type\":\"" + jsonEscape(entry.type) +
+            "\",\"type_description\":\"" +
+            jsonEscape(entry.typeDescription) +
+            "\",\"classification\":\"" + jsonEscape(entry.specialType) +
+            "\",\"squawk\":\"" + jsonEscape(entry.squawk) +
+            "\",\"route_codes\":\"" + jsonEscape(entry.routeCodes) +
+            "\",\"displayed\":" + String(entry.displayed ? "true" : "false") +
+            ",\"selection_reason\":\"" +
+            jsonEscape(entry.selectionReason) +
+            "\",\"minimum_distance_km\":" +
+            jsonNumberOrNull(entry.minimumDistanceKm) +
+            ",\"minimum_cpa_km\":" + jsonNumberOrNull(entry.minimumCpaKm) +
+            "}";
+  }
+  json += "\n  ]\n}\n";
+  webServer.sendHeader("Cache-Control", "no-store");
+  webServer.sendHeader(
+      "Content-Disposition",
+      "attachment; filename=\"flightwall-special-chronicle.json\"");
+  webServer.sendHeader("Connection", "close");
+  webServer.send(200, "application/json; charset=utf-8", json);
+}
+
+
+void handleSpecialsCsvDownload() {
+  String csv;
+  csv.reserve(14000);
+  csv = "First seen,Last seen,Hex,Flight,Type,Type description,Classification,Squawk,Route codes,Displayed,Selection reason,Minimum distance km,Minimum CPA km\r\n";
+  for (size_t index = 0; index < specialChronicleCount; ++index) {
+    const SpecialChronicleEntry &entry = specialChronicle[index];
+    csv += csvEscape(journalTimeText(entry.firstSeen, true)) + ',' +
+           csvEscape(journalTimeText(entry.lastSeen, true)) + ',' +
+           csvEscape(entry.hex) + ',' + csvEscape(entry.flight) + ',' +
+           csvEscape(entry.type) + ',' + csvEscape(entry.typeDescription) + ',' +
+           csvEscape(entry.specialType) + ',' + csvEscape(entry.squawk) + ',' +
+           csvEscape(entry.routeCodes) + ',' +
+           csvEscape(entry.displayed ? "yes" : "no") + ',' +
+           csvEscape(entry.selectionReason) + ',' +
+           numberOrDash(entry.minimumDistanceKm) + ',' +
+           numberOrDash(entry.minimumCpaKm) + "\r\n";
+  }
+  webServer.sendHeader("Cache-Control", "no-store");
+  webServer.sendHeader(
+      "Content-Disposition",
+      "attachment; filename=\"flightwall-special-chronicle.csv\"");
   webServer.sendHeader("Connection", "close");
   webServer.send(200, "text/csv; charset=utf-8", csv);
 }
@@ -5546,6 +5808,12 @@ void startWebServer() {
     });
     webServer.on("/journal.csv", HTTP_GET, []() {
       pulseHttpActivity(); handleJournalCsvDownload();
+    });
+    webServer.on("/specials.json", HTTP_GET, []() {
+      pulseHttpActivity(); handleSpecialsJsonDownload();
+    });
+    webServer.on("/specials.csv", HTTP_GET, []() {
+      pulseHttpActivity(); handleSpecialsCsvDownload();
     });
     webServer.on("/save", HTTP_POST, []() {
       pulseHttpActivity(); handleWebSave();

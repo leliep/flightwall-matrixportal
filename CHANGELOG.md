@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.6.1-dual-target.16 – 2026-11-03
+
+- tägliche Special-Chronik für bis zu 64 erkannte Specials und
+  Transpondernotfälle, unabhängig davon, ob sie zur Anzeige ausgewählt wurden
+- Chronik mit Zeit, Klassifizierung, Typ, Minimalentfernung, Minimal-CPA und
+  Anzeigestatus auf der Statusseite sowie als `/specials.json` und
+  `/specials.csv`
+- Auswahlbegründung für das aktuelle Flugzeug im Webdisplay, Status und in den
+  APIs; Begründung zusätzlich im Tagesjournal und in beiden Downloadformaten
+- Auswahlgrund unterscheidet Transponderpriorität, Special im doppelten Radius
+  und geringste Entfernung unter allen geeigneten Kandidaten
+
 ## 3.6.1-dual-target.15 – 2026-11-03
 
 - sekundengenauer CPA-Countdown in den letzten drei Minuten auf Matrix,
