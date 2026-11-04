@@ -409,6 +409,7 @@ const AirportName names[] = {
   {"SOF", "Sofia"},
   {"SPC", "La Palma"},
   {"SPU", "Split"},
+  {"SPX", "Kairo-Sphinx"},
   {"SSH", "Sharm el-Sheikh"},
   {"STL", "St. Louis"},
   {"STN", "London-Stansted"},

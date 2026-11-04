@@ -128,6 +128,7 @@ const AirlineName names[] = {
   {"EXS", "Jet2.com"},
   {"EZS", "Easyjet Switzerland"},
   {"EZY", "easyJet"},
+  {"FCK", "FCS Flight Calibration Services"},
   {"FDX", "FedEx Express"},
   {"FHM", "Freebird Airlines Europe"},
   {"FHY", "Freebird Airlines"},

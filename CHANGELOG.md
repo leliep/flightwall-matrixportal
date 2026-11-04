@@ -10,6 +10,8 @@
   nur, wenn kein geeignetes fliegendes Flugzeug im Anzeigeradius vorhanden ist
 - Bodenstatus auf Matrix, Webdisplay, Statusseite und in beiden Status-APIs
   ergänzt
+- Airport SPX (Kairo-Sphinx) einschließlich Koordinaten sowie Airline FCK
+  (FCS Flight Calibration Services) ergänzt
 
 ## 3.6.1-dual-target.19 – 2026-11-04
 
