@@ -43,8 +43,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.16";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-03 special chronicle and selection reason";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.17";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-04 route plausibility terminal tolerance";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";

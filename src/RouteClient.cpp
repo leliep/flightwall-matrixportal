@@ -218,10 +218,6 @@ void fillNames(RouteResult& route) {
   route.destinationName = airportDisplayName(route.destination);
 }
 
-float angleDifference(float left, float right) {
-  return fabsf(fmodf(left - right + 540.0F, 360.0F) - 180.0F);
-}
-
 void rejectRoute(RouteResult& route, const String& reason) {
   if (!route.source.endsWith("-rejected")) route.source += "-rejected";
   route.status = "rejected";
@@ -304,19 +300,16 @@ bool routePlausible(const RouteResult& route, const RouteContext& context,
 
   if (context.hasVerticalRate && context.verticalRateFpm < -200.0F &&
       heightAboveEnd < 10000.0F) {
+    // Close to the destination, a descending aircraft may fly a holding
+    // pattern, downwind leg or radar vector that temporarily points away
+    // from the airport. This is normal terminal-area traffic and must not
+    // invalidate an otherwise geographically plausible route.
+    constexpr double terminalAreaKm = 100.0;
+    if (bestEndDistance <= terminalAreaKm) return true;
     const double maximumDistance = 30.0 + heightAboveEnd * 0.012;
     if (bestEndDistance > maximumDistance) {
       reason = "Route verworfen: Ziel bei Höhe und Sinkflug unplausibel";
       return false;
-    }
-    if (context.hasTrack && bestEndDistance > 20.0) {
-      const float destinationBearing = bearingDegrees(
-          context.latitude, context.longitude,
-          bestEnd->coordinates.latitude, bestEnd->coordinates.longitude);
-      if (angleDifference(context.trackDegrees, destinationBearing) > 110.0F) {
-        reason = "Route verworfen: Sinkflug führt vom Ziel weg";
-        return false;
-      }
     }
   }
 
@@ -394,7 +387,6 @@ RouteResult RouteClient::readMemoryCache(const String& callsign,
     RouteResult result = entry.route;
     String reason;
     if (result.found() && !routePlausible(result, context, reason)) {
-      entry = {};
       rejectRoute(result, reason);
       return result;
     }
@@ -767,7 +759,6 @@ RouteResult RouteClient::lookup(const String& callsign,
     return {};
   }
   RouteResult cached = readMemoryCache(callsign, context, now);
-  if (cached.status == "rejected") removeCacheEntry(callsign);
   if (cached.status != "unavailable") {
     if (cached.status != "rejected") {
       lastError_ = "";
@@ -775,7 +766,6 @@ RouteResult RouteClient::lookup(const String& callsign,
     }
   }
   cached = readCache(callsign, context, now);
-  if (cached.status == "rejected") removeCacheEntry(callsign);
   if (cached.status != "unavailable") {
     if (cached.status != "rejected") {
       rememberInMemory(callsign, cached, now, false);

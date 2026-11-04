@@ -1,8 +1,9 @@
 {
-  "updated_at": "2026-11-03T18:55:11+01:00",
+  "updated_at": "2026-11-04T09:34:00+01:00",
   "status": "integrated",
   "airports": [
     "ACH",
+    "ADA",
     "AES",
     "AHO",
     "BIQ",
@@ -23,6 +24,7 @@
     "FAB",
     "FMM",
     "GHV",
+    "GOX",
     "GRO",
     "JER",
     "JRO",
@@ -67,6 +69,7 @@
     "ALK",
     "BBB",
     "BOH",
+    "BQB",
     "BSF",
     "CAL",
     "CAT",
@@ -80,6 +83,7 @@
     "EJM",
     "ELI",
     "EMC",
+    "EVA",
     "FLI",
     "FYG",
     "GER",
@@ -93,9 +97,11 @@
     "KLJ",
     "LZB",
     "LOG",
+    "MBK",
     "N9",
     "NAF",
     "NIT",
+    "NCR",
     "OLI",
     "PEA",
     "POF",
@@ -538,6 +544,35 @@
       "unknown_airlines": [
         "NIT",
         "KLJ"
+      ],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "matrixportal_s3",
+      "firmware_version": "3.6.1-dual-target.16",
+      "unknown_airports": [
+        "GOX",
+        "ADA"
+      ],
+      "unknown_airlines": [
+        "BQB",
+        "MBK",
+        "EVA"
+      ],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "esp32s3_n16r8_headless",
+      "firmware_version": "3.6.1-dual-target.16",
+      "unknown_airports": [
+        "GOX",
+        "ADA"
+      ],
+      "unknown_airlines": [
+        "MBK",
+        "NCR"
       ],
       "dropped_unknown_airports": 0,
       "dropped_unknown_airlines": 0

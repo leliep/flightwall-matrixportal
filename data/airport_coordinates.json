@@ -34,6 +34,11 @@
     "longitude": -70.060204,
     "elevation_ft": 47
   },
+  "ADA": {
+    "latitude": 36.981939,
+    "longitude": 35.280278,
+    "elevation_ft": 65
+  },
   "ADB": {
     "latitude": 38.2924,
     "longitude": 27.157,
@@ -878,6 +883,11 @@
     "latitude": 44.412039,
     "longitude": 8.840732,
     "elevation_ft": 13
+  },
+  "GOX": {
+    "latitude": 15.742499,
+    "longitude": 73.867011,
+    "elevation_ft": 564
   },
   "GOT": {
     "latitude": 57.6628,

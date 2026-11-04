@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.6.1-dual-target.17 – 2026-11-04
+
+- Routenprüfung toleriert Anflugschleifen, Warteschleifen, Gegenanflug und
+  Radarvektoren innerhalb von 100 km um den Zielflughafen
+- die momentane Flugrichtung wird nicht mehr als hartes Ausschlusskriterium
+  verwendet; die geografische Korridorprüfung bleibt aktiv
+- unplausible Momentaufnahmen löschen einen vorhandenen persistenten
+  Routencache-Eintrag nicht mehr automatisch
+- Airports ADA (Adana-Şakirpaşa) und GOX (Goa-Manohar) einschließlich
+  Koordinaten sowie Airlines BQB (Axis Aviation Austria), EVA (EVA Air), MBK
+  (Chrono Jet) und NCR (National Airlines) ergänzt
+
 ## 3.6.1-dual-target.16 – 2026-11-03
 
 - tägliche Special-Chronik für bis zu 64 erkannte Specials und
