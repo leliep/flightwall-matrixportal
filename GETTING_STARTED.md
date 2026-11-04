@@ -159,7 +159,7 @@ http://matrixportal.local/
 ```
 
 Beim Headless-Server lautet die Adresse entsprechend
-`http://flightwall-server.local/`.
+`http://flightwall-server.local/config`.
 
 Funktioniert der Name im eigenen Netz nicht, kann die im Router oder seriellen
 Monitor angezeigte IP-Adresse verwendet werden.
@@ -382,7 +382,9 @@ Die wichtigsten Adressen sind:
 
 | Adresse | Funktion |
 |---|---|
-| `http://matrixportal.local/` | Konfiguration und Status |
+| `http://matrixportal.local/` | Weiterleitung zur Statusseite |
+| `http://matrixportal.local/status` | automatisch aktualisierter Status und Diagnose |
+| `http://matrixportal.local/config` | Konfiguration ohne automatische Aktualisierung |
 | `http://matrixportal.local/display` | FlightWall-Web-Display für iPhone, Tablet und Desktop |
 | `http://matrixportal.local/api/display` | aktuelle Anzeigedaten als JSON |
 | `http://matrixportal.local/api/status` | vollständige Diagnose als JSON |
@@ -471,7 +473,7 @@ Eine erfolgreiche Grundeinrichtung ist an folgenden Punkten erkennbar:
 ### Konfigurationsseite nicht erreichbar
 
 - IP-Adresse im Router nachsehen.
-- `http://matrixportal.local/` und die numerische IP-Adresse testen.
+- `http://matrixportal.local/config` und die numerische IP-Adresse mit `/config` testen.
 - Prüfen, ob das Einrichtungsnetz `FlightWall-Setup-…` aktiv ist.
 - Bei weiterhin laufender Matrix nicht sofort mehrfach zurücksetzen; zunächst
   offene Browserclients schließen und erneut versuchen.

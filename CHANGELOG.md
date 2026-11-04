@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.6.1-dual-target.18 – 2026-11-04
+
+- Status und Konfiguration auf eigenständige Seiten `/status` und `/config`
+  verteilt; `/` führt jetzt zur Statusseite
+- gemeinsame responsive Navigation zu Status, Konfiguration, FlightWall-
+  Webdisplay und Firmwareupdate ergänzt
+- automatische Aktualisierung läuft nur noch auf der Statusseite; Eingaben
+  und geöffnete Bereiche der Konfigurationsseite bleiben unberührt
+- Airports AQJ (Aqaba) und HAV (Havanna) einschließlich Koordinaten ergänzt
+
 ## 3.6.1-dual-target.17 – 2026-11-04
 
 - Routenprüfung toleriert Anflugschleifen, Warteschleifen, Gegenanflug und

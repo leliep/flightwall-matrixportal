@@ -119,6 +119,11 @@
     "longitude": 27.146,
     "elevation_ft": 66
   },
+  "AQJ": {
+    "latitude": 29.611618,
+    "longitude": 35.018066,
+    "elevation_ft": 175
+  },
   "ARN": {
     "latitude": 59.64849,
     "longitude": 17.928829,
@@ -958,6 +963,11 @@
     "latitude": 21.221201,
     "longitude": 105.806999,
     "elevation_ft": 39
+  },
+  "HAV": {
+    "latitude": 22.989167,
+    "longitude": -82.409167,
+    "elevation_ft": 210
   },
   "HEL": {
     "latitude": 60.318363,

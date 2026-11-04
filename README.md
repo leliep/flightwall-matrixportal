@@ -19,7 +19,7 @@ erklärt auch BME280, BH1750, MQTT, Routenauflösung und OTA.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.17` |
+| Firmware | `3.6.1-dual-target.18` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -434,7 +434,9 @@ Nach erfolgreicher WLAN-Verbindung antwortet der Server auf Port 80:
 
 | Pfad | Matrixcontroller | Headless-Controller | Funktion |
 |---|---|---|---|
-| `/` | `http://matrixportal.local/` | `http://flightwall-server.local/` | Konfiguration und Status |
+| `/` | `http://matrixportal.local/` | `http://flightwall-server.local/` | Weiterleitung zum Status |
+| `/status` | `http://matrixportal.local/status` | `http://flightwall-server.local/status` | automatisch aktualisierter Status und Diagnose |
+| `/config` | `http://matrixportal.local/config` | `http://flightwall-server.local/config` | Konfiguration ohne automatische Seitenaktualisierung |
 | `/display` | `http://matrixportal.local/display` | `http://flightwall-server.local/display` | responsive FlightWall-Anzeige |
 | `/api/display` | verfügbar | verfügbar | aktuelle Displaydaten als JSON |
 | `/api/status` | verfügbar | verfügbar | vollständige Statusdaten einschließlich RGB-LED als JSON |
@@ -583,7 +585,7 @@ Der serielle Monitor läuft mit 115200 Baud:
 pio device monitor -b 115200
 ```
 
-Nach dem ersten Start `http://matrixportal.local` öffnen und mindestens
+Nach dem ersten Start `http://matrixportal.local/config` öffnen und mindestens
 Standort, Blickrichtung, aktive ADS-B-Quelle und Anzeigeradius kontrollieren.
 Die mitgelieferten Standardwerte sind auf den ursprünglichen Aufbau
 zugeschnitten und nicht als allgemeine Standortvorgabe gedacht.
@@ -606,7 +608,7 @@ eingecheckt.
 
 Für stabile Versionen ist **Releases → Latest** der bevorzugte Downloadweg.
 Ein Versionstag im Format `v<APP_VERSION>`, beispielsweise
-`v3.6.1-dual-target.17`, veröffentlicht nach zwei erfolgreichen Builds
+`v3.6.1-dual-target.18`, veröffentlicht nach zwei erfolgreichen Builds
 automatisch:
 
 - `flightwall-matrixportal-<VERSION>.bin`

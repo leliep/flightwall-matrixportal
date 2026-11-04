@@ -16,7 +16,7 @@ main{width:min(1040px,100%);margin:auto}.top{display:flex;align-items:center;jus
 .lower{display:grid;grid-template-columns:1.2fr .8fr;gap:13px;margin-top:13px}.direction{display:flex;align-items:center;gap:20px}.compass{flex:0 0 88px;width:88px;height:88px;border-radius:50%;border:1px solid #426172;background:radial-gradient(circle,#193444,#09141c 70%);display:grid;place-items:center;position:relative}.compass:before,.compass:after{content:"";position:absolute;background:#42617255}.compass:before{width:1px;height:100%}.compass:after{height:1px;width:100%}.needle{position:relative;z-index:1;font-size:42px;color:var(--yellow);line-height:1}.look{font-size:clamp(25px,5vw,42px);font-weight:850}.bearing{color:var(--muted);margin-top:4px}.cpaState{color:var(--green);font-weight:700;margin-top:7px}.reason{color:var(--muted);font-size:13px;line-height:1.35;margin-top:9px}.departing{color:var(--orange)}
 footer{display:flex;justify-content:space-between;gap:16px;margin-top:16px;color:var(--muted);font-size:13px}a{color:#76dce5;text-decoration:none}a:hover{text-decoration:underline}.empty{padding:60px 20px;text-align:center;color:var(--muted)}
 @media(max-width:720px){body{padding-left:12px;padding-right:12px}.top{margin-bottom:12px}.hero{border-radius:20px;padding:22px}.flightline{align-items:start}.callsign{font-size:clamp(45px,17vw,72px)}.type{font-size:20px}.route{margin-top:25px;padding-top:22px}.grid{grid-template-columns:repeat(2,1fr)}.card{padding:15px;border-radius:15px}.value{font-size:clamp(25px,8vw,34px)}.lower{grid-template-columns:1fr}.compass{width:72px;height:72px;flex-basis:72px}.needle{font-size:35px}footer{flex-direction:column-reverse;gap:7px}}
-</style></head><body><main><div class="top"><div class="brand"><span class="wing">✈</span><span>FlightWall</span></div><div class="live"><span class="pulse" id="pulse"></span><span id="status">verbinde…</span></div></div><div id="content"><section class="hero empty">Warte auf Flugzeugdaten…</section></div><footer><span id="updated">–</span><a href="/">Einstellungen &amp; Diagnose</a></footer></main>
+</style></head><body><main><div class="top"><div class="brand"><span class="wing">✈</span><span>FlightWall</span></div><div class="live"><span class="pulse" id="pulse"></span><span id="status">verbinde…</span></div></div><div id="content"><section class="hero empty">Warte auf Flugzeugdaten…</section></div><footer><span id="updated">–</span><span><a href="/status">Status</a> · <a href="/config">Konfiguration</a></span></footer></main>
 <script>
 const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function num(v,d=0){return Number.isFinite(v)?Number(v).toFixed(d).replace('.',','):'–'}
@@ -38,7 +38,7 @@ String webDisplayPage(bool english) {
   struct Translation { const char *de; const char *en; };
   static const Translation translations[] = {
     {"verbinde…", "connecting…"}, {"Warte auf Flugzeugdaten…", "Waiting for aircraft data…"},
-    {"Einstellungen &amp; Diagnose", "Settings &amp; diagnostics"},
+    {"Konfiguration", "Configuration"},
     {"Richtung unbekannt", "Direction unknown"}, {"rechte Schulter", "right rear"},
     {"linke Schulter", "left rear"}, {"vorne", "front"}, {"hinten", "rear"},
     {"rechts", "right"}, {"links", "left"},

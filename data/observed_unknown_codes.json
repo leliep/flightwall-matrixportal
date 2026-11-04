@@ -1,11 +1,12 @@
 {
-  "updated_at": "2026-11-04T09:34:00+01:00",
+  "updated_at": "2026-11-04T10:05:00+01:00",
   "status": "integrated",
   "airports": [
     "ACH",
     "ADA",
     "AES",
     "AHO",
+    "AQJ",
     "BIQ",
     "BOH",
     "BOO",
@@ -26,6 +27,7 @@
     "GHV",
     "GOX",
     "GRO",
+    "HAV",
     "JER",
     "JRO",
     "KIR",
@@ -574,6 +576,26 @@
         "MBK",
         "NCR"
       ],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "matrixportal_s3",
+      "firmware_version": "3.6.1-dual-target.17",
+      "unknown_airports": [
+        "HAV"
+      ],
+      "unknown_airlines": [],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "esp32s3_n16r8_headless",
+      "firmware_version": "3.6.1-dual-target.17",
+      "unknown_airports": [
+        "AQJ"
+      ],
+      "unknown_airlines": [],
       "dropped_unknown_airports": 0,
       "dropped_unknown_airlines": 0
     }

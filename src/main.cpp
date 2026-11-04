@@ -43,8 +43,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.17";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-04 route plausibility terminal tolerance";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.18";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-04 separate status and configuration pages";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -3570,6 +3570,7 @@ void translateWebPageToEnglish(String &html) {
     {"Stackreserve", "Stack reserve"}, {"Letzter Reset", "Last reset"},
     {"ESP wirklich neu starten?", "Really restart the ESP?"}, {"ESP neu starten", "Restart ESP"},
     {"Web-Display öffnen", "Open web display"}, {"Firmware drahtlos aktualisieren", "Update firmware wirelessly"},
+    {"Firmware-Update", "Firmware update"},
     {"UP/DOWN: manuell; beide Tasten: Automatik.", "UP/DOWN: manual; both buttons: automatic."},
     {"Installierte Version", "Installed version"},
     {"PlatformIO-Datei", "PlatformIO file"}, {"auswählen", "select"},
@@ -3602,7 +3603,7 @@ void translateWebPageToEnglish(String &html) {
 }
 
 
-String webPage(bool includeRouteCache = true) {
+String webPage(bool configurationPage = false, bool includeRouteCache = true) {
   FlightData statusFlight;
   String statusError;
   uint32_t statusUpdated = 0;
@@ -3626,9 +3627,10 @@ String webPage(bool includeRouteCache = true) {
   }
 
   String html;
-  // The complete configuration page is currently about 18 KiB. Reserving its
-  // real size avoids several large heap reallocations while it is assembled.
-  html.reserve(includeRouteCache ? 56000 : 48000);
+  // Status and configuration are deliberately separate. Besides making the
+  // UI clearer, this keeps a normal status request from assembling the large
+  // settings form and keeps automatic refreshes away from user input.
+  html.reserve(configurationPage ? 30000 : (includeRouteCache ? 42000 : 34000));
   html += F("<!doctype html><html lang='de'><head><meta charset='utf-8'>");
   html += F("<meta name='viewport' content='width=device-width,initial-scale=1'>");
   html += F("<title>");
@@ -3638,12 +3640,18 @@ String webPage(bool includeRouteCache = true) {
   html += F("h1{font-size:1.5rem}fieldset{border:1px solid #445;border-radius:10px;margin:14px 0;padding:14px;min-width:0}");
   html += F("label{display:block;margin:12px 0}input[type=number],input[type=text],input[type=password],input[type=url],input[type=time],select,textarea{width:100%;box-sizing:border-box;padding:9px;min-height:42px}input[type=checkbox]{width:auto;min-height:auto}.fieldGrid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:10px 14px;align-items:end;margin:10px 0}.fieldGrid>label{grid-column:span 6;margin:0;min-width:0}.fieldGrid>.third{grid-column:span 4}.fieldGrid>.quarter{grid-column:span 3}.fieldGrid>.twoThird{grid-column:span 8}.fieldGrid>.threeQuarter{grid-column:span 9}.fieldGrid>.fieldWide{grid-column:1/-1}.fieldGrid .check{align-self:center;padding:9px 0}.buttonRow{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}.pageSettings{display:grid;grid-template-columns:minmax(0,1fr) minmax(120px,180px);gap:8px 14px;align-items:end;margin:10px 0}.pageSettings label{margin:0}.orderGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px 14px}.orderGrid label{margin:0}");
   html += F("button{background:#00bcd4;color:#001018;border:0;border-radius:8px;padding:12px 18px;font-weight:bold}.danger{background:#ff8597;color:#24050b}.smallButton{padding:7px 10px;font-size:.82rem}.inlineForm{display:inline;margin:0 4px 0 0}.networkSummary{background:#172533;border:1px solid #31546b;border-radius:10px;padding:11px 13px;margin:0 0 13px;overflow-wrap:anywhere}.networkSummary a{color:#7ee7f0;font-weight:700}.tableScroll{overflow-x:auto}.cacheTable{width:100%;border-collapse:collapse}.cacheTable th,.cacheTable td{text-align:left;padding:8px 6px;border-bottom:1px solid #343d50;vertical-align:top}.cacheTable th{color:#aab;font-size:.8rem}.cacheActions{white-space:nowrap}");
-  html += F(".status{display:grid;grid-template-columns:minmax(145px,42%) minmax(0,1fr);gap:7px 14px}.status span{color:#aab}.status b{overflow-wrap:anywhere}.statusNote{grid-column:1/-1;margin:2px 0 5px;line-height:1.35}.statusCards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.statusCard{background:#171c26;border:1px solid #343d50;border-radius:12px;padding:14px}.statusCard h3{margin:0 0 12px;font-size:1rem;color:#7ee7f0}.healthbar{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 14px}.pill{border-radius:999px;padding:7px 11px;font-size:.86rem;font-weight:700}.ok{background:#153b2b;color:#74e3aa}.warn{background:#493c16;color:#ffd166}.bad{background:#4a1f29;color:#ff8597}.off{background:#303541;color:#abb3c3}.wide{grid-column:1/-1}details summary{cursor:pointer;font-weight:700;color:#7ee7f0}details .status{margin-top:12px}@media(max-width:650px){body{padding:12px}.fieldGrid>label,.fieldGrid>.third,.fieldGrid>.quarter,.fieldGrid>.twoThird,.fieldGrid>.threeQuarter{grid-column:span 6}.fieldGrid>.fieldWide{grid-column:1/-1}.statusCards{grid-template-columns:1fr}.wide{grid-column:auto}.status{grid-template-columns:1fr}.status b{margin-bottom:7px}}@media(max-width:430px){.fieldGrid>label,.fieldGrid>.third,.fieldGrid>.quarter,.fieldGrid>.twoThird,.fieldGrid>.threeQuarter{grid-column:1/-1}.pageSettings{grid-template-columns:minmax(0,1fr) 112px;gap:8px}.pageSettings label{font-size:.92rem}fieldset{padding:11px}}.muted{color:#aab}</style></head><body>");
+  html += F(".status{display:grid;grid-template-columns:minmax(145px,42%) minmax(0,1fr);gap:7px 14px}.status span{color:#aab}.status b{overflow-wrap:anywhere}.statusNote{grid-column:1/-1;margin:2px 0 5px;line-height:1.35}.statusCards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.statusCard{background:#171c26;border:1px solid #343d50;border-radius:12px;padding:14px}.statusCard h3{margin:0 0 12px;font-size:1rem;color:#7ee7f0}.healthbar{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 14px}.pill{border-radius:999px;padding:7px 11px;font-size:.86rem;font-weight:700}.ok{background:#153b2b;color:#74e3aa}.warn{background:#493c16;color:#ffd166}.bad{background:#4a1f29;color:#ff8597}.off{background:#303541;color:#abb3c3}.wide{grid-column:1/-1}details summary{cursor:pointer;font-weight:700;color:#7ee7f0}details .status{margin-top:12px}.nav{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 18px}.nav a{color:#cbd5e1;text-decoration:none;background:#171c26;border:1px solid #343d50;border-radius:9px;padding:9px 12px;font-weight:700}.nav a.active{color:#06141b;background:#7ee7f0;border-color:#7ee7f0}@media(max-width:650px){body{padding:12px}.fieldGrid>label,.fieldGrid>.third,.fieldGrid>.quarter,.fieldGrid>.twoThird,.fieldGrid>.threeQuarter{grid-column:span 6}.fieldGrid>.fieldWide{grid-column:1/-1}.statusCards{grid-template-columns:1fr}.wide{grid-column:auto}.status{grid-template-columns:1fr}.status b{margin-bottom:7px}}@media(max-width:430px){.fieldGrid>label,.fieldGrid>.third,.fieldGrid>.quarter,.fieldGrid>.twoThird,.fieldGrid>.threeQuarter{grid-column:1/-1}.pageSettings{grid-template-columns:minmax(0,1fr) 112px;gap:8px}.pageSettings label{font-size:.92rem}fieldset{padding:11px}.nav{display:grid;grid-template-columns:1fr 1fr}.nav a{text-align:center;padding:10px 6px}}.muted{color:#aab}</style></head><body>");
   html += F("<h1>");
   html += DEVICE_NAME;
   html += ' ';
   html += APP_VERSION;
-  html += F("</h1><form method='post' action='/save'>");
+  html += F("</h1><nav class='nav'><a href='/status'");
+  if (!configurationPage) html += F(" class='active'");
+  html += F(">Status</a><a href='/config'");
+  if (configurationPage) html += F(" class='active'");
+  html += F(">Konfiguration</a><a href='/display'>FlightWall</a><a href='/update'>Firmware-Update</a></nav>");
+  if (configurationPage) {
+    html += F("<form method='post' action='/save'>");
   html += F("<fieldset><legend>Sprache / Language</legend><div class='fieldGrid'><label class='third'><select name='uiLanguage'>"
             "<option value='de'");
   html += selected(!uiEnglish);
@@ -3826,8 +3834,9 @@ String webPage(bool includeRouteCache = true) {
   html += String(highLuxThreshold, 0);
   html += F("'></label></div></fieldset>");
 #endif
-  html += F("<button type='submit'>Einstellungen speichern</button></form>");
-  html += F("<fieldset><legend>Status <small class='muted' id='statusRefresh'>wird automatisch aktualisiert</small></legend><div id='statusData'><div class='healthbar'>");
+    html += F("<button type='submit'>Einstellungen speichern</button></form>");
+  } else {
+    html += F("<fieldset><legend>Status <small class='muted' id='statusRefresh'>wird automatisch aktualisiert</small></legend><div id='statusData'><div class='healthbar'>");
   html += statusError.length() ? F("<span class='pill warn'>● System eingeschränkt</span>") : F("<span class='pill ok'>● System OK</span>");
   html += lastAdsbError.length() ? F("<span class='pill bad'>● ADS-B Fehler</span>") : F("<span class='pill ok'>● ADS-B OK</span>");
   if (statusFlight.emergency)
@@ -4291,8 +4300,9 @@ String webPage(bool includeRouteCache = true) {
     }
     html += F("</fieldset>");
   }
-  html += F("<p><a href='/display'>Web-Display öffnen</a></p>");
-  html += F(R"HTML(<script>
+  }
+  if (configurationPage) {
+    html += F(R"HTML(<script>
 const wifiScanButton=document.getElementById('wifiScanButton');
 const wifiScanLabel=document.getElementById('wifiScanLabel');
 const wifiScanResults=document.getElementById('wifiScanResults');
@@ -4349,8 +4359,8 @@ wifiScanResults.addEventListener('change',()=>{
   if(openNetwork)openNetwork.checked=option.dataset.open==='1';
 });
 </script>)HTML");
-  html += F("<p class='muted'>UP/DOWN: manuell; beide Tasten: Automatik.</p>"
-            "<script>let statusBusy=false;async function refreshStatus(){"
+  } else {
+    html += F("<script>let statusBusy=false;async function refreshStatus(){"
             "if(statusBusy||document.hidden)return;statusBusy=true;"
             "const note=document.getElementById('statusRefresh');"
             "const current=document.getElementById('statusData');"
@@ -4360,14 +4370,19 @@ wifiScanResults.addEventListener('change',()=>{
             "if(fresh&&current){current.innerHTML=fresh;openDetails.forEach(id=>{const item=document.getElementById(id);if(item)item.open=true;});}"
             "if(note)note.textContent='aktualisiert '+new Date().toLocaleTimeString('de-DE');"
             "}catch(error){if(note)note.textContent='Aktualisierung fehlgeschlagen';}"
-            "finally{statusBusy=false;}}setInterval(refreshStatus,10000);</script></body></html>");
+            "finally{statusBusy=false;}}setInterval(refreshStatus,10000);</script>");
+  }
+#if FLIGHTWALL_HAS_MATRIX
+  html += F("<p class='muted'>UP/DOWN: manuell; beide Tasten: Automatik.</p>");
+#endif
+  html += F("</body></html>");
   translateWebPageToEnglish(html);
   return html;
 }
 
 
 void handleStatusFragment() {
-  String page = webPage(false);
+  String page = webPage(false, false);
   const String opening = "<div id='statusData'>";
   const String closing = "</div><form method='post' action='/restart'";
   const int start = page.indexOf(opening);
@@ -4633,7 +4648,7 @@ void handleWebSave() {
         "<h1>" + uiText("WLAN-Einstellungen ungültig",
                          "Invalid Wi-Fi settings") +
         "</h1><p>" + htmlEscape(wifiSettingsError) +
-        "</p><p><a href='/'>" + uiText("Zurück", "Back") +
+        "</p><p><a href='/config'>" + uiText("Zurück", "Back") +
         "</a></p></body></html>");
     return;
   }
@@ -4645,7 +4660,7 @@ void handleWebSave() {
         "<h1>" + uiText("OTA-Einstellungen ungültig",
                          "Invalid OTA settings") +
         "</h1><p>" + htmlEscape(otaSettingsError) +
-        "</p><p><a href='/'>" + uiText("Zurück", "Back") +
+        "</p><p><a href='/config'>" + uiText("Zurück", "Back") +
         "</a></p></body></html>");
     return;
   }
@@ -4661,7 +4676,7 @@ void handleWebSave() {
         "</p></body></html>");
     return;
   }
-  webServer.sendHeader("Location", "/");
+  webServer.sendHeader("Location", "/config");
   webServer.send(303, "text/plain", uiText("Gespeichert", "Saved"));
 }
 
@@ -4692,7 +4707,7 @@ void endRouteCacheMutation() {
 
 
 void redirectToRouteCache() {
-  webServer.sendHeader("Location", "/#routeCache");
+  webServer.sendHeader("Location", "/status#routeCache");
   webServer.send(303, "text/plain; charset=utf-8",
                  uiText("Routencache aktualisiert", "Route cache updated"));
 }
@@ -4757,7 +4772,7 @@ void handleAdsbTest() {
       String("<!doctype html><html lang='") + (uiEnglish ? "en" : "de") +
       "'><meta name='viewport' content='width=device-width'>"
       "<body style='font:18px system-ui;max-width:600px;margin:40px auto'><h1>ADS-B-Test</h1><p>" +
-      htmlEscape(message) + "</p><p><a href='/'>" + uiText("Zurück", "Back") +
+      htmlEscape(message) + "</p><p><a href='/config'>" + uiText("Zurück", "Back") +
       "</a></p></body></html>");
 }
 
@@ -4771,7 +4786,7 @@ void handleEmergencyTest() {
   selectedEmergencyHex = "";
   emergencySelectionStarted = 0;
   fetchLocalFlight();
-  webServer.sendHeader("Location", "/");
+  webServer.sendHeader("Location", "/status");
   webServer.send(303, "text/plain; charset=utf-8", uiText("Notfalltest gestartet", "Emergency test started"));
 }
 
@@ -4783,7 +4798,7 @@ void handleStopEmergencyTest() {
   selectedEmergencyHex = "";
   emergencySelectionStarted = 0;
   fetchLocalFlight();
-  webServer.sendHeader("Location", "/");
+  webServer.sendHeader("Location", "/status");
   webServer.send(303, "text/plain; charset=utf-8", uiText("Notfalltest beendet", "Emergency test stopped"));
 }
 
@@ -4843,7 +4858,7 @@ void handleRouteTest() {
       "<h1>" + uiText("Routendienst-Test", "Route service test") + "</h1><p>" +
       uiText("Direkte Abfrage ohne Cache für ", "Direct query without cache for ") + "<b>" +
       htmlEscape(callsign) + "</b>.</p><p>" + detail +
-      "</p><p><a href='/'>" + uiText("Zurück", "Back") + "</a></p></body></html>");
+      "</p><p><a href='/config'>" + uiText("Zurück", "Back") + "</a></p></body></html>");
 }
 
 
@@ -5521,7 +5536,7 @@ void handleRestart() {
 void handleDisplayTest() {
   if (displayTestActive || displayTestCommand == 1) displayTestCommand = 2;
   else displayTestCommand = 1;
-  webServer.sendHeader("Location", "/");
+  webServer.sendHeader("Location", "/config");
   webServer.send(303, "text/plain; charset=utf-8", uiText("Displaytest umgeschaltet", "Display test toggled"));
 }
 
@@ -5787,7 +5802,20 @@ void startWebServer() {
   if (!webServerConfigured) {
     webServer.on("/", HTTP_GET, []() {
       pulseHttpActivity();
-      webServer.send(200, "text/html; charset=utf-8", webPage());
+      webServer.sendHeader("Location",
+                           wifiSetupAccessPointActive ? "/config" : "/status",
+                           true);
+      webServer.send(302, "text/plain; charset=utf-8", "FlightWall");
+    });
+    webServer.on("/status", HTTP_GET, []() {
+      pulseHttpActivity();
+      webServer.sendHeader("Cache-Control", "no-store");
+      webServer.send(200, "text/html; charset=utf-8", webPage(false));
+    });
+    webServer.on("/config", HTTP_GET, []() {
+      pulseHttpActivity();
+      webServer.sendHeader("Cache-Control", "no-store");
+      webServer.send(200, "text/html; charset=utf-8", webPage(true, false));
     });
     webServer.on("/display", HTTP_GET, []() {
       pulseHttpActivity();
