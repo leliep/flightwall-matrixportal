@@ -3561,6 +3561,7 @@ void translateWebPageToEnglish(String &html) {
     {"Letzte WLAN-Unterbrechung", "Last Wi-Fi interruption"}, {"Aktuelles Flugzeug", "Current aircraft"},
     {"<span>Flug</span>", "<span>Flight</span>"}, {"Notfallauswahl", "Emergency selection"},
     {"Airline / Typ", "Airline / type"}, {"Entfernung / Höhe", "Distance / altitude"},
+    {"Boden-/Flugstatus", "Ground/flight status"},
     {"Radius normal / aktuell", "Normal / current radius"},
     {"ADS-B und Route", "ADS-B and route"}, {"ADS-B-Fehler", "ADS-B error"},
     {"Routenfehler", "Route error"}, {"Routencache wartet auf Flash", "Route cache pending flash write"},
