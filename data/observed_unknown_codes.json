@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-11-04T10:05:00+01:00",
+  "updated_at": "2026-11-04T12:30:00+01:00",
   "status": "integrated",
   "airports": [
     "ACH",
@@ -18,6 +18,7 @@
     "DAR",
     "EDKL",
     "EDLC",
+    "EDLF",
     "EDLH",
     "EDLS",
     "EDRF",
@@ -63,6 +64,7 @@
     "ZNZ"
   ],
   "airlines": [
+    "AAO",
     "ABF",
     "ABP",
     "AHY",
@@ -70,6 +72,7 @@
     "AJD",
     "ALK",
     "BBB",
+    "BGF",
     "BOH",
     "BQB",
     "BSF",
@@ -88,6 +91,7 @@
     "EVA",
     "FLI",
     "FYG",
+    "FYL",
     "GER",
     "GRZ",
     "GSR",
@@ -107,6 +111,7 @@
     "OLI",
     "PEA",
     "POF",
+    "RYS",
     "SEU",
     "SPA",
     "STQ",
@@ -114,6 +119,7 @@
     "TDR",
     "TEU",
     "THA",
+    "TOY",
     "TRK",
     "UAG"
   ],
@@ -596,6 +602,33 @@
         "AQJ"
       ],
       "unknown_airlines": [],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "matrixportal_s3",
+      "firmware_version": "3.6.1-dual-target.18",
+      "unknown_airports": [
+        "EDLF"
+      ],
+      "unknown_airlines": [
+        "AAO",
+        "BGF",
+        "RYS",
+        "FYL",
+        "TOY"
+      ],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "esp32s3_n16r8_headless",
+      "firmware_version": "3.6.1-dual-target.18",
+      "unknown_airports": [],
+      "unknown_airlines": [
+        "BGF",
+        "TOY"
+      ],
       "dropped_unknown_airports": 0,
       "dropped_unknown_airlines": 0
     }

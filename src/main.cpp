@@ -43,8 +43,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.18";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-04 separate status and configuration pages";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.19";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-04 expanded daily journal and reordered status";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -542,7 +542,8 @@ struct DailyJournalEntry {
   float altitudeFt = NAN;
 };
 
-constexpr size_t DAILY_JOURNAL_LIMIT = 64;
+constexpr size_t DAILY_JOURNAL_LIMIT = 256;
+constexpr size_t DAILY_JOURNAL_STATUS_ROWS = 64;
 DailyJournalEntry dailyJournal[DAILY_JOURNAL_LIMIT];
 size_t dailyJournalCount = 0;
 bool dailyJournalLimitReached = false;
@@ -3603,6 +3604,50 @@ void translateWebPageToEnglish(String &html) {
 }
 
 
+void appendDailyJournalStatus(String &html) {
+  html += F("<section class='statusCard wide'><h3>");
+  html += uiText("Tagesjournal", "Daily journal");
+  html += " · " + String(dailyJournalCount) + " / " +
+          String(DAILY_JOURNAL_LIMIT) + "</h3>";
+  if (!dailyJournalCount) {
+    html += "<p class='muted'>" +
+            String(uiText("Heute wurde noch kein angezeigtes Flugzeug erfasst.",
+                          "No displayed aircraft has been recorded today.")) +
+            "</p>";
+  } else {
+    html += F("<div class='tableScroll'><table class='cacheTable'><thead><tr><th>Zeit</th><th>Flug</th><th>Typ</th><th>Route</th><th>Klasse</th><th>min. CPA</th><th>Auswahlbegründung</th></tr></thead><tbody>");
+    const size_t visibleJournalRows =
+        min(dailyJournalCount, DAILY_JOURNAL_STATUS_ROWS);
+    for (size_t offset = 0; offset < visibleJournalRows; ++offset) {
+      const DailyJournalEntry &entry =
+          dailyJournal[dailyJournalCount - 1 - offset];
+      html += "<tr><td>" + journalTimeText(entry.lastSeen) + "</td><td><b>" +
+              htmlEscape(entry.flight.length() ? entry.flight : entry.hex) +
+              "</b></td><td>" + htmlEscape(entry.type) + "</td><td>" +
+              htmlEscape(entry.routeCodes.length() ? entry.routeCodes : "-") +
+              "</td><td>" + htmlEscape(journalClassification(entry)) +
+              "</td><td>" + numberOrDash(entry.minimumCpaKm) +
+              " km</td><td>" + htmlEscape(entry.selectionReason) + "</td></tr>";
+    }
+    html += F("</tbody></table></div>");
+    if (dailyJournalCount > visibleJournalRows) {
+      html += "<p class='muted'>" +
+              String(uiText("Neueste ", "Latest ")) +
+              String(visibleJournalRows) + uiText(" von ", " of ") +
+              String(dailyJournalCount) +
+              uiText(" Einträgen angezeigt. Die Downloads enthalten alle Einträge.",
+                     " entries shown. Downloads contain all entries.") +
+              "</p>";
+    }
+  }
+  if (dailyJournalLimitReached)
+    html += "<p class='pill warn'>" +
+            String(uiText("Journal-Limit erreicht", "Journal limit reached")) +
+            "</p>";
+  html += F("<div class='buttonRow'><form class='inlineForm' method='get' action='/journal.json'><button type='submit'>JSON herunterladen</button></form><form class='inlineForm' method='get' action='/journal.csv'><button type='submit'>CSV herunterladen</button></form></div></section>");
+}
+
+
 String webPage(bool configurationPage = false, bool includeRouteCache = true) {
   FlightData statusFlight;
   String statusError;
@@ -4011,35 +4056,8 @@ String webPage(bool configurationPage = false, bool includeRouteCache = true) {
               ? uiText("Limit erreicht", "limit reached")
               : String(seenAircraftCount) + " / " +
                     String(OBSERVED_AIRCRAFT_TRACKING_LIMIT);
-  html += F("</b></div></section><section class='statusCard wide'><h3>");
-  html += uiText("Tagesjournal", "Daily journal");
-  html += " · " + String(dailyJournalCount) + " / " +
-          String(DAILY_JOURNAL_LIMIT) + "</h3>";
-  if (!dailyJournalCount) {
-    html += "<p class='muted'>" +
-            String(uiText("Heute wurde noch kein angezeigtes Flugzeug erfasst.",
-                          "No displayed aircraft has been recorded today.")) +
-            "</p>";
-  } else {
-    html += F("<div class='tableScroll'><table class='cacheTable'><thead><tr><th>Zeit</th><th>Flug</th><th>Typ</th><th>Route</th><th>Klasse</th><th>min. CPA</th><th>Auswahlbegründung</th></tr></thead><tbody>");
-    for (size_t offset = 0; offset < dailyJournalCount; ++offset) {
-      const DailyJournalEntry &entry =
-          dailyJournal[dailyJournalCount - 1 - offset];
-      html += "<tr><td>" + journalTimeText(entry.lastSeen) + "</td><td><b>" +
-              htmlEscape(entry.flight.length() ? entry.flight : entry.hex) +
-              "</b></td><td>" + htmlEscape(entry.type) + "</td><td>" +
-              htmlEscape(entry.routeCodes.length() ? entry.routeCodes : "-") +
-              "</td><td>" + htmlEscape(journalClassification(entry)) +
-              "</td><td>" + numberOrDash(entry.minimumCpaKm) +
-              " km</td><td>" + htmlEscape(entry.selectionReason) + "</td></tr>";
-    }
-    html += F("</tbody></table></div>");
-  }
-  if (dailyJournalLimitReached)
-    html += "<p class='pill warn'>" +
-            String(uiText("Journal-Limit erreicht", "Journal limit reached")) +
-            "</p>";
-  html += F("<div class='buttonRow'><form class='inlineForm' method='get' action='/journal.json'><button type='submit'>JSON herunterladen</button></form><form class='inlineForm' method='get' action='/journal.csv'><button type='submit'>CSV herunterladen</button></form></div></section><section class='statusCard wide'><h3>");
+  html += F("</b></div></section>");
+  html += F("<section class='statusCard wide'><h3>");
   html += uiText("Special-Chronik", "Special chronicle");
   html += " · " + String(specialChronicleCount) + " / " +
           String(SPECIAL_CHRONICLE_LIMIT) + "</h3>";
@@ -4073,7 +4091,9 @@ String webPage(bool configurationPage = false, bool includeRouteCache = true) {
     html += "<p class='pill warn'>" +
             String(uiText("Chronik-Limit erreicht", "Chronicle limit reached")) +
             "</p>";
-  html += F("<div class='buttonRow'><form class='inlineForm' method='get' action='/specials.json'><button type='submit'>JSON herunterladen</button></form><form class='inlineForm' method='get' action='/specials.csv'><button type='submit'>CSV herunterladen</button></form></div></section><section class='statusCard'><h3>ADS-B und Route</h3><div class='status'><span>ADS-B</span><b>");
+  html += F("<div class='buttonRow'><form class='inlineForm' method='get' action='/specials.json'><button type='submit'>JSON herunterladen</button></form><form class='inlineForm' method='get' action='/specials.csv'><button type='submit'>CSV herunterladen</button></form></div></section>");
+  appendDailyJournalStatus(html);
+  html += F("<section class='statusCard'><h3>ADS-B und Route</h3><div class='status'><span>ADS-B</span><b>");
   html += statusError.length() ? displayAscii(statusError) : "OK";
   html += F("</b><span>ADS-B-Fehler</span><b>");
   html += lastAdsbError.length() ? htmlEscape(lastAdsbError) : "keiner";
@@ -5243,78 +5263,94 @@ String csvEscape(String value) {
 }
 
 
+void flushDownloadChunk(String &chunk) {
+  if (!chunk.length()) return;
+  webServer.sendContent(chunk);
+  chunk = "";
+}
+
+
 void handleJournalJsonDownload() {
-  String json;
-  json.reserve(18000);
-  json = "{\n  \"firmware_version\":\"" + jsonEscape(APP_VERSION) +
-         "\",\n  \"period_started\":\"" +
-         jsonEscape(journalTimeText(dailyStatisticsStarted, true)) +
-         "\",\n  \"entries_count\":" + String(dailyJournalCount) +
-         ",\n  \"limit\":" + String(DAILY_JOURNAL_LIMIT) +
-         ",\n  \"limit_reached\":" +
-         String(dailyJournalLimitReached ? "true" : "false") +
-         ",\n  \"entries\":[";
-  for (size_t index = 0; index < dailyJournalCount; ++index) {
-    const DailyJournalEntry &entry = dailyJournal[index];
-    if (index) json += ',';
-    json += "\n    {\"first_seen\":\"" +
-            jsonEscape(journalTimeText(entry.firstSeen, true)) +
-            "\",\"last_seen\":\"" +
-            jsonEscape(journalTimeText(entry.lastSeen, true)) +
-            "\",\"hex\":\"" + jsonEscape(entry.hex) +
-            "\",\"flight\":\"" + jsonEscape(entry.flight) +
-            "\",\"airline\":\"" + jsonEscape(entry.airline) +
-            "\",\"type\":\"" + jsonEscape(entry.type) +
-            "\",\"type_description\":\"" +
-            jsonEscape(entry.typeDescription) +
-            "\",\"route_codes\":\"" + jsonEscape(entry.routeCodes) +
-            "\",\"route_names\":\"" + jsonEscape(entry.routeNames) +
-            "\",\"classification\":\"" +
-            jsonEscape(journalClassification(entry)) +
-            "\",\"selection_reason\":\"" +
-            jsonEscape(entry.selectionReason) +
-            "\",\"squawk\":\"" + jsonEscape(entry.squawk) +
-            "\",\"minimum_distance_km\":" +
-            jsonNumberOrNull(entry.minimumDistanceKm) +
-            ",\"minimum_cpa_km\":" + jsonNumberOrNull(entry.minimumCpaKm) +
-            ",\"last_altitude_ft\":" +
-            jsonNumberOrNull(entry.altitudeFt, 0) + "}";
-  }
-  json += "\n  ]\n}\n";
   webServer.sendHeader("Cache-Control", "no-store");
   webServer.sendHeader(
       "Content-Disposition",
       "attachment; filename=\"flightwall-daily-journal.json\"");
-  webServer.sendHeader("Connection", "close");
-  webServer.send(200, "application/json; charset=utf-8", json);
+  webServer.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  webServer.send(200, "application/json; charset=utf-8", "");
+
+  String chunk;
+  chunk.reserve(4600);
+  chunk = "{\n  \"firmware_version\":\"" + jsonEscape(APP_VERSION) +
+          "\",\n  \"period_started\":\"" +
+          jsonEscape(journalTimeText(dailyStatisticsStarted, true)) +
+          "\",\n  \"entries_count\":" + String(dailyJournalCount) +
+          ",\n  \"limit\":" + String(DAILY_JOURNAL_LIMIT) +
+          ",\n  \"limit_reached\":" +
+          String(dailyJournalLimitReached ? "true" : "false") +
+          ",\n  \"entries\":[";
+  for (size_t index = 0; index < dailyJournalCount; ++index) {
+    const DailyJournalEntry &entry = dailyJournal[index];
+    if (index) chunk += ',';
+    chunk += "\n    {\"first_seen\":\"" +
+             jsonEscape(journalTimeText(entry.firstSeen, true)) +
+             "\",\"last_seen\":\"" +
+             jsonEscape(journalTimeText(entry.lastSeen, true)) +
+             "\",\"hex\":\"" + jsonEscape(entry.hex) +
+             "\",\"flight\":\"" + jsonEscape(entry.flight) +
+             "\",\"airline\":\"" + jsonEscape(entry.airline) +
+             "\",\"type\":\"" + jsonEscape(entry.type) +
+             "\",\"type_description\":\"" +
+             jsonEscape(entry.typeDescription) +
+             "\",\"route_codes\":\"" + jsonEscape(entry.routeCodes) +
+             "\",\"route_names\":\"" + jsonEscape(entry.routeNames) +
+             "\",\"classification\":\"" +
+             jsonEscape(journalClassification(entry)) +
+             "\",\"selection_reason\":\"" +
+             jsonEscape(entry.selectionReason) +
+             "\",\"squawk\":\"" + jsonEscape(entry.squawk) +
+             "\",\"minimum_distance_km\":" +
+             jsonNumberOrNull(entry.minimumDistanceKm) +
+             ",\"minimum_cpa_km\":" + jsonNumberOrNull(entry.minimumCpaKm) +
+             ",\"last_altitude_ft\":" +
+             jsonNumberOrNull(entry.altitudeFt, 0) + "}";
+    if (chunk.length() >= 4096) flushDownloadChunk(chunk);
+  }
+  chunk += "\n  ]\n}\n";
+  flushDownloadChunk(chunk);
+  webServer.sendContent("");
 }
 
 
 void handleJournalCsvDownload() {
-  String csv;
-  csv.reserve(14000);
-  csv = "First seen,Last seen,Hex,Flight,Airline,Type,Type description,Route codes,Route names,Classification,Selection reason,Squawk,Minimum distance km,Minimum CPA km,Last altitude ft\r\n";
-  for (size_t index = 0; index < dailyJournalCount; ++index) {
-    const DailyJournalEntry &entry = dailyJournal[index];
-    csv += csvEscape(journalTimeText(entry.firstSeen, true)) + ',' +
-           csvEscape(journalTimeText(entry.lastSeen, true)) + ',' +
-           csvEscape(entry.hex) + ',' + csvEscape(entry.flight) + ',' +
-           csvEscape(entry.airline) + ',' + csvEscape(entry.type) + ',' +
-           csvEscape(entry.typeDescription) + ',' +
-           csvEscape(entry.routeCodes) + ',' + csvEscape(entry.routeNames) + ',' +
-           csvEscape(journalClassification(entry)) + ',' +
-           csvEscape(entry.selectionReason) + ',' +
-           csvEscape(entry.squawk) + ',' +
-           numberOrDash(entry.minimumDistanceKm) + ',' +
-           numberOrDash(entry.minimumCpaKm) + ',' +
-           numberOrDash(entry.altitudeFt, 0) + "\r\n";
-  }
   webServer.sendHeader("Cache-Control", "no-store");
   webServer.sendHeader(
       "Content-Disposition",
       "attachment; filename=\"flightwall-daily-journal.csv\"");
-  webServer.sendHeader("Connection", "close");
-  webServer.send(200, "text/csv; charset=utf-8", csv);
+  webServer.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  webServer.send(200, "text/csv; charset=utf-8", "");
+
+  String chunk;
+  chunk.reserve(4600);
+  chunk = "First seen,Last seen,Hex,Flight,Airline,Type,Type description,Route codes,Route names,Classification,Selection reason,Squawk,Minimum distance km,Minimum CPA km,Last altitude ft\r\n";
+  for (size_t index = 0; index < dailyJournalCount; ++index) {
+    const DailyJournalEntry &entry = dailyJournal[index];
+    chunk += csvEscape(journalTimeText(entry.firstSeen, true)) + ',' +
+             csvEscape(journalTimeText(entry.lastSeen, true)) + ',' +
+             csvEscape(entry.hex) + ',' + csvEscape(entry.flight) + ',' +
+             csvEscape(entry.airline) + ',' + csvEscape(entry.type) + ',' +
+             csvEscape(entry.typeDescription) + ',' +
+             csvEscape(entry.routeCodes) + ',' +
+             csvEscape(entry.routeNames) + ',' +
+             csvEscape(journalClassification(entry)) + ',' +
+             csvEscape(entry.selectionReason) + ',' +
+             csvEscape(entry.squawk) + ',' +
+             numberOrDash(entry.minimumDistanceKm) + ',' +
+             numberOrDash(entry.minimumCpaKm) + ',' +
+             numberOrDash(entry.altitudeFt, 0) + "\r\n";
+    if (chunk.length() >= 4096) flushDownloadChunk(chunk);
+  }
+  flushDownloadChunk(chunk);
+  webServer.sendContent("");
 }
 
 

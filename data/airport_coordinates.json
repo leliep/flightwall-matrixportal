@@ -704,6 +704,11 @@
     "longitude": 6.536111,
     "elevation_ft": 85
   },
+  "EDLF": {
+    "latitude": 51.334,
+    "longitude": 6.359333,
+    "elevation_ft": 105
+  },
   "EDLH": {
     "latitude": 51.68972,
     "longitude": 7.816111,

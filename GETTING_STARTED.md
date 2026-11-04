@@ -408,10 +408,11 @@ Die Statusseite enthält außerdem eine flüchtige Tagesstatistik. Sie zählt bi
 zu 4096 eindeutige, frische Flugzeuge und gliedert bis zu 256 Specials nach
 Art. Gesamtzahl, Special-Anteil, Erfassungsbeginn und Kapazitätsgrenzen werden
 angezeigt. Der Reset erfolgt bei lokalem Datumswechsel und bei jedem Neustart.
-Zusätzlich führt die Software ein flüchtiges Journal mit bis zu 64 tatsächlich
+Zusätzlich führt die Software ein flüchtiges Journal mit bis zu 256 tatsächlich
 angezeigten Flugzeugen einschließlich Zeit, Route, Klassifizierung,
-Minimalentfernung und Minimal-CPA. Es kann über die Statusseite als JSON oder
-CSV heruntergeladen werden und wird zusammen mit der Tagesstatistik gelöscht.
+Minimalentfernung und Minimal-CPA. Die Statusseite zeigt die neuesten 64
+Einträge; JSON- und CSV-Download enthalten das vollständige Journal. Es wird
+zusammen mit der Tagesstatistik gelöscht.
 Die zusätzliche Special-Chronik erfasst alle erkannten Sonderflugzeuge – auch
 wenn ein anderes Flugzeug ausgewählt wurde. Status, Webdisplay und Downloads
 zeigen außerdem die Begründung für die aktuelle Flugzeugauswahl.

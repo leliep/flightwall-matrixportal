@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.6.1-dual-target.19 – 2026-11-04
+
+- Special-Chronik auf der Statusseite vor das Tagesjournal verschoben
+- Tagesjournal von 64 auf 256 Einträge erweitert; die Statusseite zeigt für
+  eine stabile und schnelle Darstellung die neuesten 64 Einträge
+- JSON- und CSV-Downloads liefern weiterhin das vollständige Journal und
+  werden nun speicherschonend in Blöcken übertragen
+- Airport EDLF (Grefrath-Niershorst) einschließlich Koordinaten sowie Airlines
+  AAO, BGF, FYL, RYS und TOY ergänzt
+
 ## 3.6.1-dual-target.18 – 2026-11-04
 
 - Status und Konfiguration auf eigenständige Seiten `/status` und `/config`

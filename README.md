@@ -19,7 +19,7 @@ erklärt auch BME280, BH1750, MQTT, Routenauflösung und OTA.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.18` |
+| Firmware | `3.6.1-dual-target.19` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -608,7 +608,7 @@ eingecheckt.
 
 Für stabile Versionen ist **Releases → Latest** der bevorzugte Downloadweg.
 Ein Versionstag im Format `v<APP_VERSION>`, beispielsweise
-`v3.6.1-dual-target.18`, veröffentlicht nach zwei erfolgreichen Builds
+`v3.6.1-dual-target.19`, veröffentlicht nach zwei erfolgreichen Builds
 automatisch:
 
 - `flightwall-matrixportal-<VERSION>.bin`
@@ -725,12 +725,13 @@ werden im RAM verfolgt. Der Reset erfolgt um Mitternacht lokaler NTP-Zeit und
 zusätzlich bei jedem Neustart; die Statusseite zeigt den tatsächlichen
 Erfassungsbeginn und beide Kapazitätsgrenzen.
 
-Das Tagesjournal hält zusätzlich bis zu 64 tatsächlich zur Anzeige ausgewählte
+Das Tagesjournal hält zusätzlich bis zu 256 tatsächlich zur Anzeige ausgewählte
 Flugzeuge im RAM. Für jeden Eintrag werden erster und letzter Sichtzeitpunkt,
 Flug, Typ, Route, Klassifizierung sowie kleinste Entfernung und kleinster CPA
-fortgeschrieben. Die Statusseite zeigt die Einträge in umgekehrter zeitlicher
-Reihenfolge und bietet Downloads als JSON und CSV. Journal und Tagesstatistik
-werden gemeinsam bei lokalem Datumswechsel oder Neustart gelöscht.
+fortgeschrieben. Die Statusseite zeigt aus Stabilitätsgründen die neuesten 64
+Einträge in umgekehrter zeitlicher Reihenfolge; die JSON- und CSV-Downloads
+enthalten das vollständige Journal. Journal und Tagesstatistik werden gemeinsam
+bei lokalem Datumswechsel oder Neustart gelöscht.
 
 Die Special-Chronik erfasst unabhängig von der Anzeige bis zu 64 Specials und
 Transpondernotfälle, die der aktive ADS-B-Empfänger innerhalb des
