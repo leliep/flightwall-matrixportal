@@ -51,7 +51,8 @@ AdsbResult AdsbClient::fetch(const ProcessingConfig& config) {
                           "desc",      "ownOp",     "category",  "dbFlags",
                           "lat",       "lon",       "alt_baro",  "alt_geom",
                           "gs",        "track",     "baro_rate", "geom_rate",
-                          "seen",      "seen_pos", "squawk"};
+                          "seen",      "seen_pos",  "squawk",    "ground",
+                          "on_ground"};
   for (const char* field : fields) {
     filter["aircraft"][0][field] = true;
     filter["ac"][0][field] = true;

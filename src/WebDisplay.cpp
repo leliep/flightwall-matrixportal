@@ -55,6 +55,6 @@ String webDisplayPage(bool english) {
   // Keep the language-neutral API values for compatibility, but render their
   // English equivalents in the browser.
   html.replace("esc(f.vertical_motion||'unknown')",
-               "esc(f.vertical_motion==='steigt'?'climbing':f.vertical_motion==='sinkt'?'descending':f.vertical_motion==='haelt'?'level':'unknown')");
+               "esc(f.vertical_motion==='steigt'?'climbing':f.vertical_motion==='sinkt'?'descending':f.vertical_motion==='haelt'?'level':f.vertical_motion==='rollt'?'taxiing':f.vertical_motion==='steht'?'standing':f.vertical_motion==='am Boden'?'on ground':'unknown')");
   return html;
 }

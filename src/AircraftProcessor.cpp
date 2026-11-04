@@ -103,12 +103,19 @@ bool isSportAircraft(const Aircraft& aircraft) {
                             "GYROPLANE", "AMATEUR BUILT"});
 }
 
-bool readAltitude(JsonObjectConst raw, int& altitude) {
+bool readAltitude(JsonObjectConst raw, int& altitude, bool& onGround) {
+  onGround = raw["ground"] | false;
+  if (!onGround) onGround = raw["on_ground"] | false;
   JsonVariantConst barometric = raw["alt_baro"];
-  if (barometric.is<const char*>() &&
-      String(barometric.as<const char*>()) == "ground") {
-    altitude = 0;
-    return true;
+  if (barometric.is<const char*>()) {
+    String value = barometric.as<const char*>();
+    value.trim();
+    value.toLowerCase();
+    if (value == "ground") {
+      onGround = true;
+      altitude = 0;
+      return true;
+    }
   }
   if (barometric.is<float>() || barometric.is<int>()) {
     altitude = barometric.as<int>();
@@ -177,7 +184,8 @@ bool aircraftFromJson(JsonObjectConst raw, const ProcessingConfig& config,
         aircraft.distanceKm > config.radiusKm * 2.0F) return false;
   }
 
-  aircraft.hasAltitude = readAltitude(raw, aircraft.altitudeFt);
+  aircraft.hasAltitude =
+      readAltitude(raw, aircraft.altitudeFt, aircraft.onGround);
   if (!aircraft.emergency && config.maximumAltitudeFt > 0 && aircraft.hasAltitude &&
       aircraft.altitudeFt > config.maximumAltitudeFt)
     return false;
@@ -244,7 +252,8 @@ bool selectAircraft(const std::vector<Aircraft>& aircraft,
   }
 
   selectedEmergencyHex = "";
-  const Aircraft* nearest = nullptr;
+  const Aircraft* nearestAirborne = nullptr;
+  const Aircraft* nearestTaxiing = nullptr;
   for (const Aircraft& candidate : aircraft) {
     if (!candidate.hasPosition) continue;
     if (config.hideSportAircraft && candidate.sportAircraft &&
@@ -253,8 +262,20 @@ bool selectAircraft(const std::vector<Aircraft>& aircraft,
     const bool special = !candidate.specialTypes.empty();
     const float allowedRadius = special ? config.radiusKm * 2.0F : config.radiusKm;
     if (candidate.distanceKm > allowedRadius) continue;
-    if (!nearest || candidate.distanceKm < nearest->distanceKm) nearest = &candidate;
+    if (candidate.onGround) {
+      // Parked aircraft and ground reports without a usable speed must not
+      // permanently displace aircraft that are actually flying nearby.
+      if (!aircraftIsTaxiing(candidate)) continue;
+      if (!nearestTaxiing ||
+          candidate.distanceKm < nearestTaxiing->distanceKm)
+        nearestTaxiing = &candidate;
+      continue;
+    }
+    if (!nearestAirborne ||
+        candidate.distanceKm < nearestAirborne->distanceKm)
+      nearestAirborne = &candidate;
   }
+  const Aircraft* nearest = nearestAirborne ? nearestAirborne : nearestTaxiing;
   if (!nearest) return false;
   selected = *nearest;
   return true;

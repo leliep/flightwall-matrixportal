@@ -417,6 +417,12 @@ Die zusätzliche Special-Chronik erfasst alle erkannten Sonderflugzeuge – auch
 wenn ein anderes Flugzeug ausgewählt wurde. Status, Webdisplay und Downloads
 zeigen außerdem die Begründung für die aktuelle Flugzeugauswahl.
 
+ADS-B-Meldungen mit eindeutigem Bodenstatus werden als **steht** (bis 3 km/h),
+**rollt** oder bei fehlender Geschwindigkeit als **am Boden** gekennzeichnet.
+Stehende Flugzeuge verdrängen keine Überflüge. Rollende Flugzeuge werden nur
+ausgewählt, wenn im konfigurierten Radius kein geeignetes fliegendes Flugzeug
+vorhanden ist.
+
 ## 11. OTA optional aktivieren
 
 Das erste Image muss per USB installiert werden. Für spätere Updates kann ein

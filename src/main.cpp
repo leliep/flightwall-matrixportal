@@ -43,8 +43,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.19";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-04 expanded daily journal and reordered status";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.20";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-04 ground movement classification";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -163,6 +163,7 @@ struct FlightData {
   bool available = false;
   bool emergency = false;
   bool hasPosition = false;
+  bool onGround = false;
   String hex;
   String flight;
   String squawk;
@@ -1175,7 +1176,15 @@ void drawMainPage() {
   String metrics;
   if (!isnan(flight.distanceKm)) metrics += String(flight.distanceKm, 1) + "km ";
   metrics += clipped(localizedCompassToken(flight.direction), 2);
-  if (!isnan(flight.altitudeFt)) {
+  if (flight.onGround) {
+    metrics += " ";
+    metrics += uiText(flight.verticalMotion == "rollt" ? "rollt" :
+                          flight.verticalMotion == "steht" ? "steht" :
+                          "am Boden",
+                      flight.verticalMotion == "rollt" ? "taxiing" :
+                          flight.verticalMotion == "steht" ? "standing" :
+                          "on ground");
+  } else if (!isnan(flight.altitudeFt)) {
     metrics += " " + String(static_cast<int>(round(flight.altitudeFt))) + "ft";
   }
   const String shownMetrics = clipped(metrics, 19);
@@ -1338,8 +1347,14 @@ void drawCompactTypeHeader() {
 void drawCompactDetails() {
   const String distance = isnan(flight.distanceKm) ?
       "?km" : String(flight.distanceKm, 1) + "km";
-  const String altitude = isnan(flight.altitudeFt) ?
-      "?ft" : String(static_cast<int>(round(flight.altitudeFt))) + "ft";
+  const String altitude = flight.onGround
+      ? uiText(flight.verticalMotion == "rollt" ? "rollt" :
+                   flight.verticalMotion == "steht" ? "steht" : "Boden",
+               flight.verticalMotion == "rollt" ? "taxi" :
+                   flight.verticalMotion == "steht" ? "stand" : "ground")
+      : (isnan(flight.altitudeFt)
+             ? "?ft"
+             : String(static_cast<int>(round(flight.altitudeFt))) + "ft");
   const String metrics = distance + " " + altitude;
   drawLine(0, 8, metrics, yellow);
   const int16_t indicatorX = metrics.length() * 6 + 1;
@@ -2656,6 +2671,10 @@ String specialTypeDisplayName(String specialType) {
 
 
 String verticalMotion(const Aircraft &aircraft) {
+  if (aircraft.onGround) {
+    if (!aircraft.hasSpeed) return "am Boden";
+    return aircraftIsStanding(aircraft) ? "steht" : "rollt";
+  }
   if (!aircraft.hasVerticalRate) return "unbekannt";
   if (aircraft.verticalRateFpm > 64) return "steigt";
   if (aircraft.verticalRateFpm < -64) return "sinkt";
@@ -2787,14 +2806,29 @@ String aircraftSelectionReason(const Aircraft &selected,
     return reason;
   }
 
-  size_t eligible = 0;
+  size_t eligibleAirborne = 0;
+  size_t eligibleTaxiing = 0;
   for (const Aircraft &candidate : aircraft) {
     if (!candidate.hasPosition || candidate.emergency) continue;
     if (config.hideSportAircraft && candidate.sportAircraft &&
         candidate.specialTypes.empty()) continue;
     const float radius = candidate.specialTypes.empty()
                              ? config.radiusKm : config.radiusKm * 2.0f;
-    if (candidate.distanceKm <= radius) ++eligible;
+    if (candidate.distanceKm > radius) continue;
+    if (candidate.onGround) {
+      if (aircraftIsTaxiing(candidate)) ++eligibleTaxiing;
+    } else {
+      ++eligibleAirborne;
+    }
+  }
+  if (selected.onGround) {
+    String reason = uiText(
+        "Rollendes Flugzeug – kein geeignetes fliegendes Flugzeug im Radius",
+        "Taxiing aircraft – no eligible airborne aircraft within radius");
+    if (eligibleTaxiing > 1)
+      reason += uiText(" · nächstes von ", " · nearest of ") +
+                String(eligibleTaxiing);
+    return reason;
   }
   const bool special = !selected.specialTypes.empty();
   if (special && selected.distanceKm > config.radiusKm) {
@@ -2803,8 +2837,8 @@ String aircraftSelectionReason(const Aircraft &selected,
            specialCategoryName(selected);
   }
   String reason = uiText("Geringste Entfernung", "Shortest distance");
-  if (eligible > 1)
-    reason += uiText(" unter ", " among ") + String(eligible) +
+  if (eligibleAirborne > 1)
+    reason += uiText(" unter ", " among ") + String(eligibleAirborne) +
               uiText(" geeigneten Flugzeugen", " eligible aircraft");
   if (special)
     reason += " · " + specialCategoryName(selected);
@@ -3148,6 +3182,7 @@ bool fetchLocalFlight() {
     next.available = true;
     next.emergency = selected.emergency;
     next.hasPosition = selected.hasPosition;
+    next.onGround = selected.onGround;
     next.hex = selected.hex;
     next.flight = selected.flight.length() ? selected.flight : selected.hex;
     next.squawk = selected.squawk;
@@ -3966,6 +4001,24 @@ String webPage(bool configurationPage = false, bool includeRouteCache = true) {
               ? numberOrDash(statusFlight.distanceKm) + " km / " +
                     numberOrDash(statusFlight.altitudeFt, 0) + " ft"
               : "-";
+  html += F("</b><span>Boden-/Flugstatus</span><b>");
+  if (!statusFlight.available) {
+    html += "-";
+  } else if (statusFlight.verticalMotion == "rollt") {
+    html += uiText("rollt", "taxiing");
+  } else if (statusFlight.verticalMotion == "steht") {
+    html += uiText("steht", "standing");
+  } else if (statusFlight.verticalMotion == "am Boden") {
+    html += uiText("am Boden", "on ground");
+  } else if (statusFlight.verticalMotion == "steigt") {
+    html += uiText("steigt", "climbing");
+  } else if (statusFlight.verticalMotion == "sinkt") {
+    html += uiText("sinkt", "descending");
+  } else if (statusFlight.verticalMotion == "haelt") {
+    html += uiText("hält Höhe", "level");
+  } else {
+    html += uiText("unbekannt", "unknown");
+  }
   html += F("</b><span>CPA</span><b>");
   if (statusFlight.available) {
     html += numberOrDash(statusFlight.cpaKm) + " km / ";
@@ -4925,6 +4978,7 @@ void handleDisplayApi() {
   json += "\"available\":" + String(shown.available ? "true" : "false") +
           ",\"emergency\":" + String(shown.emergency ? "true" : "false") +
           ",\"has_position\":" + String(shown.hasPosition ? "true" : "false") +
+          ",\"on_ground\":" + String(shown.onGround ? "true" : "false") +
           ",\"hex\":\"" + jsonEscape(shown.hex) + "\"" +
           ",\"flight\":\"" + jsonEscape(shown.flight) + "\"" +
           ",\"squawk\":\"" + jsonEscape(shown.squawk) + "\"" +
@@ -5123,6 +5177,7 @@ void handleStatusApi() {
       ",\"has_position\":" + String(statusFlight.hasPosition ? "true" : "false") +
       ",\"hex\":\"" + jsonEscape(statusFlight.hex) + "\"" +
       ",\"flight\":\"" + jsonEscape(statusFlight.flight) + "\"" +
+      ",\"on_ground\":" + String(statusFlight.onGround ? "true" : "false") +
       ",\"squawk\":\"" + jsonEscape(statusFlight.squawk) + "\"" +
       ",\"emergency_meaning\":\"" +
           jsonEscape(statusFlight.emergency ? emergencyMeaning(statusFlight.squawk) : "") + "\"" +

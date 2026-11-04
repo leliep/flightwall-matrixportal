@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.6.1-dual-target.20 – 2026-11-04
+
+- ADS-B-Bodenstatus aus `alt_baro: "ground"`, `ground` und `on_ground`
+  bleibt bei der Verarbeitung erhalten
+- Flugzustand unterscheidet am Boden zwischen `steht` bis 3 km/h, `rollt`
+  oberhalb dieser Schwelle und `am Boden` bei fehlender Geschwindigkeit
+- stehende Flugzeuge werden nicht ausgewählt; rollende Flugzeuge erscheinen
+  nur, wenn kein geeignetes fliegendes Flugzeug im Anzeigeradius vorhanden ist
+- Bodenstatus auf Matrix, Webdisplay, Statusseite und in beiden Status-APIs
+  ergänzt
+
 ## 3.6.1-dual-target.19 – 2026-11-04
 
 - Special-Chronik auf der Statusseite vor das Tagesjournal verschoben
