@@ -1429,6 +1429,11 @@
     "longitude": 39.705101,
     "elevation_ft": 2151
   },
+  "MEL": {
+    "latitude": -37.673333,
+    "longitude": 144.843333,
+    "elevation_ft": 434
+  },
   "MEM": {
     "latitude": 35.043845,
     "longitude": -89.97634,
@@ -2008,6 +2013,11 @@
     "latitude": 52.702,
     "longitude": -8.92482,
     "elevation_ft": 46
+  },
+  "SNR": {
+    "latitude": 47.310556,
+    "longitude": -2.156667,
+    "elevation_ft": 13
   },
   "SOF": {
     "latitude": 42.696357,

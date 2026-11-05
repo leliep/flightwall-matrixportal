@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.6.1-dual-target.21 – 2026-11-05
+
+- Airports MEL (Melbourne) und SNR (Saint-Nazaire-Montoir) einschließlich
+  Koordinaten ergänzt
+- Airlines AWC (Titan Airways), CMB (U.S. Transportation Command), ITL
+  (ItalFly), JVW (Jetview), MMZ (EuroAtlantic Airways), NVD (Avion Express)
+  und VOS (Volaris El Salvador) ergänzt
+
 ## 3.6.1-dual-target.20 – 2026-11-04
 
 - ADS-B-Bodenstatus aus `alt_baro: "ground"`, `ground` und `on_ground`
