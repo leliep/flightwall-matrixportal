@@ -389,6 +389,11 @@
     "longitude": -76.668297,
     "elevation_ft": 146
   },
+  "BZG": {
+    "latitude": 53.096802,
+    "longitude": 17.977699,
+    "elevation_ft": 235
+  },
   "BZO": {
     "latitude": 46.459245,
     "longitude": 11.326125,
@@ -2323,6 +2328,11 @@
     "latitude": 52.165699,
     "longitude": 20.9671,
     "elevation_ft": 362
+  },
+  "WIE": {
+    "latitude": 50.049801,
+    "longitude": 8.3254,
+    "elevation_ft": 461
   },
   "WMI": {
     "latitude": 52.451099,

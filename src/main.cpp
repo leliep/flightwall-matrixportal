@@ -43,8 +43,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.21";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-05 lookup table update";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.22";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-05 configuration backup and ADS-B failover";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -61,6 +61,7 @@ constexpr uint32_t WIFI_RETRY_MS = 60000;
 constexpr char WIFI_SETUP_AP_PREFIX[] = "FlightWall-Setup";
 constexpr char WIFI_SETUP_AP_PASSWORD[] = "flightwall";
 constexpr uint32_t POLL_INTERVAL_MS = 5000;
+constexpr uint32_t ADSB_PREFERRED_RETRY_MS = 60000;
 constexpr uint32_t DEFAULT_PAGE_INTERVAL_MS = 5000;
 constexpr uint32_t PAGE_TRANSITION_MS = 350;
 constexpr uint32_t STALE_AFTER_MS = 20000;
@@ -428,6 +429,10 @@ float highLuxThreshold = 800.0f;
 String adsbUrl1 = DEFAULT_ADSB_URL;
 String adsbUrl2;
 uint8_t activeAdsbSource = 0;
+uint8_t currentAdsbSource = 0;
+bool automaticAdsbFailover = true;
+uint32_t adsbFailoverSince = 0;
+uint32_t lastPreferredAdsbProbe = 0;
 String routeUrl = DEFAULT_ROUTE_URL;
 double siteLatitude = DEFAULT_SITE_LATITUDE;
 double siteLongitude = DEFAULT_SITE_LONGITUDE;
@@ -2624,15 +2629,30 @@ String adsbFiUrl() {
 }
 
 
+String adsbUrlForSource(uint8_t source) {
+  if (source == 2) return adsbFiUrl();
+  return source == 1 ? adsbUrl2 : adsbUrl1;
+}
+
+
+bool adsbSourceConfigured(uint8_t source) {
+  return source == 2 || (source == 1 ? adsbUrl2.length() : adsbUrl1.length());
+}
+
+
+String adsbSourceName(uint8_t source) {
+  if (source == 2) return "adsb.fi";
+  return String(uiText("Quelle ", "Source ")) + String(source + 1);
+}
+
+
 String activeAdsbUrl() {
-  if (activeAdsbSource == 2) return adsbFiUrl();
-  return activeAdsbSource == 1 ? adsbUrl2 : adsbUrl1;
+  return adsbUrlForSource(currentAdsbSource);
 }
 
 
 String activeAdsbSourceName() {
-  if (activeAdsbSource == 2) return "adsb.fi";
-  return String(uiText("Quelle ", "Source ")) + String(activeAdsbSource + 1);
+  return adsbSourceName(currentAdsbSource);
 }
 
 
@@ -3105,13 +3125,50 @@ bool fetchLocalFlight() {
   config.radiusKm = displayRadiusKm;
   config.hideSportAircraft = hideSportAircraft;
   config.maximumAltitudeFt = altitudeFilterEnabled ? maximumAltitudeFt : 0;
-  adsbClient.setUrl(activeAdsbUrl());
   routeClient.configure(routesEnabled, routeUrl, adsbDbFallbackEnabled);
 
   AdsbResult result;
-  {
+  uint8_t attemptedSource = currentAdsbSource;
+  const uint32_t fetchStarted = millis();
+  if (automaticAdsbFailover && currentAdsbSource != activeAdsbSource &&
+      fetchStarted - lastPreferredAdsbProbe >= ADSB_PREFERRED_RETRY_MS) {
+    attemptedSource = activeAdsbSource;
+    lastPreferredAdsbProbe = fetchStarted;
+  }
+  auto fetchSource = [&](uint8_t source) {
+    adsbClient.setUrl(adsbUrlForSource(source));
     NetworkPhaseScope phase(NetworkPhase::Adsb);
-    result = adsbClient.fetch(config);
+    return adsbClient.fetch(config);
+  };
+  result = fetchSource(attemptedSource);
+  uint8_t successfulSource = attemptedSource;
+  if (!result.ok && automaticAdsbFailover) {
+    const uint8_t alternatives[] = {activeAdsbSource, 0, 1, 2};
+    bool attempted[3] = {};
+    attempted[attemptedSource] = true;
+    String combinedError = adsbSourceName(attemptedSource) + ": " + result.error;
+    for (uint8_t alternative : alternatives) {
+      if (alternative > 2 || attempted[alternative] ||
+          !adsbSourceConfigured(alternative)) continue;
+      attempted[alternative] = true;
+      AdsbResult fallback = fetchSource(alternative);
+      if (fallback.ok) {
+        result = std::move(fallback);
+        successfulSource = alternative;
+        break;
+      }
+      combinedError += " / " + adsbSourceName(alternative) + ": " +
+                       fallback.error;
+      result.error = combinedError;
+    }
+  }
+  if (result.ok) {
+    if (successfulSource != activeAdsbSource) {
+      if (!adsbFailoverSince) adsbFailoverSince = millis();
+    } else {
+      adsbFailoverSince = 0;
+    }
+    currentAdsbSource = successfulSource;
   }
   lastReceivedAircraft = result.receivedAircraft;
   lastCandidateAircraft = result.candidates.size();
@@ -3363,6 +3420,162 @@ String jsonEscape(String value) {
   value.replace("\r", " ");
   value.replace("\n", " ");
   return value;
+}
+
+
+String configurationJson() {
+  JsonDocument document;
+  document["format"] = "flightwall-config-v1";
+  document["firmware"] = APP_VERSION;
+  document["device_variant"] = DEVICE_VARIANT;
+  JsonObject settings = document["settings"].to<JsonObject>();
+  settings["wifi_ssid"] = wifiSsid;
+  settings["wifi_password"] = wifiPassword;
+  settings["ota_password"] = otaPassword;
+  settings["ui_english"] = uiEnglish;
+  settings["status_led"] = statusLedBrightnessMode;
+  settings["display_enabled"] = displayEnabled;
+  settings["environment_idle"] = environmentIdleDisplayEnabled;
+  settings["mqtt_enabled"] = mqttWeatherEnabled;
+  settings["mqtt_host"] = mqttHost;
+  settings["mqtt_port"] = mqttPort;
+  settings["mqtt_user"] = mqttUser;
+  settings["mqtt_password"] = mqttPassword;
+  settings["wind_direction_topic"] = windDirectionTopic;
+  settings["wind_speed_topic"] = windSpeedTopic;
+  settings["wind_gust_topic"] = windGustTopic;
+  settings["rain_topic"] = rainTopic;
+  settings["quiet_hours"] = quietHoursEnabled;
+  settings["quiet_start"] = quietHoursStartMinutes;
+  settings["quiet_end"] = quietHoursEndMinutes;
+  settings["automatic_brightness"] = automaticBrightnessEnabled;
+  settings["manual_brightness"] = manualBrightnessIndex;
+  settings["low_lux"] = lowLuxThreshold;
+  settings["high_lux"] = highLuxThreshold;
+  settings["display_radius_km"] = displayRadiusKm;
+  settings["observer_elevation_m"] = observerElevationM;
+  settings["far_elevation_deg"] = farDirectionElevationDeg;
+  settings["adsb_url_1"] = adsbUrl1;
+  settings["adsb_url_2"] = adsbUrl2;
+  settings["preferred_adsb_source"] = activeAdsbSource;
+  settings["automatic_adsb_failover"] = automaticAdsbFailover;
+  settings["route_url"] = routeUrl;
+  settings["site_latitude"] = siteLatitude;
+  settings["site_longitude"] = siteLongitude;
+  settings["view_heading"] = viewHeading;
+  settings["routes_enabled"] = routesEnabled;
+  settings["adsbdb_fallback"] = adsbDbFallbackEnabled;
+  settings["hide_sport_aircraft"] = hideSportAircraft;
+  settings["altitude_filter"] = altitudeFilterEnabled;
+  settings["maximum_altitude_ft"] = maximumAltitudeFt;
+#if FLIGHTWALL_HAS_MATRIX
+  settings["custom_text"] = customPageText;
+  settings["custom_scroll_speed"] = customScrollSpeed;
+  settings["smooth_transitions"] = smoothTransitions;
+  JsonArray pages = settings["pages"].to<JsonArray>();
+  for (uint8_t page = 0; page < PAGE_COUNT; ++page) {
+    JsonObject item = pages.add<JsonObject>();
+    item["enabled"] = pageEnabled[page];
+    item["duration_ms"] = pageDurationMs[page];
+    item["order"] = pageOrder[page];
+  }
+#endif
+  String json;
+  serializeJsonPretty(document, json);
+  return json;
+}
+
+
+void handleConfigurationDownload() {
+  if (otaPassword.length() >= 8 &&
+      !webServer.authenticate("admin", otaPassword.c_str())) {
+    webServer.requestAuthentication();
+    return;
+  }
+  webServer.sendHeader("Cache-Control", "no-store");
+  webServer.sendHeader(
+      "Content-Disposition",
+      String("attachment; filename=\"flightwall-config-") +
+          DEVICE_VARIANT + ".json\"");
+  webServer.send(200, "application/json; charset=utf-8", configurationJson());
+}
+
+
+void handleConfigurationRestore() {
+  JsonDocument document;
+  const DeserializationError error =
+      deserializeJson(document, webServer.arg("plain"));
+  if (error || String(document["format"] | "") != "flightwall-config-v1" ||
+      !document["settings"].is<JsonObjectConst>()) {
+    webServer.send(400, "text/plain; charset=utf-8",
+                   uiText("Ungültige FlightWall-Sicherungsdatei.",
+                          "Invalid FlightWall backup file."));
+    return;
+  }
+  JsonObjectConst s = document["settings"].as<JsonObjectConst>();
+  settingsWritePreparing = true;
+  if (xSemaphoreTake(preferencesMutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
+    settingsWritePreparing = false;
+    webServer.send(503, "text/plain; charset=utf-8", "Preferences busy");
+    return;
+  }
+  settingsWritePreparing = false;
+  settingsWriteInProgress = true;
+  auto putString = [&](const char* key, const char* field) {
+    if (!s[field].isNull()) preferences.putString(key, s[field].as<String>());
+  };
+  auto putBool = [&](const char* key, const char* field) {
+    if (!s[field].isNull()) preferences.putBool(key, s[field].as<bool>());
+  };
+  putString("wifiSsid", "wifi_ssid"); putString("wifiPass", "wifi_password");
+  putString("otaPass", "ota_password"); putBool("uiEnglish", "ui_english");
+  if (!s["status_led"].isNull()) preferences.putUChar("statusLed", constrain(s["status_led"].as<int>(), 0, 2));
+  putBool("displayOn", "display_enabled"); putBool("envIdle", "environment_idle");
+  putBool("mqttOn", "mqtt_enabled"); putString("mqttHost", "mqtt_host");
+  if (!s["mqtt_port"].isNull()) preferences.putUShort("mqttPort", constrain(s["mqtt_port"].as<int>(), 1, 65535));
+  putString("mqttUser", "mqtt_user"); putString("mqttPass", "mqtt_password");
+  putString("windDirTop", "wind_direction_topic"); putString("windSpdTop", "wind_speed_topic");
+  putString("windGstTop", "wind_gust_topic"); putString("rainTop", "rain_topic");
+  putBool("quietOn", "quiet_hours");
+  if (!s["quiet_start"].isNull()) preferences.putUShort("quietStart", constrain(s["quiet_start"].as<int>(), 0, 1439));
+  if (!s["quiet_end"].isNull()) preferences.putUShort("quietEnd", constrain(s["quiet_end"].as<int>(), 0, 1439));
+  putBool("autoLight", "automatic_brightness");
+  if (!s["manual_brightness"].isNull()) preferences.putUChar("brightness", constrain(s["manual_brightness"].as<int>(), 0, BRIGHTNESS_LEVEL_COUNT - 1));
+  if (!s["low_lux"].isNull()) preferences.putFloat("lowLux", constrain(s["low_lux"].as<float>(), 1.0f, 500.0f));
+  if (!s["high_lux"].isNull()) preferences.putFloat("highLux", constrain(s["high_lux"].as<float>(), 50.0f, 50000.0f));
+  if (!s["display_radius_km"].isNull()) preferences.putFloat("radiusKm", constrain(s["display_radius_km"].as<float>(), 1.0f, 100.0f));
+  if (!s["observer_elevation_m"].isNull()) preferences.putFloat("observerElevM", constrain(s["observer_elevation_m"].as<float>(), -500.0f, 9000.0f));
+  if (!s["far_elevation_deg"].isNull()) preferences.putFloat("farAngle", constrain(s["far_elevation_deg"].as<float>(), 10.0f, 45.0f));
+  putString("adsbUrl", "adsb_url_1"); putString("adsbUrl2", "adsb_url_2");
+  if (!s["preferred_adsb_source"].isNull()) preferences.putUChar("adsbActive", constrain(s["preferred_adsb_source"].as<int>(), 0, 2));
+  putBool("adsbFailover", "automatic_adsb_failover"); putString("routeUrl", "route_url");
+  if (!s["site_latitude"].isNull()) preferences.putDouble("siteLat", constrain(s["site_latitude"].as<double>(), -90.0, 90.0));
+  if (!s["site_longitude"].isNull()) preferences.putDouble("siteLon", constrain(s["site_longitude"].as<double>(), -180.0, 180.0));
+  if (!s["view_heading"].isNull()) preferences.putFloat("heading", constrain(s["view_heading"].as<float>(), 0.0f, 359.0f));
+  putBool("routesOn", "routes_enabled"); putBool("routeFallback", "adsbdb_fallback");
+  putBool("hideSport", "hide_sport_aircraft"); putBool("altFilter", "altitude_filter");
+  if (!s["maximum_altitude_ft"].isNull()) preferences.putInt("maxAltFt", constrain(s["maximum_altitude_ft"].as<int>(), 1000, 100000));
+#if FLIGHTWALL_HAS_MATRIX
+  putString("customText", "custom_text");
+  if (!s["custom_scroll_speed"].isNull()) preferences.putUChar("customSpd", constrain(s["custom_scroll_speed"].as<int>(), 0, 2));
+  putBool("smooth", "smooth_transitions");
+  if (s["pages"].is<JsonArrayConst>()) {
+    uint8_t page = 0;
+    for (JsonObjectConst item : s["pages"].as<JsonArrayConst>()) {
+      if (page >= PAGE_COUNT) break;
+      preferences.putBool(("p" + String(page) + "On").c_str(), item["enabled"] | true);
+      preferences.putUInt(("p" + String(page) + "Ms").c_str(), constrain(item["duration_ms"] | 5000U, 2000U, 60000U));
+      preferences.putUChar(("order" + String(page)).c_str(), constrain(item["order"] | page, 0, PAGE_COUNT - 1));
+      ++page;
+    }
+  }
+#endif
+  xSemaphoreGive(preferencesMutex);
+  settingsWriteInProgress = false;
+  webServer.send(200, "text/plain; charset=utf-8",
+                 uiText("Konfiguration wiederhergestellt. Neustart…",
+                        "Configuration restored. Restarting…"));
+  manualRebootAt = millis() + 1500;
 }
 
 
@@ -3820,11 +4033,13 @@ String webPage(bool configurationPage = false, bool includeRouteCache = true) {
   html += selected(activeAdsbSource == 1);
   html += F(">Quelle 2</option><option value='3'");
   html += selected(activeAdsbSource == 2);
-  html += F(">adsb.fi (externe Quelle)</option></select></label><label class='fieldWide'>ADS-B-Adresse Quelle 1<input type='url' name='adsbUrl1' maxlength='180' value='");
+  html += F(">adsb.fi (externe Quelle)</option></select></label><label class='twoThird check'><input type='checkbox' name='adsbFailover' value='1'");
+  html += checked(automaticAdsbFailover);
+  html += F("> Automatisch auf eine erreichbare ADS-B-Quelle wechseln</label><label class='fieldWide'>ADS-B-Adresse Quelle 1<input type='url' name='adsbUrl1' maxlength='180' value='");
   html += htmlEscape(adsbUrl1);
   html += F("'></label><label class='fieldWide'>ADS-B-Adresse Quelle 2<input type='url' name='adsbUrl2' maxlength='180' value='");
   html += htmlEscape(adsbUrl2);
-  html += F("' placeholder='http://zweiter-empfaenger/data/aircraft.json'></label></div><p class='muted'>Nur die ausgewählte Quelle wird abgefragt. Quelle 2 darf unkonfiguriert bleiben. Der Radius von adsb.fi wird automatisch aus dem Anzeigeradius berechnet. Daten: <a href='https://adsb.fi/' target='_blank' rel='noopener'>adsb.fi</a>.</p><div class='fieldGrid'><label class='third'>Breitengrad<input type='number' name='siteLat' min='-90' max='90' step='0.000001' value='");
+  html += F("' placeholder='http://zweiter-empfaenger/data/aircraft.json'></label></div><p class='muted'>Bei aktivem Failover wird nach einem Fehler sofort eine andere konfigurierte Quelle verwendet; die bevorzugte Quelle wird jede Minute erneut geprüft. Quelle 2 darf unkonfiguriert bleiben. Der Radius von adsb.fi wird automatisch aus dem Anzeigeradius berechnet. Daten: <a href='https://adsb.fi/' target='_blank' rel='noopener'>adsb.fi</a>.</p><div class='fieldGrid'><label class='third'>Breitengrad<input type='number' name='siteLat' min='-90' max='90' step='0.000001' value='");
   html += String(siteLatitude, 6);
   html += F("'></label><label class='third'>Längengrad<input type='number' name='siteLon' min='-180' max='180' step='0.000001' value='");
   html += String(siteLongitude, 6);
@@ -3915,7 +4130,7 @@ String webPage(bool configurationPage = false, bool includeRouteCache = true) {
   html += String(highLuxThreshold, 0);
   html += F("'></label></div></fieldset>");
 #endif
-    html += F("<button type='submit'>Einstellungen speichern</button></form>");
+    html += F("<fieldset><legend>Konfiguration sichern</legend><p class='muted'>Die Sicherungsdatei enthält auch WLAN-, MQTT- und OTA-Passwörter. Bewahre sie geschützt auf.</p><div class='buttonRow'><a class='button' href='/configuration.json' download>Konfiguration herunterladen</a><input id='configRestoreFile' type='file' accept='application/json,.json'><button type='button' onclick='restoreConfiguration()'>Sicherung wiederherstellen</button></div><p id='configRestoreResult' class='muted'></p></fieldset><button type='submit'>Einstellungen speichern</button></form><script>async function restoreConfiguration(){const f=document.getElementById('configRestoreFile').files[0],o=document.getElementById('configRestoreResult');if(!f){o.textContent='Bitte zuerst eine JSON-Datei auswählen.';return}if(!confirm('Gesamte Konfiguration ersetzen und Controller neu starten?'))return;o.textContent='Wiederherstellung läuft…';try{const r=await fetch('/configuration/restore',{method:'POST',headers:{'Content-Type':'application/json'},body:await f.text()});o.textContent=await r.text();if(r.ok)setTimeout(()=>location.href='/status',5000)}catch(e){o.textContent='Wiederherstellung fehlgeschlagen.'}}</script>");
   } else {
     html += F("<fieldset><legend>Status <small class='muted' id='statusRefresh'>wird automatisch aktualisiert</small></legend><div id='statusData'><div class='healthbar'>");
   html += statusError.length() ? F("<span class='pill warn'>● System eingeschränkt</span>") : F("<span class='pill ok'>● System OK</span>");
@@ -4157,12 +4372,26 @@ String webPage(bool configurationPage = false, bool includeRouteCache = true) {
   html += htmlEscape(currentRoute.status);
   html += F("</b><span>Routenquelle</span><b>");
   html += currentRoute.source.length() ? htmlEscape(currentRoute.source) : "-";
+  html += F("</b><span>Routenqualität</span><b>");
+  html += currentRoute.found()
+              ? String(currentRoute.confidence) + "% · " +
+                    htmlEscape(currentRoute.confidenceReason)
+              : "-";
   html += F("</b><span>ADSBDB-Fallback</span><b>");
   html += adsbDbFallbackEnabled ? "aktiv" : "aus";
   html += F("</b><span>Routencache wartet auf Flash</span><b>");
   html += routeClient.hasPendingWrites() ? "ja" : "nein";
   html += F("</b><span>Aktive ADS-B-Quelle</span><b>");
   html += activeAdsbSourceName();
+  html += F("</b><span>Bevorzugte ADS-B-Quelle</span><b>");
+  html += adsbSourceName(activeAdsbSource);
+  html += F("</b><span>Automatisches Failover</span><b>");
+  html += automaticAdsbFailover
+              ? (currentAdsbSource == activeAdsbSource
+                     ? uiText("bereit", "ready")
+                     : String(uiText("aktiv seit ", "active for ")) +
+                           ageText(adsbFailoverSince))
+              : uiText("aus", "off");
   html += F("</b><span>Empfangen / Kandidaten</span><b>");
   html += String(lastReceivedAircraft) + " / " + String(lastCandidateAircraft);
   html += F("</b><span>Letzter Erfolg</span><b>");
@@ -4587,6 +4816,11 @@ void applyWebSettings() {
         constrain(webServer.arg("activeAdsbSource").toInt(), 1, 3) - 1;
     activeAdsbSource = requestedAdsbSource == 1 && !adsbUrl2.length()
                            ? 0 : requestedAdsbSource;
+    automaticAdsbFailover = webServer.hasArg("adsbFailover");
+    if (!automaticAdsbFailover || !adsbSourceConfigured(currentAdsbSource)) {
+      currentAdsbSource = activeAdsbSource;
+      adsbFailoverSince = 0;
+    }
     String requestedRouteUrl = webServer.arg("routeUrl");
     requestedRouteUrl.trim();
     if (requestedRouteUrl.startsWith("http://") ||
@@ -4681,6 +4915,7 @@ void applyWebSettings() {
     preferences.putString("adsbUrl", adsbUrl1);
     preferences.putString("adsbUrl2", adsbUrl2);
     preferences.putUChar("adsbActive", activeAdsbSource);
+    preferences.putBool("adsbFailover", automaticAdsbFailover);
     preferences.putString("routeUrl", routeUrl);
     preferences.putDouble("siteLat", siteLatitude);
     preferences.putDouble("siteLon", siteLongitude);
@@ -5145,6 +5380,11 @@ void handleStatusApi() {
       ",\"adsb_url_3\":\"" + jsonEscape(adsbFiUrl()) + "\"" +
       ",\"adsb_source_name\":\"" + jsonEscape(activeAdsbSourceName()) + "\"" +
       ",\"active_adsb_source\":" + String(activeAdsbSource + 1) +
+      ",\"current_adsb_source\":" + String(currentAdsbSource + 1) +
+      ",\"adsb_failover_enabled\":" +
+          String(automaticAdsbFailover ? "true" : "false") +
+      ",\"adsb_failover_active\":" +
+          String(currentAdsbSource != activeAdsbSource ? "true" : "false") +
       ",\"site_latitude\":" + String(siteLatitude, 6) +
       ",\"site_longitude\":" + String(siteLongitude, 6) +
       ",\"view_heading\":" + String(viewHeading, 0) +
@@ -5171,6 +5411,9 @@ void handleStatusApi() {
       ",\"route_error\":\"" + jsonEscape(lastRouteError) + "\"" +
       ",\"route_status\":\"" + jsonEscape(currentRoute.status) + "\"" +
       ",\"route_source\":\"" + jsonEscape(currentRoute.source) + "\"" +
+      ",\"route_confidence\":" + String(currentRoute.confidence) +
+      ",\"route_confidence_reason\":\"" +
+          jsonEscape(currentRoute.confidenceReason) + "\"" +
       ",\"route_cache_write_pending\":" +
           String(routeClient.hasPendingWrites() ? "true" : "false") +
       ",\"flight_available\":" + String(statusFlight.available ? "true" : "false") +
@@ -5923,6 +6166,12 @@ void startWebServer() {
     webServer.on("/unknown-codes.json", HTTP_GET, []() {
       pulseHttpActivity(); handleUnknownCodesDownload();
     });
+    webServer.on("/configuration.json", HTTP_GET, []() {
+      pulseHttpActivity(); handleConfigurationDownload();
+    });
+    webServer.on("/configuration/restore", HTTP_POST, []() {
+      pulseHttpActivity(); handleConfigurationRestore();
+    });
     webServer.on("/journal.json", HTTP_GET, []() {
       pulseHttpActivity(); handleJournalJsonDownload();
     });
@@ -6281,6 +6530,8 @@ void setup() {
   activeAdsbSource = preferences.getUChar("adsbActive", 0);
   if (activeAdsbSource > 2 || (activeAdsbSource == 1 && !adsbUrl2.length()))
     activeAdsbSource = 0;
+  automaticAdsbFailover = preferences.getBool("adsbFailover", true);
+  currentAdsbSource = activeAdsbSource;
   routeUrl = preferences.getString("routeUrl", DEFAULT_ROUTE_URL);
   siteLatitude = preferences.getDouble("siteLat", DEFAULT_SITE_LATITUDE);
   siteLongitude = preferences.getDouble("siteLon", DEFAULT_SITE_LONGITUDE);

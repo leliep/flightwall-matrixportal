@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.6.1-dual-target.22 – 2026-11-05
+
+- vollständige Konfiguration einschließlich Zugangsdaten als JSON sichern und
+  über die Konfigurationsseite wiederherstellen
+- automatisches ADS-B-Failover auf die zweite lokale beziehungsweise externe
+  Quelle mit minütlicher Rückkehrprüfung zur bevorzugten Quelle
+- Routen erhalten eine sichtbare Qualitätsbewertung mit Quelle,
+  Positionsprüfung und Cache-Hinweis
+- Airports BZG (Bydgoszcz) und WIE (Wiesbaden Army Airfield) einschließlich
+  Koordinaten ergänzt
+
 ## 3.6.1-dual-target.21 – 2026-11-05
 
 - Airports MEL (Melbourne) und SNR (Saint-Nazaire-Montoir) einschließlich

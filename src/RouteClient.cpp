@@ -228,6 +228,30 @@ void rejectRoute(RouteResult& route, const String& reason) {
   route.destination = "";
   route.originName = "";
   route.destinationName = "";
+  route.confidence = 0;
+  route.confidenceReason = reason;
+}
+
+void assessRouteConfidence(RouteResult& route, bool positionChecked,
+                           bool cached) {
+  if (!route.found()) {
+    route.confidence = 0;
+    route.confidenceReason = "Keine Route vorhanden";
+    return;
+  }
+  uint8_t score = route.source == "adsb.im" ? 80 :
+                  route.source == "adsbdb" ? 60 : 70;
+  String reason = "Quelle " + route.source;
+  if (positionChecked) {
+    score = static_cast<uint8_t>(std::min(95, static_cast<int>(score) + 15));
+    reason += ", Position plausibel";
+  }
+  if (cached) {
+    score = score > 5 ? score - 5 : score;
+    reason += ", Cache";
+  }
+  route.confidence = score;
+  route.confidenceReason = reason;
 }
 
 bool routePlausible(const RouteResult& route, const RouteContext& context,
@@ -391,6 +415,7 @@ RouteResult RouteClient::readMemoryCache(const String& callsign,
       return result;
     }
     result.status = result.found() ? "memory" : "not_found";
+    assessRouteConfidence(result, context.hasPosition, true);
     return result;
   }
   return {};
@@ -575,6 +600,8 @@ RouteResult RouteClient::readCache(const String& callsign,
   if (newestRoute.found() &&
       !routePlausible(newestRoute, context, reason))
     rejectRoute(newestRoute, reason);
+  else
+    assessRouteConfidence(newestRoute, context.hasPosition, true);
   return newestRoute;
 }
 
@@ -667,6 +694,8 @@ RouteResult RouteClient::fetchPrimary(const String& callsign,
   String reason;
   if (result.found() && !routePlausible(result, context, reason))
     rejectRoute(result, reason);
+  else
+    assessRouteConfidence(result, context.hasPosition, false);
   return result;
 }
 
@@ -735,6 +764,8 @@ RouteResult RouteClient::fetchAdsbDb(const String& callsign,
   String reason;
   if (result.found() && !routePlausible(result, context, reason))
     rejectRoute(result, reason);
+  else
+    assessRouteConfidence(result, context.hasPosition, false);
   return result;
 }
 

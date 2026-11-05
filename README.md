@@ -19,7 +19,7 @@ erklärt auch BME280, BH1750, MQTT, Routenauflösung und OTA.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.21` |
+| Firmware | `3.6.1-dual-target.22` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -59,7 +59,9 @@ Wesentliche Funktionen:
 - tägliche Special-Chronik für alle erkannten Sonderflugzeuge sowie eine
   nachvollziehbare Auswahlbegründung
 - Routenauflösung über adsb.im mit kostenlosem ADSBDB-Fallback und
-  verwaltetem RAM-/Flash-Cache
+  verwaltetem RAM-/Flash-Cache sowie sichtbarer Qualitätsbewertung
+- automatisches Failover zwischen den beiden lokalen ADS-B-Quellen und
+  adsb.fi mit regelmäßiger Rückkehrprüfung zur bevorzugten Quelle
 - vollständige Multi-Hop-Routen und kompakte Darstellung geschlossener Umläufe
 - integrierte Flughafen- und Airline-Klartexte
 - sieben frei auswählbare und sortierbare Matrixseiten
@@ -69,6 +71,7 @@ Wesentliche Funktionen:
 - BH1750-Helligkeitsautomatik mit sieben stabilen Helligkeitsstufen
 - umfangreiche Status-, Test- und Diagnosefunktionen
 - änderbare WLAN-Zugangsdaten mit geschütztem Einrichtungsnetz als Rückfallweg
+- vollständige Konfigurationssicherung und -wiederherstellung als JSON-Datei
 - Dual-Core-Betrieb mit voneinander getrennter Anzeige und Netzverarbeitung
 
 ## Systemaufbau
@@ -441,6 +444,7 @@ Nach erfolgreicher WLAN-Verbindung antwortet der Server auf Port 80:
 | `/api/display` | verfügbar | verfügbar | aktuelle Displaydaten als JSON |
 | `/api/status` | verfügbar | verfügbar | vollständige Statusdaten einschließlich RGB-LED als JSON |
 | `/unknown-codes.json` | verfügbar | verfügbar | unbekannte Airport-/Airline-Codes herunterladen |
+| `/configuration.json` | verfügbar | verfügbar | vollständige Konfiguration herunterladen |
 | `/journal.json` | verfügbar | verfügbar | heutiges Flugzeugjournal als JSON herunterladen |
 | `/journal.csv` | verfügbar | verfügbar | heutiges Flugzeugjournal als CSV herunterladen |
 | `/specials.json` | verfügbar | verfügbar | heutige Special-Chronik als JSON herunterladen |
@@ -461,6 +465,16 @@ Display, Wetterseite, Standort, Blickrichtung, ADS-B-Quelle, Filter,
 Routendienst, MQTT, Seitenreihenfolge, Freitext, Helligkeit und Nachtruhe.
 Statuskarten werden regelmäßig aktualisiert, ohne geöffnete Bereiche zu
 schließen oder ungespeicherte Formulareingaben zu überschreiben.
+
+Im Abschnitt **Konfiguration sichern** kann der gesamte Gerätestand als
+JSON-Datei heruntergeladen und später auf demselben oder einem Ersatzgerät
+wiederhergestellt werden. Die Datei enthält auch WLAN-, MQTT- und
+OTA-Zugangsdaten und muss deshalb geschützt aufbewahrt werden.
+
+Ist das ADS-B-Failover aktiviert, verwendet die Firmware bei einem Fehler
+sofort eine andere konfigurierte Quelle. Die bevorzugte Quelle wird danach
+einmal pro Minute erneut geprüft. Statusseite und `/api/status` unterscheiden
+zwischen bevorzugter und tatsächlich verwendeter Quelle.
 
 Die Seite `/display` zeigt Callsign, Typ, Airline/Special Type, vollständige
 Route, Entfernung, Höhe, Geschwindigkeit, CPA, Vertikalbewegung und
@@ -608,7 +622,7 @@ eingecheckt.
 
 Für stabile Versionen ist **Releases → Latest** der bevorzugte Downloadweg.
 Ein Versionstag im Format `v<APP_VERSION>`, beispielsweise
-`v3.6.1-dual-target.21`, veröffentlicht nach zwei erfolgreichen Builds
+`v3.6.1-dual-target.22`, veröffentlicht nach zwei erfolgreichen Builds
 automatisch:
 
 - `flightwall-matrixportal-<VERSION>.bin`

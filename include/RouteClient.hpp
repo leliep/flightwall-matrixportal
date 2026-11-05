@@ -14,6 +14,8 @@ struct RouteResult {
   String source;
   String status = "unavailable";
   String error;
+  uint8_t confidence = 0;
+  String confidenceReason;
 
   bool found() const { return !origin.isEmpty() || !destination.isEmpty(); }
 };
