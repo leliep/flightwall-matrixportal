@@ -704,6 +704,11 @@
     "longitude": 7.005556,
     "elevation_ft": 157
   },
+  "EDLA": {
+    "latitude": 51.483333,
+    "longitude": 7.899444,
+    "elevation_ft": 794
+  },
   "EDLC": {
     "latitude": 51.529167,
     "longitude": 6.536111,
@@ -733,6 +738,11 @@
     "latitude": 49.4728,
     "longitude": 8.195737,
     "elevation_ft": 351
+  },
+  "EDRJ": {
+    "latitude": 49.3125,
+    "longitude": 6.673889,
+    "elevation_ft": 1120
   },
   "EDRK": {
     "latitude": 50.325558,

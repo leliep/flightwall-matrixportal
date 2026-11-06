@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-11-05T15:00:00+01:00",
+  "updated_at": "2026-11-06T12:00:00+01:00",
   "status": "integrated",
   "airports": [
     "ACH",
@@ -18,11 +18,13 @@
     "CHR",
     "DAR",
     "EDKL",
+    "EDLA",
     "EDLC",
     "EDLF",
     "EDLH",
     "EDLS",
     "EDRF",
+    "EDRJ",
     "EDRK",
     "FAB",
     "FMM",
@@ -107,6 +109,7 @@
     "HZA",
     "ICL",
     "ITL",
+    "JMP",
     "JSE",
     "JSF",
     "JVW",
@@ -134,7 +137,8 @@
     "TOY",
     "TRK",
     "UAG",
-    "VOS"
+    "VOS",
+    "WOL"
   ],
   "observations": [
     {
@@ -705,6 +709,22 @@
       "firmware_version": "3.6.1-dual-target.20",
       "unknown_airports": ["SNR", "MEL", "BZG", "WIE"],
       "unknown_airlines": ["ITL", "AWC", "CMB", "VOS", "MMZ", "NVD", "JVW"],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "matrixportal_s3",
+      "firmware_version": "3.6.1-dual-target.22",
+      "unknown_airports": ["EDRJ", "EDLA"],
+      "unknown_airlines": ["WOL", "JMP"],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "esp32s3_n16r8_headless",
+      "firmware_version": "3.6.1-dual-target.22",
+      "unknown_airports": [],
+      "unknown_airlines": [],
       "dropped_unknown_airports": 0,
       "dropped_unknown_airlines": 0
     }

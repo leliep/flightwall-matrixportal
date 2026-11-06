@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.6.1-dual-target.23 – 2026-11-06
+
+- Special-Chronik der Statusseite nach letzter Beobachtung absteigend sortiert
+  und Zeitspalte eindeutig als „Zuletzt gesehen“ bezeichnet
+- Airports EDLA (Arnsberg-Menden) und EDRJ (Saarlouis-Düren) einschließlich
+  Koordinaten sowie Airlines JMP (Business Wings) und WOL (Wings Aviation)
+  ergänzt
+
 ## 3.6.1-dual-target.22 – 2026-11-05
 
 - vollständige Konfiguration einschließlich Zugangsdaten als JSON sichern und

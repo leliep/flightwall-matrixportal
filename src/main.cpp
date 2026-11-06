@@ -43,8 +43,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.22";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-05 configuration backup and ADS-B failover";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.23";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-06 chronological special status";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -4336,10 +4336,26 @@ String webPage(bool configurationPage = false, bool includeRouteCache = true) {
                           "No special aircraft has been detected today.")) +
             "</p>";
   } else {
-    html += F("<div class='tableScroll'><table class='cacheTable'><thead><tr><th>Zeit</th><th>Flug</th><th>Klasse</th><th>Typ</th><th>min. Entfernung</th><th>min. CPA</th><th>Angezeigt</th><th>Auswahlbegründung</th></tr></thead><tbody>");
+    html += "<div class='tableScroll'><table class='cacheTable'><thead><tr><th>" +
+            String(uiText("Zuletzt gesehen", "Last seen")) +
+            "</th><th>Flug</th><th>Klasse</th><th>Typ</th><th>min. Entfernung</th><th>min. CPA</th><th>Angezeigt</th><th>Auswahlbegründung</th></tr></thead><tbody>";
+    size_t chronologicalOrder[SPECIAL_CHRONICLE_LIMIT];
+    for (size_t index = 0; index < specialChronicleCount; ++index)
+      chronologicalOrder[index] = index;
+    for (size_t index = 1; index < specialChronicleCount; ++index) {
+      const size_t candidate = chronologicalOrder[index];
+      size_t position = index;
+      while (position > 0 &&
+             specialChronicle[chronologicalOrder[position - 1]].lastSeen <
+                 specialChronicle[candidate].lastSeen) {
+        chronologicalOrder[position] = chronologicalOrder[position - 1];
+        --position;
+      }
+      chronologicalOrder[position] = candidate;
+    }
     for (size_t offset = 0; offset < specialChronicleCount; ++offset) {
       const SpecialChronicleEntry &entry =
-          specialChronicle[specialChronicleCount - 1 - offset];
+          specialChronicle[chronologicalOrder[offset]];
       html += "<tr><td>" + journalTimeText(entry.lastSeen) + "</td><td><b>" +
               htmlEscape(entry.flight.length() ? entry.flight : entry.hex) +
               "</b></td><td>" + htmlEscape(entry.specialType) +
