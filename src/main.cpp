@@ -43,8 +43,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.24";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-08 matrix radar view";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.25";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-08 full-width matrix radar";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -1941,22 +1941,47 @@ uint16_t radarPointColor(const RadarPoint &point) {
 }
 
 
+constexpr int16_t RADAR_CENTER_X = MATRIX_WIDTH / 2;
+constexpr int16_t RADAR_CENTER_Y = 15;
+constexpr int16_t RADAR_RADIUS_PIXELS = 15;
+// The furthest matrix corner is about 4.4 configured radii away when the
+// same distance scale is used on both axes. A small margin avoids losing
+// edge pixels through rounding or receiver-side distance filtering.
+constexpr float RADAR_COVERAGE_RADIUS_FACTOR = 4.5F;
+
+
+float radarCoverageRadiusKm() {
+  return displayRadiusKm * RADAR_COVERAGE_RADIUS_FACTOR;
+}
+
+
+bool radarPointCoordinates(float distanceKm, float bearing,
+                           int16_t &x, int16_t &y) {
+  if (displayRadiusKm <= 0.0F || !isfinite(distanceKm) ||
+      !isfinite(bearing)) return false;
+  const float pixelsPerKm = RADAR_RADIUS_PIXELS / displayRadiusKm;
+  const float relativeRadians = (bearing - viewHeading) * PI / 180.0F;
+  x = RADAR_CENTER_X + static_cast<int16_t>(
+      roundf(sinf(relativeRadians) * distanceKm * pixelsPerKm));
+  y = RADAR_CENTER_Y - static_cast<int16_t>(
+      roundf(cosf(relativeRadians) * distanceKm * pixelsPerKm));
+  return x >= 0 && x < MATRIX_WIDTH && y >= 0 && y < matrix.height();
+}
+
+
 void drawRadarPage() {
-  constexpr int16_t centerX = MATRIX_WIDTH / 2;
-  constexpr int16_t centerY = 15;
-  constexpr int16_t circleRadius = 15;
-  constexpr int16_t aircraftRadius = circleRadius - 1;
-  matrix.drawCircle(centerX, centerY, circleRadius, blue);
+  matrix.drawCircle(
+      RADAR_CENTER_X, RADAR_CENTER_Y, RADAR_RADIUS_PIXELS, blue);
   // The white mark at the top is the configured viewing direction.
-  matrix.drawPixel(centerX, 0, white);
-  matrix.drawPixel(centerX - 1, 1, white);
-  matrix.drawPixel(centerX + 1, 1, white);
+  matrix.drawPixel(RADAR_CENTER_X, 0, white);
+  matrix.drawPixel(RADAR_CENTER_X - 1, 1, white);
+  matrix.drawPixel(RADAR_CENTER_X + 1, 1, white);
   // Own position remains visible even when no aircraft is present.
-  matrix.drawPixel(centerX, centerY, green);
-  matrix.drawPixel(centerX - 1, centerY, green);
-  matrix.drawPixel(centerX + 1, centerY, green);
-  matrix.drawPixel(centerX, centerY - 1, green);
-  matrix.drawPixel(centerX, centerY + 1, green);
+  matrix.drawPixel(RADAR_CENTER_X, RADAR_CENTER_Y, green);
+  matrix.drawPixel(RADAR_CENTER_X - 1, RADAR_CENTER_Y, green);
+  matrix.drawPixel(RADAR_CENTER_X + 1, RADAR_CENTER_Y, green);
+  matrix.drawPixel(RADAR_CENTER_X, RADAR_CENTER_Y - 1, green);
+  matrix.drawPixel(RADAR_CENTER_X, RADAR_CENTER_Y + 1, green);
 
   const bool blinkOn = (millis() / 500U) % 2U == 0;
   for (uint8_t pass = 0; pass < 2; ++pass) {
@@ -1964,20 +1989,12 @@ void drawRadarPage() {
       const RadarPoint &point = radarPoints[index];
       const bool selectedPoint = point.flags & RADAR_POINT_SELECTED;
       if (selectedPoint != (pass == 1)) continue;
-      const bool attention = point.flags &
-          (RADAR_POINT_EMERGENCY | RADAR_POINT_OUTSIDE_RADIUS);
-      if (attention && !blinkOn && !selectedPoint) continue;
-      const float normalizedDistance = displayRadiusKm > 0.0F
-          ? min(point.distanceKm / displayRadiusKm, 1.0F) : 0.0F;
-      const float pixelRadius = normalizedDistance * aircraftRadius;
-      const float relativeRadians =
-          (point.bearing - viewHeading) * PI / 180.0F;
-      const int16_t x = centerX + static_cast<int16_t>(
-          roundf(sinf(relativeRadians) * pixelRadius));
-      const int16_t y = centerY - static_cast<int16_t>(
-          roundf(cosf(relativeRadians) * pixelRadius));
-      const uint16_t color = radarPointColor(point);
       if ((point.flags & RADAR_POINT_EMERGENCY) && !blinkOn) continue;
+      int16_t x = 0;
+      int16_t y = 0;
+      if (!radarPointCoordinates(point.distanceKm, point.bearing, x, y))
+        continue;
+      const uint16_t color = radarPointColor(point);
       matrix.drawPixel(x, y, color);
       if (selectedPoint) {
         matrix.drawPixel(x - 1, y, color);
@@ -1997,8 +2014,11 @@ void drawIdleDisplay() {
       isfinite(relativeHumidityPercent) && isfinite(airPressureHpa);
   const bool mqttAvailable = environmentIdleDisplayEnabled &&
       mqttWeatherAvailable();
-  if (bmeAvailable || mqttAvailable)
+  if (bmeAvailable || mqttAvailable) {
     drawCompactClimateDisplay(bmeAvailable, mqttAvailable);
+  } else if (!environmentIdleDisplayEnabled && pageEnabled[7]) {
+    drawRadarPage();
+  }
   if ((millis() / IDLE_BLINK_HALF_PERIOD_MS) % 2 == 0) {
     matrix.drawPixel(0, 31, lastError.length() ? idleErrorPixel : idlePixel);
   }
@@ -2696,10 +2716,12 @@ String httpFailureText(int status) {
 
 
 String adsbFiUrl() {
-  // adsb.fi expects nautical miles. Fetch at least the complete doubled
-  // radius used for special aircraft, with the user's 10 NM example as the
-  // practical lower bound.
-  const float requiredKm = max(displayRadiusKm * 2.0F, 18.52F);
+  // adsb.fi expects nautical miles. Include the complete rectangular radar
+  // viewport when enabled; selection still uses the configured circular
+  // radius and the doubled radius for specials.
+  const float requiredKm = max(
+      pageEnabled[7] ? radarCoverageRadiusKm() : displayRadiusKm * 2.0F,
+      18.52F);
   const uint16_t radiusNm = constrain(
       static_cast<uint16_t>(ceilf(requiredKm / 1.852F)),
       static_cast<uint16_t>(10), static_cast<uint16_t>(250));
@@ -3202,6 +3224,9 @@ bool fetchLocalFlight() {
   config.longitude = siteLongitude;
   config.maxPositionAgeSeconds = 15.0f;
   config.radiusKm = displayRadiusKm;
+  config.candidateRadiusKm = pageEnabled[7]
+                                 ? radarCoverageRadiusKm()
+                                 : displayRadiusKm * 2.0F;
   config.hideSportAircraft = hideSportAircraft;
   config.maximumAltitudeFt = altitudeFilterEnabled ? maximumAltitudeFt : 0;
   routeClient.configure(routesEnabled, routeUrl, adsbDbFallbackEnabled);
@@ -3399,21 +3424,26 @@ bool fetchLocalFlight() {
     networkRadarPointCount = 0;
     const uint64_t selectedIdentity = next.available
         ? aircraftIdentity(selected) : 0;
-    // Insert the selected target first so it cannot be lost when more than
-    // the fixed radar capacity is received.
-    for (uint8_t pass = 0; pass < 2; ++pass) {
+    // Preserve the selected target and all selection-relevant traffic before
+    // filling the remaining fixed capacity with the wider radar surroundings.
+    for (uint8_t pass = 0; pass < 3; ++pass) {
       for (const Aircraft &candidate : result.candidates) {
         if (!candidate.hasPosition ||
             networkRadarPointCount >= RADAR_POINT_LIMIT) continue;
         const bool isSelected = selectedIdentity &&
             aircraftIdentity(candidate) == selectedIdentity;
-        if (isSelected != (pass == 0)) continue;
         const bool special = !candidate.specialTypes.empty();
+        const bool selectionRelevant = candidate.emergency ||
+            candidate.distanceKm <= displayRadiusKm ||
+            (special && candidate.distanceKm <= displayRadiusKm * 2.0F);
+        if ((pass == 0 && !isSelected) ||
+            (pass == 1 && (isSelected || !selectionRelevant)) ||
+            (pass == 2 && (isSelected || selectionRelevant))) continue;
         if (hideSportAircraft && candidate.sportAircraft && !special) continue;
-        const float allowedRadius = special
-                                        ? displayRadiusKm * 2.0F
-                                        : displayRadiusKm;
-        if (!candidate.emergency && candidate.distanceKm > allowedRadius)
+        int16_t radarX = 0;
+        int16_t radarY = 0;
+        if (!radarPointCoordinates(
+                candidate.distanceKm, candidate.bearing, radarX, radarY))
           continue;
         RadarPoint &point = networkRadarPoints[networkRadarPointCount++];
         point.distanceKm = candidate.distanceKm;

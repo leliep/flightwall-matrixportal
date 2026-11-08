@@ -180,8 +180,11 @@ bool aircraftFromJson(JsonObjectConst raw, const ProcessingConfig& config,
     aircraft.bearing = bearingDegrees(config.latitude, config.longitude,
                                       aircraft.latitude, aircraft.longitude);
     aircraft.direction = compassDirection(aircraft.bearing);
-    if (!aircraft.emergency &&
-        aircraft.distanceKm > config.radiusKm * 2.0F) return false;
+    const float candidateRadius = config.candidateRadiusKm > 0.0F
+                                      ? config.candidateRadiusKm
+                                      : config.radiusKm * 2.0F;
+    if (!aircraft.emergency && aircraft.distanceKm > candidateRadius)
+      return false;
   }
 
   aircraft.hasAltitude =

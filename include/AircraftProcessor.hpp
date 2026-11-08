@@ -9,6 +9,9 @@ struct ProcessingConfig {
   double longitude = 0.0;
   float maxPositionAgeSeconds = 15.0F;
   float radiusKm = 10.0F;
+  // Optional acquisition radius for views that need more surrounding
+  // traffic than the selection logic. Zero retains the historic 2x radius.
+  float candidateRadiusKm = 0.0F;
   bool hideSportAircraft = false;
   int maximumAltitudeFt = 0;
 };
