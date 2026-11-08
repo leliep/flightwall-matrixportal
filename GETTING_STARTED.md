@@ -252,10 +252,11 @@ Headless-Controller.
 
 ### Matrixseiten
 
-Die sieben Flugzeugseiten können einzeln aktiviert, sortiert und mit einer
+Die acht Flugzeugseiten können einzeln aktiviert, sortiert und mit einer
 Anzeigedauer versehen werden. Für einen ersten Test genügen beispielsweise:
 
 - Kompaktansicht
+- Radaransicht
 - Airline und Route
 - CPA und Sondertyp
 

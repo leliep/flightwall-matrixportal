@@ -43,8 +43,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.23";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-06 chronological special status";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.24";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-08 matrix radar view";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -54,7 +54,7 @@ constexpr char DEVICE_NAME[] = "FlightWall ESP32-S3 Server";
 constexpr char DEVICE_VARIANT[] = "esp32s3_n16r8_headless";
 constexpr char DEVICE_HOSTNAME[] = "flightwall-server";
 #endif
-constexpr uint8_t PAGE_COUNT = 7;
+constexpr uint8_t PAGE_COUNT = 8;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
 constexpr uint32_t WIFI_RETRY_MS = 60000;
@@ -197,6 +197,23 @@ struct FlightData {
 
 FlightData flight;
 FlightData networkFlight;
+
+struct RadarPoint {
+  float distanceKm = 0.0F;
+  float bearing = 0.0F;
+  uint8_t flags = 0;
+};
+
+constexpr uint8_t RADAR_POINT_SELECTED = 0x01;
+constexpr uint8_t RADAR_POINT_SPECIAL = 0x02;
+constexpr uint8_t RADAR_POINT_EMERGENCY = 0x04;
+constexpr uint8_t RADAR_POINT_GROUND = 0x08;
+constexpr uint8_t RADAR_POINT_OUTSIDE_RADIUS = 0x10;
+constexpr size_t RADAR_POINT_LIMIT = 64;
+RadarPoint radarPoints[RADAR_POINT_LIMIT];
+RadarPoint networkRadarPoints[RADAR_POINT_LIMIT];
+size_t radarPointCount = 0;
+size_t networkRadarPointCount = 0;
 
 constexpr int32_t CPA_COUNTDOWN_HORIZON_SECONDS = 3 * 60;
 
@@ -578,13 +595,13 @@ bool specialChronicleLimitReached = false;
 
 String customPageText;
 uint8_t customScrollSpeed = 1;
-bool pageEnabled[] = {true, true, true, true, true, true, true};
-uint8_t pageOrder[] = {0, 1, 2, 3, 4, 5, 6};
+bool pageEnabled[] = {true, true, true, true, true, true, true, true};
+uint8_t pageOrder[] = {0, 1, 2, 3, 4, 5, 6, 7};
 uint32_t pageDurationMs[] = {
     DEFAULT_PAGE_INTERVAL_MS, DEFAULT_PAGE_INTERVAL_MS,
     DEFAULT_PAGE_INTERVAL_MS, DEFAULT_PAGE_INTERVAL_MS,
     DEFAULT_PAGE_INTERVAL_MS, DEFAULT_PAGE_INTERVAL_MS,
-    DEFAULT_PAGE_INTERVAL_MS};
+    DEFAULT_PAGE_INTERVAL_MS, DEFAULT_PAGE_INTERVAL_MS};
 bool smoothTransitions = true;
 uint8_t currentPageSlot = 0;
 uint32_t currentPageStarted = 0;
@@ -1915,6 +1932,64 @@ void drawCompactClimateDisplay(bool bmeAvailable, bool mqttAvailable) {
 }
 
 
+uint16_t radarPointColor(const RadarPoint &point) {
+  if (point.flags & RADAR_POINT_EMERGENCY) return red;
+  if (point.flags & RADAR_POINT_SELECTED) return yellow;
+  if (point.flags & RADAR_POINT_SPECIAL) return violet;
+  if (point.flags & RADAR_POINT_GROUND) return orange;
+  return cyan;
+}
+
+
+void drawRadarPage() {
+  constexpr int16_t centerX = MATRIX_WIDTH / 2;
+  constexpr int16_t centerY = 15;
+  constexpr int16_t circleRadius = 15;
+  constexpr int16_t aircraftRadius = circleRadius - 1;
+  matrix.drawCircle(centerX, centerY, circleRadius, blue);
+  // The white mark at the top is the configured viewing direction.
+  matrix.drawPixel(centerX, 0, white);
+  matrix.drawPixel(centerX - 1, 1, white);
+  matrix.drawPixel(centerX + 1, 1, white);
+  // Own position remains visible even when no aircraft is present.
+  matrix.drawPixel(centerX, centerY, green);
+  matrix.drawPixel(centerX - 1, centerY, green);
+  matrix.drawPixel(centerX + 1, centerY, green);
+  matrix.drawPixel(centerX, centerY - 1, green);
+  matrix.drawPixel(centerX, centerY + 1, green);
+
+  const bool blinkOn = (millis() / 500U) % 2U == 0;
+  for (uint8_t pass = 0; pass < 2; ++pass) {
+    for (size_t index = 0; index < radarPointCount; ++index) {
+      const RadarPoint &point = radarPoints[index];
+      const bool selectedPoint = point.flags & RADAR_POINT_SELECTED;
+      if (selectedPoint != (pass == 1)) continue;
+      const bool attention = point.flags &
+          (RADAR_POINT_EMERGENCY | RADAR_POINT_OUTSIDE_RADIUS);
+      if (attention && !blinkOn && !selectedPoint) continue;
+      const float normalizedDistance = displayRadiusKm > 0.0F
+          ? min(point.distanceKm / displayRadiusKm, 1.0F) : 0.0F;
+      const float pixelRadius = normalizedDistance * aircraftRadius;
+      const float relativeRadians =
+          (point.bearing - viewHeading) * PI / 180.0F;
+      const int16_t x = centerX + static_cast<int16_t>(
+          roundf(sinf(relativeRadians) * pixelRadius));
+      const int16_t y = centerY - static_cast<int16_t>(
+          roundf(cosf(relativeRadians) * pixelRadius));
+      const uint16_t color = radarPointColor(point);
+      if ((point.flags & RADAR_POINT_EMERGENCY) && !blinkOn) continue;
+      matrix.drawPixel(x, y, color);
+      if (selectedPoint) {
+        matrix.drawPixel(x - 1, y, color);
+        matrix.drawPixel(x + 1, y, color);
+        matrix.drawPixel(x, y - 1, color);
+        matrix.drawPixel(x, y + 1, color);
+      }
+    }
+  }
+}
+
+
 void drawIdleDisplay() {
   matrix.fillScreen(0);
   const bool bmeAvailable = environmentIdleDisplayEnabled &&
@@ -1961,7 +2036,8 @@ void drawConfiguredPage(uint8_t page) {
     case 3: drawAirportNamesPage(); break;
     case 4: drawCustomTextPage(); break;
     case 5: drawCompactPage(); break;
-    default: drawCompactAirportsPage(); break;
+    case 6: drawCompactAirportsPage(); break;
+    default: drawRadarPage(); break;
   }
 }
 
@@ -2567,6 +2643,9 @@ void syncNetworkState() {
       setTransitionPercent(100);
     }
     flight = networkFlight;
+    radarPointCount = min(networkRadarPointCount, RADAR_POINT_LIMIT);
+    for (size_t index = 0; index < radarPointCount; ++index)
+      radarPoints[index] = networkRadarPoints[index];
     lastSuccessfulPoll = networkLastSuccessfulPoll;
     lastError = networkLastError;
     xSemaphoreGive(flightMutex);
@@ -3317,6 +3396,36 @@ bool fetchLocalFlight() {
 
   if (xSemaphoreTake(flightMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
     networkFlight = next;
+    networkRadarPointCount = 0;
+    const uint64_t selectedIdentity = next.available
+        ? aircraftIdentity(selected) : 0;
+    // Insert the selected target first so it cannot be lost when more than
+    // the fixed radar capacity is received.
+    for (uint8_t pass = 0; pass < 2; ++pass) {
+      for (const Aircraft &candidate : result.candidates) {
+        if (!candidate.hasPosition ||
+            networkRadarPointCount >= RADAR_POINT_LIMIT) continue;
+        const bool isSelected = selectedIdentity &&
+            aircraftIdentity(candidate) == selectedIdentity;
+        if (isSelected != (pass == 0)) continue;
+        const bool special = !candidate.specialTypes.empty();
+        if (hideSportAircraft && candidate.sportAircraft && !special) continue;
+        const float allowedRadius = special
+                                        ? displayRadiusKm * 2.0F
+                                        : displayRadiusKm;
+        if (!candidate.emergency && candidate.distanceKm > allowedRadius)
+          continue;
+        RadarPoint &point = networkRadarPoints[networkRadarPointCount++];
+        point.distanceKm = candidate.distanceKm;
+        point.bearing = candidate.bearing;
+        point.flags = isSelected ? RADAR_POINT_SELECTED : 0;
+        if (special) point.flags |= RADAR_POINT_SPECIAL;
+        if (candidate.emergency) point.flags |= RADAR_POINT_EMERGENCY;
+        if (candidate.onGround) point.flags |= RADAR_POINT_GROUND;
+        if (candidate.distanceKm > displayRadiusKm)
+          point.flags |= RADAR_POINT_OUTSIDE_RADIUS;
+      }
+    }
     networkLastSuccessfulPoll = millis();
     networkLastError = "";
     xSemaphoreGive(flightMutex);
@@ -3377,7 +3486,8 @@ String pageName(uint8_t page) {
   if (page == 3) return uiText("Flughafennamen", "Airport names");
   if (page == 4) return uiText("Freitext", "Custom text");
   if (page == 5) return uiText("Kompaktansicht", "Compact view");
-  return uiText("Kompakt + Flughäfen", "Compact + airports");
+  if (page == 6) return uiText("Kompakt + Flughäfen", "Compact + airports");
+  return uiText("Radaransicht", "Radar view");
 }
 
 
@@ -5414,6 +5524,7 @@ void handleStatusApi() {
       ",\"maximum_altitude_ft\":" + String(maximumAltitudeFt) +
       ",\"received_aircraft\":" + String(lastReceivedAircraft) +
       ",\"candidate_aircraft\":" + String(lastCandidateAircraft) +
+      ",\"radar_aircraft\":" + String(networkRadarPointCount) +
       ",\"last_adsb_attempt_age_seconds\":" +
           (lastAdsbAttempt ? String((millis() - lastAdsbAttempt) / 1000) : "null") +
       ",\"last_adsb_success_age_seconds\":" +

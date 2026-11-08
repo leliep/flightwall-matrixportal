@@ -689,6 +689,11 @@
     "longitude": 33.507352,
     "elevation_ft": 404
   },
+  "EDAZ": {
+    "latitude": 52.203889,
+    "longitude": 13.16,
+    "elevation_ft": 135
+  },
   "EDFA": {
     "latitude": 50.288334,
     "longitude": 8.533889,
@@ -984,6 +989,11 @@
     "longitude": 105.806999,
     "elevation_ft": 39
   },
+  "HAU": {
+    "latitude": 59.345299,
+    "longitude": 5.20836,
+    "elevation_ft": 86
+  },
   "HAV": {
     "latitude": 22.989167,
     "longitude": -82.409167,
@@ -1118,6 +1128,11 @@
     "latitude": 40.639447,
     "longitude": -73.779317,
     "elevation_ft": 13
+  },
+  "JJG": {
+    "latitude": -28.67528,
+    "longitude": -49.06028,
+    "elevation_ft": 115
   },
   "JMK": {
     "latitude": 37.435101,

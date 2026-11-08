@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.6.1-dual-target.24 – 2026-11-08
+
+- neue konfigurierbare Radaransicht für die 128×32-Matrix: eigener Standort
+  im Zentrum, Blickrichtung nach oben und Anzeigeradius als Kreis
+- geeignete Flugzeuge als farbige Punkte; Auswahl, Specials, Bodenverkehr und
+  Transpondernotfälle werden hervorgehoben
+- Specials außerhalb des normalen Radius werden richtungsgetreu am Kreisrand
+  dargestellt; maximal 64 Radarziele pro ADS-B-Momentaufnahme
+- Airports EDAZ (Schönhagen), HAU (Haugesund) und JJG (Jaguaruna)
+  einschließlich Koordinaten sowie Airlines ALX (Alpi Jets), AZE (Arcus Air)
+  und UNC (Uni-Fly) ergänzt
+
 ## 3.6.1-dual-target.23 – 2026-11-06
 
 - Special-Chronik der Statusseite nach letzter Beobachtung absteigend sortiert

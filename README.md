@@ -19,7 +19,7 @@ erklärt auch BME280, BH1750, MQTT, Routenauflösung und OTA.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.23` |
+| Firmware | `3.6.1-dual-target.24` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -64,7 +64,9 @@ Wesentliche Funktionen:
   adsb.fi mit regelmäßiger Rückkehrprüfung zur bevorzugten Quelle
 - vollständige Multi-Hop-Routen und kompakte Darstellung geschlossener Umläufe
 - integrierte Flughafen- und Airline-Klartexte
-- sieben frei auswählbare und sortierbare Matrixseiten
+- acht frei auswählbare und sortierbare Matrixseiten
+- Radaransicht mit Standortzentrum, Blickrichtung, Radiuskreis und bis zu
+  64 gleichzeitig sichtbaren Flugzeugpunkten
 - responsive Webanzeige für iPhone, Tablet und Desktop
 - deutsch/englisch umschaltbare Matrix- und Weboberfläche
 - BME280-Klimawerte, Schimmelrisiko und optionale MQTT-Wetterdaten
@@ -352,7 +354,7 @@ zusätzlich, aus welcher Quelle das Ergebnis stammt.
 
 ## Matrixanzeige
 
-Alle sieben Flugzeugseiten können einzeln aktiviert, frei angeordnet und mit
+Alle acht Flugzeugseiten können einzeln aktiviert, frei angeordnet und mit
 einer Dauer von 2 bis 60 Sekunden versehen werden:
 
 | Seite | Inhalt |
@@ -364,10 +366,16 @@ einer Dauer von 2 bis 60 Sekunden versehen werden:
 | Freitext | eigener Text bis 128 Zeichen, langsam/mittel/schnell |
 | Kompaktansicht | Typ, Kerndaten, Blickrichtung, Route und CPA |
 | Kompakt + Flughäfen | Airline, Typ, Kerndaten und dynamische Namenszeile |
+| Radaransicht | Standortzentrum, Blickrichtung nach oben, Radiuskreis und bis zu 64 Flugzeugpunkte |
 
 Lange Texte verlängern die Seitendauer automatisch, bis der Lauf vollständig
 sichtbar war. Seiten ohne verwertbaren Inhalt werden übersprungen. Sanfte
 Übergänge sind optional.
+
+In der Radaransicht sind normale Ziele cyan, das ausgewählte Ziel gelb,
+Specials violett, Bodenverkehr orange und Transpondernotfälle blinkend rot.
+Der Standort erscheint grün im Zentrum. Specials außerhalb des normalen
+Radius werden in ihrer Richtung blinkend am Kreisrand dargestellt.
 
 Die Blickrichtung bezieht sich auf den Standort des Betrachters, nicht auf den
 Track des Flugzeugs. Aus Standort, Entfernung, Höhe und Standorthöhe berechnet
@@ -622,7 +630,7 @@ eingecheckt.
 
 Für stabile Versionen ist **Releases → Latest** der bevorzugte Downloadweg.
 Ein Versionstag im Format `v<APP_VERSION>`, beispielsweise
-`v3.6.1-dual-target.23`, veröffentlicht nach zwei erfolgreichen Builds
+`v3.6.1-dual-target.24`, veröffentlicht nach zwei erfolgreichen Builds
 automatisch:
 
 - `flightwall-matrixportal-<VERSION>.bin`
