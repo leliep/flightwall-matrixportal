@@ -43,8 +43,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.25";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-08 full-width matrix radar";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.26";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-08 clean matrix radar";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -1972,10 +1972,6 @@ bool radarPointCoordinates(float distanceKm, float bearing,
 void drawRadarPage() {
   matrix.drawCircle(
       RADAR_CENTER_X, RADAR_CENTER_Y, RADAR_RADIUS_PIXELS, blue);
-  // The white mark at the top is the configured viewing direction.
-  matrix.drawPixel(RADAR_CENTER_X, 0, white);
-  matrix.drawPixel(RADAR_CENTER_X - 1, 1, white);
-  matrix.drawPixel(RADAR_CENTER_X + 1, 1, white);
   // Own position remains visible even when no aircraft is present.
   matrix.drawPixel(RADAR_CENTER_X, RADAR_CENTER_Y, green);
   matrix.drawPixel(RADAR_CENTER_X - 1, RADAR_CENTER_Y, green);

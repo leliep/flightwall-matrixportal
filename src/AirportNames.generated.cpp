@@ -26,6 +26,7 @@ const AirportName names[] = {
   {"AMM", "Amman"},
   {"AMS", "Amsterdam"},
   {"ANC", "Anchorage"},
+  {"ANR", "Antwerpen"},
   {"AOI", "Ancona"},
   {"AOK", "Karpathos"},
   {"AQJ", "Aqaba"},

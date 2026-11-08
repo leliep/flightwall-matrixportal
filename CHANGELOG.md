@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.6.1-dual-target.26 – 2026-11-08
+
+- redundante 12-Uhr-Markierung aus der Radaransicht entfernt; die
+  konfigurierte Blickrichtung bleibt definitionsgemäß nach oben ausgerichtet
+- Airport ANR (Antwerpen) einschließlich offizieller AIP-Koordinaten ergänzt
+
 ## 3.6.1-dual-target.25 – 2026-11-08
 
 - Radaransicht bei ausgeschalteter Wetterseite auch ohne aktuell ausgewähltes

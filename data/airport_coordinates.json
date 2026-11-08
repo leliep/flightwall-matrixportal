@@ -109,6 +109,11 @@
     "longitude": -149.992561,
     "elevation_ft": 152
   },
+  "ANR": {
+    "latitude": 51.189444,
+    "longitude": 4.460278,
+    "elevation_ft": 32
+  },
   "AOI": {
     "latitude": 43.616299,
     "longitude": 13.3623,
