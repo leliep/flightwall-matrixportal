@@ -43,8 +43,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.27";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-08 quiet radar status pixel";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.28";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-08 subtle radar radius";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -1970,8 +1970,16 @@ bool radarPointCoordinates(float distanceKm, float bearing,
 
 
 void drawRadarPage() {
-  matrix.drawCircle(
-      RADAR_CENTER_X, RADAR_CENTER_Y, RADAR_RADIUS_PIXELS, blue);
+  constexpr uint8_t RADAR_RADIUS_DOT_COUNT = 32;
+  for (uint8_t dot = 0; dot < RADAR_RADIUS_DOT_COUNT; ++dot) {
+    const float angle = 2.0F * PI * dot / RADAR_RADIUS_DOT_COUNT;
+    matrix.drawPixel(
+        RADAR_CENTER_X + static_cast<int16_t>(
+            roundf(cosf(angle) * RADAR_RADIUS_PIXELS)),
+        RADAR_CENTER_Y + static_cast<int16_t>(
+            roundf(sinf(angle) * RADAR_RADIUS_PIXELS)),
+        blue);
+  }
   // Own position remains visible even when no aircraft is present.
   matrix.drawPixel(RADAR_CENTER_X, RADAR_CENTER_Y, green);
   matrix.drawPixel(RADAR_CENTER_X - 1, RADAR_CENTER_Y, green);

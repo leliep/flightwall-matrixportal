@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.6.1-dual-target.28 – 2026-11-08
+
+- Suchradius der Radaransicht als dezenter Ring aus 32 gleichmäßig verteilten
+  Einzelpunkten statt als geschlossene, dominante Kreislinie dargestellt
+
 ## 3.6.1-dual-target.27 – 2026-11-08
 
 - Betriebsanzeige-Pixel während der Radaransicht im fehlerfreien Betrieb
