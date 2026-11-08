@@ -43,8 +43,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.26";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-08 clean matrix radar";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.27";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-08 quiet radar status pixel";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -2000,6 +2000,9 @@ void drawRadarPage() {
       }
     }
   }
+  if (lastError.length() &&
+      (millis() / IDLE_BLINK_HALF_PERIOD_MS) % 2 == 0)
+    matrix.drawPixel(0, 31, idleErrorPixel);
 }
 
 
@@ -2010,12 +2013,15 @@ void drawIdleDisplay() {
       isfinite(relativeHumidityPercent) && isfinite(airPressureHpa);
   const bool mqttAvailable = environmentIdleDisplayEnabled &&
       mqttWeatherAvailable();
+  bool radarIdleVisible = false;
   if (bmeAvailable || mqttAvailable) {
     drawCompactClimateDisplay(bmeAvailable, mqttAvailable);
   } else if (!environmentIdleDisplayEnabled && pageEnabled[7]) {
     drawRadarPage();
+    radarIdleVisible = true;
   }
-  if ((millis() / IDLE_BLINK_HALF_PERIOD_MS) % 2 == 0) {
+  if (!radarIdleVisible &&
+      (millis() / IDLE_BLINK_HALF_PERIOD_MS) % 2 == 0) {
     matrix.drawPixel(0, 31, lastError.length() ? idleErrorPixel : idlePixel);
   }
   showMatrix();

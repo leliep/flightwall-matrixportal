@@ -38,6 +38,7 @@ const AirlineName names[] = {
   {"APA", "Air Park Aviation"},
   {"ASL", "Spurling Aviation"},
   {"ATJ", "Air Traffic GmbH"},
+  {"ATV", "Avanti Air"},
   {"AUA", "Austrian Airlines"},
   {"AUH", "Presidential Flight UAE"},
   {"AWC", "Titan Airways"},

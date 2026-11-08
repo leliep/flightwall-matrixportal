@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.6.1-dual-target.27 – 2026-11-08
+
+- Betriebsanzeige-Pixel während der Radaransicht im fehlerfreien Betrieb
+  abgeschaltet; bei einer aktuellen Störung blinkt es weiterhin rot
+- Airline ATV (Avanti Air) ergänzt
+
 ## 3.6.1-dual-target.26 – 2026-11-08
 
 - redundante 12-Uhr-Markierung aus der Radaransicht entfernt; die
