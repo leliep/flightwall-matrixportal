@@ -1,5 +1,19 @@
 # Changelog
 
+## 3.6.1-dual-target.33 – 2026-11-09
+
+- Punktierte Radarspuren über 60 Sekunden für Matrix und Headless-Webradar;
+  standardmäßig aktiv und auf beiden Varianten unter Radar abschaltbar
+- Fester RAM-Verlauf für bis zu 64 Ziele, altersabhängige Abdunklung,
+  Zusammenfassung gleicher Bildpunkte und Ablauf auch bei Empfangsausfällen
+- Spurunterbrechung bei Empfangslücken und Positionssprüngen; Zurücksetzen
+  bei Änderungen von Quelle, Standort, Radaransicht oder Filtern
+- Einstellung in NVS, Konfigurationssicherung/-wiederherstellung und APIs integriert
+- EGSY (St Athan) mit Koordinaten aus den Statusmeldungen beider Controller
+  ergänzt; Lookup-Tabellen neu erzeugt und validiert, einschließlich des
+  bereits in den Quelldaten vorhandenen OBF-Koordinateneintrags
+- Lokale Tests für Verlauf, Zeitüberlauf, Kapazität und Webdarstellung ergänzt
+
 ## 3.6.1-dual-target.32 – 2026-11-09
 
 - Radar-Umlauf geschlossen: Der helle Punkt endet nun sichtbar wieder auf

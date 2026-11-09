@@ -158,6 +158,7 @@ const AirportName names[] = {
   {"EDRK", "Koblenz-Winningen"},
   {"EFL", "Kefalonia"},
   {"EGC", "Bergerac"},
+  {"EGSY", "St Athan"},
   {"EHBD", "Budel/Kempen"},
   {"EHU", "Ezhou"},
   {"EHVK", "Volkel Air Base"},

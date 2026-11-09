@@ -769,6 +769,11 @@
     "longitude": 0.518611,
     "elevation_ft": 171
   },
+  "EGSY": {
+    "latitude": 51.405229,
+    "longitude": -3.433254,
+    "elevation_ft": 163
+  },
   "EHBD": {
     "latitude": 51.255299,
     "longitude": 5.60139,

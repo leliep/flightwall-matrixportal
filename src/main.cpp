@@ -28,6 +28,7 @@
 #include "AirlineNames.hpp"
 #include "CallsignClassifier.hpp"
 #include "Geo.hpp"
+#include "RadarTrails.hpp"
 #include "RouteClient.hpp"
 #include "StatusLed.hpp"
 #include "UnknownCodes.hpp"
@@ -43,8 +44,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.32";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-09 closed matrix radar sweep";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.33";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-09 dotted radar trails";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -199,7 +200,14 @@ struct FlightData {
 FlightData flight;
 FlightData networkFlight;
 
+struct RadarTrailDot {
+  uint32_t time = 0;
+  int8_t x = 0, y = 0;
+};
+
 struct RadarPoint {
+  RadarTrailDot trail[RadarTrails::Samples - 1];
+  uint8_t trailCount = 0;
   float distanceKm = 0.0F;
   float bearing = 0.0F;
   uint8_t flags = 0;
@@ -215,6 +223,10 @@ RadarPoint radarPoints[RADAR_POINT_LIMIT];
 RadarPoint networkRadarPoints[RADAR_POINT_LIMIT];
 size_t radarPointCount = 0;
 size_t networkRadarPointCount = 0;
+RadarTrails radarTrails;
+bool radarTrailsEnabled = true;
+// A separate display-core copy avoids reading configuration during rendering.
+bool displayedRadarTrailsEnabled = true;
 
 constexpr int32_t CPA_COUNTDOWN_HORIZON_SECONDS = 3 * 60;
 
@@ -1989,6 +2001,31 @@ bool radarPointCoordinates(float distanceKm, float bearing,
 
 
 void drawRadarPage() {
+  // Trails are drawn first so the ring, own position and live targets win.
+  if (displayedRadarTrailsEnabled && transitionPercent > 0) {
+    const uint32_t now = millis();
+    for (size_t i = 0; i < radarPointCount; ++i) {
+      const RadarPoint &point = radarPoints[i];
+      const uint16_t base = radarPointColor(point);
+      for (uint8_t j = 0; j < point.trailCount; ++j) {
+        const RadarTrailDot &dot = point.trail[j];
+        const uint32_t age = now - dot.time;
+        if (age >= RadarTrails::LifetimeMs) continue;
+        // At minimum brightness a distinct darker native level is impossible.
+        // Keep nonzero channels at the first visible level, never above base.
+        const uint8_t level = age < 30000 ? 3 : 1;
+        auto dimChannel = [level](uint8_t channel) -> uint8_t {
+          if (!channel) return 0;
+          return min(channel, static_cast<uint8_t>(max(36, channel * level / 7)));
+        };
+        const uint16_t color = matrix.color565(
+            dimChannel(((base >> 11) & 31) * 255 / 31),
+            dimChannel(((base >> 5) & 63) * 255 / 63),
+            dimChannel((base & 31) * 255 / 31));
+        matrix.drawPixel(dot.x, dot.y, color);
+      }
+    }
+  }
   for (uint8_t dot = 0; dot < RADAR_RADIUS_DOT_COUNT; ++dot) {
     const float angle = 2.0F * PI * dot / RADAR_RADIUS_DOT_COUNT;
     matrix.drawPixel(
@@ -2725,6 +2762,7 @@ void syncNetworkState() {
       setTransitionPercent(100);
     }
     flight = networkFlight;
+    displayedRadarTrailsEnabled = radarTrailsEnabled;
     radarPointCount = min(networkRadarPointCount, RADAR_POINT_LIMIT);
     for (size_t index = 0; index < radarPointCount; ++index)
       radarPoints[index] = networkRadarPoints[index];
@@ -3484,6 +3522,23 @@ bool fetchLocalFlight() {
     currentRoute = {};
   }
 
+  static double trailLatitude = NAN, trailLongitude = NAN;
+  static float trailRadius = NAN, trailHeading = NAN;
+  static bool trailSport = false, trailAltitude = false;
+  static int trailMaxAltitude = 0;
+  static uint8_t trailSource = 255;
+  if (!radarTrailsEnabled || trailLatitude != siteLatitude ||
+      trailLongitude != siteLongitude || trailRadius != displayRadiusKm ||
+      trailHeading != viewHeading || trailSport != hideSportAircraft ||
+      trailAltitude != altitudeFilterEnabled || trailMaxAltitude != maximumAltitudeFt ||
+      trailSource != successfulSource) {
+    radarTrails.clear();
+    trailLatitude = siteLatitude; trailLongitude = siteLongitude;
+    trailRadius = displayRadiusKm; trailHeading = viewHeading;
+    trailSport = hideSportAircraft; trailAltitude = altitudeFilterEnabled;
+    trailMaxAltitude = maximumAltitudeFt; trailSource = successfulSource;
+  }
+  const uint32_t trailNow = millis();
   if (xSemaphoreTake(flightMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
     networkFlight = next;
     networkRadarPointCount = 0;
@@ -3511,6 +3566,34 @@ bool fetchLocalFlight() {
                 candidate.distanceKm, candidate.bearing, radarX, radarY))
           continue;
         RadarPoint &point = networkRadarPoints[networkRadarPointCount++];
+        point.trailCount = 0;
+        if (radarTrailsEnabled &&
+            (candidate.hex.length() || candidate.registration.length() || candidate.flight.length())) {
+          const float angle = candidate.bearing * PI / 180.0F;
+          const auto *track = radarTrails.update(aircraftIdentity(candidate),
+              sinf(angle) * candidate.distanceKm,
+              cosf(angle) * candidate.distanceKm, trailNow);
+          if (track) {
+            for (size_t j = 0; j + 1 < track->count; ++j) {
+              const auto &fix = track->fixes[j];
+              int16_t x = 0, y = 0;
+              if (!radarPointCoordinates(hypotf(fix.east, fix.north),
+                      atan2f(fix.east, fix.north) * 180.0F / PI, x, y) ||
+                  (x == radarX && y == radarY)) continue;
+              bool duplicate = false;
+              for (uint8_t k = 0; k < point.trailCount; ++k) {
+                auto &dot = point.trail[k];
+                if (dot.x == x && dot.y == y) {
+                  dot.time = fix.time; duplicate = true; break;
+                }
+              }
+              if (!duplicate) {
+                auto &dot = point.trail[point.trailCount++];
+                dot.x = x; dot.y = y; dot.time = fix.time;
+              }
+            }
+          }
+        }
         point.distanceKm = candidate.distanceKm;
         point.bearing = candidate.bearing;
         point.flags = isSelected ? RADAR_POINT_SELECTED : 0;
@@ -3668,6 +3751,7 @@ String configurationJson() {
   settings["site_latitude"] = siteLatitude;
   settings["site_longitude"] = siteLongitude;
   settings["view_heading"] = viewHeading;
+  settings["radar_trails_enabled"] = radarTrailsEnabled;
   settings["routes_enabled"] = routesEnabled;
   settings["adsbdb_fallback"] = adsbDbFallbackEnabled;
   settings["hide_sport_aircraft"] = hideSportAircraft;
@@ -3758,6 +3842,7 @@ void handleConfigurationRestore() {
   if (!s["site_latitude"].isNull()) preferences.putDouble("siteLat", constrain(s["site_latitude"].as<double>(), -90.0, 90.0));
   if (!s["site_longitude"].isNull()) preferences.putDouble("siteLon", constrain(s["site_longitude"].as<double>(), -180.0, 180.0));
   if (!s["view_heading"].isNull()) preferences.putFloat("heading", constrain(s["view_heading"].as<float>(), 0.0f, 359.0f));
+  putBool("radarTrails", "radar_trails_enabled");
   putBool("routesOn", "routes_enabled"); putBool("routeFallback", "adsbdb_fallback");
   putBool("hideSport", "hide_sport_aircraft"); putBool("altFilter", "altitude_filter");
   if (!s["maximum_altitude_ft"].isNull()) preferences.putInt("maxAltFt", constrain(s["maximum_altitude_ft"].as<int>(), 1000, 100000));
@@ -3969,6 +4054,7 @@ void translateWebPageToEnglish(String &html) {
     {"Freitext (maximal 128 Zeichen)", "Custom text (maximum 128 characters)"},
     {"Freitext-Scrollgeschwindigkeit", "Custom text scroll speed"}, {">schnell<", ">fast<"},
     {">mittel<", ">medium<"}, {">langsam<", ">slow<"},
+    {"Radarspuren (60 Sekunden)", "Radar trails (60 seconds)"},
     {"Radar-Umlaufintervall", "Radar sweep interval"}, {">Aus<", ">Off<"},
     {"Ein Umlauf dauert etwa 0,8 Sekunden. 0 schaltet ihn aus.", "One sweep takes about 0.8 seconds. 0 disables it."},
     {"Ein leerer Freitext überspringt die Seite automatisch.", "An empty custom text automatically skips the page."},
@@ -4297,6 +4383,9 @@ String webPage(bool configurationPage = false, bool includeRouteCache = true) {
   html += F("'></label><label>Regen heute (cm)<input type='text' name='rainTopic' maxlength='128' value='");
   html += htmlEscape(rainTopic);
   html += F("'></label></div><p class='muted'>Regen wird für die Anzeige von cm in mm umgerechnet. Ein leeres Passwortfeld behält das gespeicherte Passwort bei.</p></fieldset>");
+  html += F("<fieldset><legend>Radar</legend><label class='check'><input type='checkbox' name='radarTrails' value='1'");
+  html += checked(radarTrailsEnabled);
+  html += F("> Radarspuren (60 Sekunden)</label></fieldset>");
 #if FLIGHTWALL_HAS_MATRIX
   html += F("<fieldset><legend>Anzeigeseiten</legend><div class='fieldGrid'><label class='check'><input type='checkbox' name='smooth' value='1'");
   html += checked(smoothTransitions);
@@ -5041,6 +5130,14 @@ void applyWebSettings() {
     radarSweepStarted = 0;
     radarSweepLastDraw = 0;
 #endif
+    radarTrailsEnabled = webServer.hasArg("radarTrails");
+    // Saving configuration starts a fresh trail, including source URL edits.
+    radarTrails.clear();
+    if (xSemaphoreTake(flightMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+      for (size_t i = 0; i < networkRadarPointCount; ++i)
+        networkRadarPoints[i].trailCount = 0;
+      xSemaphoreGive(flightMutex);
+    }
     String requestedAdsbUrl1 = webServer.arg("adsbUrl1");
     requestedAdsbUrl1.trim();
     if (requestedAdsbUrl1.startsWith("http://") ||
@@ -5157,6 +5254,7 @@ void applyWebSettings() {
     preferences.putDouble("siteLat", siteLatitude);
     preferences.putDouble("siteLon", siteLongitude);
     preferences.putFloat("heading", viewHeading);
+    preferences.putBool("radarTrails", radarTrailsEnabled);
     preferences.putBool("routesOn", routesEnabled);
     preferences.putBool("routeFallback", adsbDbFallbackEnabled);
     preferences.putBool("hideSport", hideSportAircraft);
@@ -5417,21 +5515,25 @@ void handleWebDisplay() {
 
 void handleDisplayApi() {
   FlightData shown;
-  RadarPoint webRadarPoints[RADAR_POINT_LIMIT];
+#if !FLIGHTWALL_HAS_MATRIX
+  static RadarPoint webRadarPoints[RADAR_POINT_LIMIT];
   size_t webRadarPointCount = 0;
+#endif
   String error;
   uint32_t updated = 0;
   if (xSemaphoreTake(flightMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
     shown = networkFlight;
+#if !FLIGHTWALL_HAS_MATRIX
     webRadarPointCount = min(networkRadarPointCount, RADAR_POINT_LIMIT);
     for (size_t index = 0; index < webRadarPointCount; ++index)
       webRadarPoints[index] = networkRadarPoints[index];
+#endif
     error = networkLastError;
     updated = networkLastSuccessfulPoll;
     xSemaphoreGive(flightMutex);
   }
   String json;
-  json.reserve(4200);
+  json.reserve(FLIGHTWALL_HAS_MATRIX ? 4200 : 24000);
   json = "{\"language\":\"" + String(uiEnglish ? "en" : "de") +
          "\",\"device_variant\":\"" + jsonEscape(DEVICE_VARIANT) +
          "\",\"web_radar\":" +
@@ -5458,7 +5560,8 @@ void handleDisplayApi() {
     if (page) json += ',';
     json += String(pageDurationMs[page]);
   }
-  json += "],\"radar\":{\"radius_km\":" + String(displayRadiusKm, 1) +
+  json += "],\"radar_trails_enabled\":" + String(radarTrailsEnabled ? "true" : "false") +
+          ",\"radar\":{\"radius_km\":" + String(displayRadiusKm, 1) +
           ",\"view_heading\":" + String(viewHeading, 1) +
           ",\"points\":[";
 #if !FLIGHTWALL_HAS_MATRIX
@@ -5468,7 +5571,18 @@ void handleDisplayApi() {
     json += String(webRadarPoints[index].distanceKm, 2) + ',' +
             String(webRadarPoints[index].bearing, 1) + ',' +
             String(webRadarPoints[index].flags);
-    json += ']';
+    json += ",[";
+    bool firstDot = true;
+    if (radarTrailsEnabled) for (uint8_t j = 0; j < webRadarPoints[index].trailCount; ++j) {
+      const auto &dot = webRadarPoints[index].trail[j];
+      const uint32_t age = millis() - dot.time;
+      if (age >= RadarTrails::LifetimeMs) continue;
+      if (!firstDot) json += ',';
+      firstDot = false;
+      json += '[' + String(dot.x) + ',' + String(dot.y) + ',' +
+              String(RadarTrails::LifetimeMs - age) + ']';
+    }
+    json += "]]";
   }
 #endif
   json += "]},\"flight\":{";
@@ -5661,6 +5775,7 @@ void handleStatusApi() {
       ",\"maximum_altitude_ft\":" + String(maximumAltitudeFt) +
       ",\"received_aircraft\":" + String(lastReceivedAircraft) +
       ",\"candidate_aircraft\":" + String(lastCandidateAircraft) +
+      ",\"radar_trails_enabled\":" + String(radarTrailsEnabled ? "true" : "false") +
       ",\"radar_aircraft\":" + String(networkRadarPointCount) +
       ",\"last_adsb_attempt_age_seconds\":" +
           (lastAdsbAttempt ? String((millis() - lastAdsbAttempt) / 1000) : "null") +
@@ -6802,6 +6917,7 @@ void setup() {
   viewHeading = preferences.getFloat("heading", DEFAULT_VIEW_HEADING);
   routesEnabled = preferences.getBool("routesOn", true);
   adsbDbFallbackEnabled = preferences.getBool("routeFallback", true);
+  radarTrailsEnabled = preferences.getBool("radarTrails", true);
   hideSportAircraft = preferences.getBool("hideSport", true);
   altitudeFilterEnabled = preferences.getBool("altFilter", false);
   maximumAltitudeFt = preferences.getInt(
