@@ -228,6 +228,7 @@ const AirlineName names[] = {
   {"LXA", "Luxaviation"},
   {"LYF", "Lithuanian Air Force"},
   {"LZB", "Bulgaria Air"},
+  {"MAC", "Air Arabia Maroc"},
   {"MAS", "Malaysia Airlines"},
   {"MBK", "Chrono Jet"},
   {"MBU", "Marabu Airlines"},

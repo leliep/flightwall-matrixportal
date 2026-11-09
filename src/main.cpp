@@ -43,8 +43,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.31";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-09 configurable matrix radar sweep";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.32";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-09 closed matrix radar sweep";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -1950,6 +1950,7 @@ constexpr int16_t RADAR_CENTER_Y = 15;
 constexpr int16_t RADAR_RADIUS_PIXELS = 15;
 constexpr uint8_t RADAR_RADIUS_DOT_COUNT = 32;
 constexpr uint32_t RADAR_SWEEP_PERIOD_MS = 800;
+constexpr uint32_t RADAR_SWEEP_DRAW_INTERVAL_MS = 25;
 constexpr uint32_t RADAR_SWEEP_SESSION_GAP_MS = 750;
 // The furthest matrix corner is about 4.4 configured radii away when the
 // same distance scale is used on both axes. A small margin avoids losing
@@ -2008,8 +2009,15 @@ void drawRadarPage() {
     const uint32_t sweepElapsed =
         (now - radarSweepStarted) % sweepCycleMs;
     if (sweepElapsed < RADAR_SWEEP_PERIOD_MS) {
-      const uint8_t sweepDot = static_cast<uint8_t>(
-          sweepElapsed * RADAR_RADIUS_DOT_COUNT / RADAR_SWEEP_PERIOD_MS);
+      // Include both ends of the circle. The final visible position is the
+      // same 12-o'clock pixel at which the sweep started.
+      constexpr uint32_t sweepEndpointMs =
+          RADAR_SWEEP_PERIOD_MS - RADAR_SWEEP_DRAW_INTERVAL_MS;
+      uint32_t sweepDot =
+          (sweepElapsed * RADAR_RADIUS_DOT_COUNT + sweepEndpointMs / 2U) /
+          sweepEndpointMs;
+      if (sweepDot > RADAR_RADIUS_DOT_COUNT)
+        sweepDot = RADAR_RADIUS_DOT_COUNT;
       // Start at 12 o'clock and advance clockwise exactly once per interval.
       const float sweepAngle = -PI / 2.0F +
           2.0F * PI * sweepDot / RADAR_RADIUS_DOT_COUNT;
@@ -6907,7 +6915,8 @@ uint32_t displayDrawIntervalMs() {
       const uint32_t cycleMs =
           static_cast<uint32_t>(radarSweepIntervalSeconds) * 1000U;
       const uint32_t elapsed = (millis() - radarSweepStarted) % cycleMs;
-      if (elapsed < RADAR_SWEEP_PERIOD_MS) return 25;
+      if (elapsed < RADAR_SWEEP_PERIOD_MS)
+        return RADAR_SWEEP_DRAW_INTERVAL_MS;
       return min(250U, cycleMs - elapsed);
     }
 #endif
@@ -6923,7 +6932,8 @@ uint32_t displayDrawIntervalMs() {
       const uint32_t cycleMs =
           static_cast<uint32_t>(radarSweepIntervalSeconds) * 1000U;
       const uint32_t elapsed = (millis() - radarSweepStarted) % cycleMs;
-      if (elapsed < RADAR_SWEEP_PERIOD_MS) return 25;
+      if (elapsed < RADAR_SWEEP_PERIOD_MS)
+        return RADAR_SWEEP_DRAW_INTERVAL_MS;
       return min(250U, cycleMs - elapsed);
     }
     if (page == 4 && customScrollSpeed == 2) return 25;

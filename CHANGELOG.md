@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.6.1-dual-target.32 – 2026-11-09
+
+- Radar-Umlauf geschlossen: Der helle Punkt endet nun sichtbar wieder auf
+  dem 12-Uhr-Pixel, auf dem der Umlauf begonnen hat
+- Flughafen OBF (Oberpfaffenhofen) einschließlich Koordinaten sowie Airline
+  MAC (Air Arabia Maroc) aus den vor dem Update beobachteten Codes ergänzt
+
 ## 3.6.1-dual-target.31 – 2026-11-09
 
 - Radar-Umlauf auf einen kurzen Umlauf von etwa 800 ms pro konfiguriertem

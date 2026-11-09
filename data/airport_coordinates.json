@@ -924,15 +924,15 @@
     "longitude": 8.840732,
     "elevation_ft": 13
   },
-  "GOX": {
-    "latitude": 15.742499,
-    "longitude": 73.867011,
-    "elevation_ft": 564
-  },
   "GOT": {
     "latitude": 57.6628,
     "longitude": 12.2798,
     "elevation_ft": 506
+  },
+  "GOX": {
+    "latitude": 15.742499,
+    "longitude": 73.867011,
+    "elevation_ft": 564
   },
   "GPA": {
     "latitude": 38.1511,
@@ -1654,6 +1654,11 @@
     "longitude": 16.911479,
     "elevation_ft": 140
   },
+  "OBF": {
+    "latitude": 48.081402,
+    "longitude": 11.2831,
+    "elevation_ft": 1947
+  },
   "OFF": {
     "latitude": 41.119307,
     "longitude": -95.90851,
@@ -2069,15 +2074,15 @@
     "longitude": -17.7556,
     "elevation_ft": 107
   },
-  "SPX": {
-    "latitude": 30.1082,
-    "longitude": 30.8957,
-    "elevation_ft": 510
-  },
   "SPU": {
     "latitude": 43.538898,
     "longitude": 16.298,
     "elevation_ft": 79
+  },
+  "SPX": {
+    "latitude": 30.1082,
+    "longitude": 30.8957,
+    "elevation_ft": 510
   },
   "SSH": {
     "latitude": 27.977272,

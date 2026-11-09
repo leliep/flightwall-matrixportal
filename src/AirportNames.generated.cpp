@@ -335,6 +335,7 @@ const AirportName names[] = {
   {"NVI", "Navoiy"},
   {"NWI", "Norwich"},
   {"NYO", "Stockholm-Skavsta"},
+  {"OBF", "Oberpfaffenhofen"},
   {"OFF", "Offutt Air Force Base"},
   {"OGU", "Ordu-Giresun"},
   {"OLB", "Olbia"},
