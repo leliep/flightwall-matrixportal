@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.6.1-dual-target.29 – 2026-11-09
+
+- Headless-Webdisplay um ein responsives Radarbild im 128×32-Seitenverhältnis
+  mit gepunktetem Radius, Standortzentrum und bis zu 64 Zielen erweitert
+- Webradar übernimmt Orientierung, maßstabstreuen rechteckigen Ausschnitt,
+  Farblogik, ausgewähltes Ziel und blinkende Transpondernotfälle der Matrix
+- Headless-Controller sammelt den erweiterten Radarbereich unabhängig von den
+  gemeinsam gespeicherten Matrixseiten-Einstellungen
+
 ## 3.6.1-dual-target.28 – 2026-11-08
 
 - Suchradius der Radaransicht als dezenter Ring aus 32 gleichmäßig verteilten

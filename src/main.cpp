@@ -43,8 +43,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.28";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-08 subtle radar radius";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.29";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-09 headless web radar";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -1955,6 +1955,17 @@ float radarCoverageRadiusKm() {
 }
 
 
+bool radarDataCollectionEnabled() {
+#if FLIGHTWALL_HAS_MATRIX
+  return pageEnabled[7];
+#else
+  // The headless controller supplies the web radar independently of the
+  // matrix-page settings retained in the shared configuration format.
+  return true;
+#endif
+}
+
+
 bool radarPointCoordinates(float distanceKm, float bearing,
                            int16_t &x, int16_t &y) {
   if (displayRadiusKm <= 0.0F || !isfinite(distanceKm) ||
@@ -2730,7 +2741,8 @@ String adsbFiUrl() {
   // viewport when enabled; selection still uses the configured circular
   // radius and the doubled radius for specials.
   const float requiredKm = max(
-      pageEnabled[7] ? radarCoverageRadiusKm() : displayRadiusKm * 2.0F,
+      radarDataCollectionEnabled()
+          ? radarCoverageRadiusKm() : displayRadiusKm * 2.0F,
       18.52F);
   const uint16_t radiusNm = constrain(
       static_cast<uint16_t>(ceilf(requiredKm / 1.852F)),
@@ -3234,7 +3246,7 @@ bool fetchLocalFlight() {
   config.longitude = siteLongitude;
   config.maxPositionAgeSeconds = 15.0f;
   config.radiusKm = displayRadiusKm;
-  config.candidateRadiusKm = pageEnabled[7]
+  config.candidateRadiusKm = radarDataCollectionEnabled()
                                  ? radarCoverageRadiusKm()
                                  : displayRadiusKm * 2.0F;
   config.hideSportAircraft = hideSportAircraft;
@@ -5345,18 +5357,26 @@ void handleWebDisplay() {
 
 void handleDisplayApi() {
   FlightData shown;
+  RadarPoint webRadarPoints[RADAR_POINT_LIMIT];
+  size_t webRadarPointCount = 0;
   String error;
   uint32_t updated = 0;
   if (xSemaphoreTake(flightMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
     shown = networkFlight;
+    webRadarPointCount = min(networkRadarPointCount, RADAR_POINT_LIMIT);
+    for (size_t index = 0; index < webRadarPointCount; ++index)
+      webRadarPoints[index] = networkRadarPoints[index];
     error = networkLastError;
     updated = networkLastSuccessfulPoll;
     xSemaphoreGive(flightMutex);
   }
   String json;
-  json.reserve(1800);
+  json.reserve(4200);
   json = "{\"language\":\"" + String(uiEnglish ? "en" : "de") +
-         "\",\"age_seconds\":" +
+         "\",\"device_variant\":\"" + jsonEscape(DEVICE_VARIANT) +
+         "\",\"web_radar\":" +
+             String(FLIGHTWALL_HAS_MATRIX ? "false" : "true") +
+         ",\"age_seconds\":" +
          (updated ? String((millis() - updated) / 1000) : "null") +
          ",\"error\":\"" + jsonEscape(error) + "\"" +
          ",\"custom_text\":\"" + jsonEscape(customPageText) + "\"" +
@@ -5376,7 +5396,20 @@ void handleDisplayApi() {
     if (page) json += ',';
     json += String(pageDurationMs[page]);
   }
-  json += "],\"flight\":{";
+  json += "],\"radar\":{\"radius_km\":" + String(displayRadiusKm, 1) +
+          ",\"view_heading\":" + String(viewHeading, 1) +
+          ",\"points\":[";
+#if !FLIGHTWALL_HAS_MATRIX
+  for (size_t index = 0; index < webRadarPointCount; ++index) {
+    if (index) json += ',';
+    json += '[';
+    json += String(webRadarPoints[index].distanceKm, 2) + ',' +
+            String(webRadarPoints[index].bearing, 1) + ',' +
+            String(webRadarPoints[index].flags);
+    json += ']';
+  }
+#endif
+  json += "]},\"flight\":{";
   json += "\"available\":" + String(shown.available ? "true" : "false") +
           ",\"emergency\":" + String(shown.emergency ? "true" : "false") +
           ",\"has_position\":" + String(shown.hasPosition ? "true" : "false") +

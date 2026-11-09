@@ -19,7 +19,7 @@ erklärt auch BME280, BH1750, MQTT, Routenauflösung und OTA.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.28` |
+| Firmware | `3.6.1-dual-target.29` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -69,7 +69,8 @@ Wesentliche Funktionen:
   Standortzentrum, Blickrichtung, unverzerrtem Radiuskreis und bis zu
   64 gleichzeitig sichtbaren Flugzeugpunkten; bei deaktivierter Wetterseite
   auch im Leerlauf sichtbar
-- responsive Webanzeige für iPhone, Tablet und Desktop
+- responsive Webanzeige für iPhone, Tablet und Desktop; auf der
+  Headless-Variante einschließlich kompaktem Live-Radar
 - deutsch/englisch umschaltbare Matrix- und Weboberfläche
 - BME280-Klimawerte, Schimmelrisiko und optionale MQTT-Wetterdaten
 - BH1750-Helligkeitsautomatik mit sieben stabilen Helligkeitsstufen
@@ -635,7 +636,7 @@ eingecheckt.
 
 Für stabile Versionen ist **Releases → Latest** der bevorzugte Downloadweg.
 Ein Versionstag im Format `v<APP_VERSION>`, beispielsweise
-`v3.6.1-dual-target.28`, veröffentlicht nach zwei erfolgreichen Builds
+`v3.6.1-dual-target.29`, veröffentlicht nach zwei erfolgreichen Builds
 automatisch:
 
 - `flightwall-matrixportal-<VERSION>.bin`

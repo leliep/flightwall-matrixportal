@@ -265,6 +265,8 @@ Der Radar-Kreis entspricht unverzerrt dem konfigurierten Auswahlradius. Die
 maßstabstreue Umgebung wird links und rechts bis zum Matrixrand fortgesetzt.
 Ist die Wetteranzeige deaktiviert und die Radaransicht aktiviert, bleibt das
 Radar auch ohne aktuell ausgewähltes Flugzeug sichtbar.
+Auf der Headless-Variante zeigt das responsive Webdisplay denselben
+Radar-Ausschnitt in kompakter Form unterhalb der aktuellen Flugzeugdaten.
 Mit dem integrierten Matrixtest lassen sich Farben, Pixel, Linien, Schriften
 und Special-Symbole unabhängig von einem realen Flugzeug kontrollieren.
 
