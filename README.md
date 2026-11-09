@@ -15,6 +15,44 @@ erforderlich.
 Hardwareaufbau über die Ersteinrichtung bis zur ersten Flugzeuganzeige und
 erklärt auch BME280, BH1750, MQTT, Routenauflösung und OTA.
 
+Weitere Dokumentation:
+
+- [Getting Started](GETTING_STARTED.md) – Aufbau und Ersteinrichtung
+- [PlatformIO-Hinweise](PLATFORMIO.md) – Build, Upload und Entwicklung
+- [Changelog](CHANGELOG.md) – Änderungen nach Firmwareversion
+- [GitHub Releases](https://github.com/leliep/flightwall-matrixportal/releases) – fertige OTA-Images
+
+## Schnellstart
+
+1. Hardwarevariante auswählen: MatrixPortal mit 128×32-Matrix oder ESP32-S3
+   N16R8 ohne Matrix.
+2. Repository klonen und `include/secrets.h.example` nach
+   `include/secrets.h` kopieren.
+3. Erstmalige WLAN-Daten und optional ein OTA-Passwort eintragen.
+4. Das zur Hardware passende PlatformIO-Environment per USB installieren.
+5. `/config` öffnen und Standort, Blickrichtung, Radius sowie ADS-B-Quelle
+   prüfen.
+6. Unter `/status` den erfolgreichen ADS-B-Abruf kontrollieren und
+   anschließend `/display` beziehungsweise die Matrix verwenden.
+
+Die Kurzfassung ersetzt nicht die Hinweise zu Matrixstromversorgung,
+unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
+
+## Inhalt
+
+- [Hardware und Verkabelung](#hardware)
+- [ADS-B-Daten und Flugzeugauswahl](#ads-b-daten-und-flugzeugauswahl)
+- [Routen, Klartexte und Cache](#routen-klartexte-und-cache)
+- [Matrixanzeige und Radar](#matrixanzeige)
+- [Wetterseite und Schimmelrisiko](#wetterseite)
+- [Weboberfläche](#weboberfläche)
+- [Installation per USB](#installation-per-usb)
+- [OTA-Updates](#ota-updates)
+- [Übersetzungstabellen](#übersetzungstabellen-pflegen)
+- [Diagnose und Tests](#diagnose-und-tests)
+- [Betrieb und Fehlersuche](#betrieb-und-fehlersuche)
+- [Sicherheit und Grenzen](#sicherheit-und-grenzen)
+
 ## Aktueller Stand
 
 | Merkmal | Stand |
@@ -29,6 +67,11 @@ erklärt auch BME280, BH1750, MQTT, Routenauflösung und OTA.
 | Aktualisierung | USB, Web-OTA oder PlatformIO-OTA |
 | Gerätestatus | gemeinsame RGB-LED-Logik; zusätzlicher Betriebs-Pixel auf der Matrix |
 | Lizenz | MIT |
+
+Die aktuelle Firmware ist gezielt für **128×32 Pixel aus zwei horizontal
+verketteten 64×32-Panels** ausgelegt. Ein einzelnes 128×64-Panel oder andere
+Scanverfahren benötigen Änderungen an Matrixhöhe, Layout, Speicherbedarf und
+Protomatter-Konfiguration und sind kein direkt unterstützter Ersatz.
 
 ## Eindrücke aus dem Betrieb
 
@@ -137,6 +180,14 @@ Optional:
 - BH1750 zur automatischen Helligkeitsregelung
 - BME280 für Temperatur, Luftfeuchte und Luftdruck
 - Mosquitto-kompatibler MQTT-Broker für Wind und Regen
+
+| Option | Matrixcontroller | Headless-Controller |
+|---|---|---|
+| BME280 | Status und Wetter-Ruheanzeige | Status/API; keine lokale Matrixseite |
+| BH1750 | automatische Matrixhelligkeit | nicht verwendet |
+| MQTT-Wetter | Wetter-Ruheanzeige und Status | Status/API; keine lokale Matrixseite |
+| Browser | zusätzliche Anzeige und Bedienung | primäre Anzeige und Bedienung |
+| adsb.im / ADSBDB | Routenauflösung | Routenauflösung |
 
 ### Matrixverkabelung
 
@@ -263,13 +314,30 @@ Point of Approach (CPA), die Zeit bis zum CPA und ob sich das Flugzeug nähert
 oder entfernt. In den letzten drei Minuten vor dem CPA wird die Restzeit auf
 Matrix, Webdisplay, Statusseite und in den APIs sekundengenau heruntergezählt.
 
+### Bodenverkehr
+
+ADS-B-Meldungen mit `alt_baro: "ground"`, `ground` oder `on_ground` behalten
+ihren Bodenstatus. Die Anzeige unterscheidet:
+
+- `steht` bis einschließlich 3 km/h
+- `rollt` oberhalb von 3 km/h
+- `am Boden`, wenn keine brauchbare Geschwindigkeit vorliegt
+
+Stehende Flugzeuge werden nicht ausgewählt. Rollende Flugzeuge können
+erscheinen, wenn kein geeignetes fliegendes Flugzeug im normalen Radius
+vorhanden ist. Im Radar wird Bodenverkehr orange dargestellt.
+
 ### Special Types
 
 Military, German Airforce, Bundespolizei, Polizei, Regierung, Hubschrauber,
 Luftschiff und A380 werden besonders klassifiziert und auf allen
 Flugzeugseiten mit eigenen Symbolen dargestellt. Die Erkennung verwendet
-ADS-B-Metadaten und bekannte Callsign-Muster, beispielsweise `GAF…`, `BPO…`,
-`VADER…`, `SHOCK…`, `SONIC…` und `FELON…`.
+ADS-B-Metadaten und bekannte Callsign-Muster. Dazu gehören unter anderem
+`GAF…`, `VAD…`/`VADER…`, `SHO…`/`SHOCK…`, `BURRO…`, `HAMMER…`, `SMASH…`,
+`CONAN…`, `FALCON…`, `THOR…`, `VIRUS…`, `SONIC…`, `FELON…`, `IAM…`,
+`BPO…`, `POL…`, `HBT…`, `HUM…` und `NRW…`. Die vollständige, tatsächlich
+verwendete Regelbasis steht in `include/CallsignClassifier.hpp` und
+`src/AircraftProcessor.cpp`.
 
 Die Statusseite zählt pro Kalendertag eindeutige Flugzeuge und weist den
 Anteil der Specials aus. Specials werden zusätzlich nach Kategorie aufgeteilt.
@@ -384,8 +452,8 @@ normale Flugzeugauswahl zu verändern. Ist die Wetterseite deaktiviert, bleibt
 das Radar auch ohne ausgewähltes Flugzeug als Leerlaufanzeige sichtbar. Ein
 heller Punkt umläuft den Radius ausgehend von 12 Uhr im Uhrzeigersinn. Das
 Intervall ist von 1 bis 10 Sekunden konfigurierbar; `0` schaltet den
-Umlaufpunkt aus. Ein einzelner Umlauf dauert etwa 0,8 Sekunden und endet
-sichtbar wieder am 12-Uhr-Startpixel.
+Umlaufpunkt aus. Der Standardwert beträgt 5 Sekunden. Ein einzelner Umlauf
+dauert etwa 0,8 Sekunden und endet sichtbar wieder am 12-Uhr-Startpixel.
 
 Die Blickrichtung bezieht sich auf den Standort des Betrachters, nicht auf den
 Track des Flugzeugs. Aus Standort, Entfernung, Höhe und Standorthöhe berechnet
@@ -397,8 +465,9 @@ Hysterese beruhigt die Anzeige an den Winkelgrenzen.
 Wenn kein Flugzeug im Anzeigeradius liegt, erscheint wahlweise die Wetterseite.
 Ohne Wetterseite blinkt unten links der zusätzliche Matrix-Betriebs-Pixel: weiß
 bei gültigen ADS-B-Daten, rot nach einem Abruffehler. Dieser Pixel bleibt neben
-der gemeinsamen RGB-Status-LED aktiv. Display-Aus, Nachtruhe, Flash- und
-OTA-Zustände haben Vorrang vor der normalen Seitenausgabe.
+der gemeinsamen RGB-Status-LED aktiv. Während der Radaransicht bleibt er im
+fehlerfreien Betrieb dunkel und blinkt nur bei einer Störung rot. Display-Aus,
+Nachtruhe, Flash- und OTA-Zustände haben Vorrang vor der normalen Seitenausgabe.
 
 ### Matrixansteuerung und Helligkeit
 
@@ -434,6 +503,10 @@ in Millimeter umgerechnet. MQTT-Werte verfallen nach 15 Minuten ohne Update.
 Broker, Port, Benutzer, Passwort und alle vier Topics sind im Webinterface
 konfigurierbar. Windrichtung kann numerisch oder als kurze Himmelsrichtung
 geliefert werden; numerische Werte werden in eine von 16 Richtungen umgesetzt.
+Die Option für die Wetter-Ruheanzeige schaltet die gesamte Matrix-Wetterseite
+ein oder aus. Auf dem Headless-Controller werden BME280- und MQTT-Werte
+weiterhin in Status und API verarbeitet, aber nicht als lokale Ruheanzeige
+dargestellt.
 
 ### Schimmelrisiko
 
@@ -484,10 +557,33 @@ Routendienst, MQTT, Seitenreihenfolge, Freitext, Helligkeit und Nachtruhe.
 Statuskarten werden regelmäßig aktualisiert, ohne geöffnete Bereiche zu
 schließen oder ungespeicherte Formulareingaben zu überschreiben.
 
+### Wichtige Konfigurationsgruppen
+
+| Bereich | Wesentliche Einstellungen |
+|---|---|
+| WLAN und Sprache | SSID, Passwort, Netzwerkscan, Deutsch/Englisch |
+| Standort und Auswahl | Koordinaten, Höhe über NHN, Blickrichtung, Radius, Blickwinkel für `weit` |
+| ADS-B | zwei lokale URLs, externe adsb.fi-Quelle, bevorzugte Quelle und Failover |
+| Filter | Kleinflugzeuge ausblenden, Maximalhöhe in ft |
+| Routen | adsb.im, ADSBDB-Fallback, Verbindungstest und Cacheverwaltung |
+| Matrixseiten | Seiten aktivieren, Reihenfolge, Dauer, Übergänge, Freitext und Radar-Umlauf |
+| Wetter | BME280-Ruheanzeige, MQTT-Broker, Zugangsdaten und Topics |
+| Helligkeit | BH1750-Automatik, manuelle Stufe und Lux-Schwellen |
+| Betrieb | Nachtruhe, RGB-LED-Helligkeit, Tests und Neustart |
+| Sicherung | vollständige JSON-Sicherung und Wiederherstellung |
+
+Matrixbezogene Felder werden im Headless-Build ausgeblendet. Einstellungen
+werden im NVS gespeichert und bleiben bei normalen USB- und OTA-Updates
+erhalten.
+
 Im Abschnitt **Konfiguration sichern** kann der gesamte Gerätestand als
 JSON-Datei heruntergeladen und später auf demselben oder einem Ersatzgerät
 wiederhergestellt werden. Die Datei enthält auch WLAN-, MQTT- und
-OTA-Zugangsdaten und muss deshalb geschützt aufbewahrt werden.
+OTA-Zugangsdaten **im Klartext** und muss deshalb geschützt aufbewahrt werden.
+Ist OTA eingerichtet, verlangt der Download dieselben Zugangsdaten wie die
+Update-Seite. Die Sicherungsdatei selbst ist weder verschlüsselt noch durch ein
+zusätzliches Passwort geschützt. Eine Wiederherstellung ersetzt die gesamte
+Konfiguration und startet den Controller anschließend neu.
 
 Ist das ADS-B-Failover aktiviert, verwendet die Firmware bei einem Fehler
 sofort eine andere konfigurierte Quelle. Die bevorzugte Quelle wird danach
@@ -497,7 +593,9 @@ zwischen bevorzugter und tatsächlich verwendeter Quelle.
 Die Seite `/display` zeigt Callsign, Typ, Airline/Special Type, vollständige
 Route, Entfernung, Höhe, Geschwindigkeit, CPA, Vertikalbewegung und
 Blickrichtung. Sie aktualisiert sich automatisch und ist unabhängig vom
-128×32-Layout gestaltet.
+128×32-Layout gestaltet. Auf der Headless-Variante enthält sie zusätzlich ein
+kompaktes Live-Radar im Seitenverhältnis der Matrix. Es verwendet dieselbe
+Orientierung, Entfernungsskala und Farblogik wie das Matrixradar.
 
 Deutsch/Englisch wirkt gemeinsam auf Matrix, Konfiguration, Diagnose,
 Web-Display und Wetterkürzel. Airport-, Airline- und Freitextnamen werden nicht
@@ -574,8 +672,8 @@ Solange es aktiv ist, zeigt die Matrix dauerhaft WLAN-Name, Passwort und
 MatrixPortal kompilieren und per USB übertragen:
 
 ```bash
-pio run
-pio run -t upload
+pio run -e adafruit_matrixportal_esp32s3
+pio run -e adafruit_matrixportal_esp32s3 -t upload
 ```
 
 Headless-Server für das ESP32-S3-N16R8-Board kompilieren und übertragen:
@@ -610,6 +708,12 @@ Die beiden Firmwaredateien liegen anschließend unter:
 Die Images sind **nicht austauschbar**: Das Matrix-Image initialisiert HUB75,
 Taster und die Matrixsensorik, das Headless-Image lässt diese Hardware bewusst
 aus. Die Update-Seite nennt deshalb die erkannte Gerätevariante.
+
+Beim ersten USB-Upload kann es je nach Board und USB-Modus erforderlich sein,
+BOOT gedrückt zu halten, kurz RESET zu betätigen und BOOT wieder loszulassen.
+Nach erfolgreicher Installation genügt normalerweise ein gewöhnlicher Upload
+oder OTA. Der im Betrieb sichtbare USB-Port kann sich vom Bootloader-Port
+unterscheiden.
 
 Der serielle Monitor läuft mit 115200 Baud:
 
@@ -653,6 +757,10 @@ Das Manifest nennt für beide Hardwarevarianten Dateiname, Größe, SHA-256-Wert
 und Quell-Commit. Dadurch lassen sich vertauschte oder beschädigte Images vor
 dem Web-OTA erkennen. Normale Build-Artefakte bleiben zusätzlich für jeden
 erfolgreichen Commit verfügbar.
+
+`main` kann bereits eine neuere, erfolgreich gebaute Entwicklungsversion als
+das jüngste getaggte Release enthalten. In diesem Fall stehen die aktuellen
+Images zunächst als GitHub-Actions-Artefakte oder nach lokalem Build bereit.
 
 ## OTA-Updates
 
@@ -705,12 +813,12 @@ Die C++-Dateien in `src/*.generated.cpp` werden daraus erzeugt und sollten
 nicht direkt bearbeitet werden:
 
 ```bash
-python3 tools/validate_airport_names.py
-python3 tools/validate_airline_names.py
-python3 tools/validate_airport_coordinates.py
 python3 tools/generate_airport_names.py
 python3 tools/generate_airline_names.py
 python3 tools/generate_airport_coordinates.py
+python3 tools/validate_airport_names.py
+python3 tools/validate_airline_names.py
+python3 tools/validate_airport_coordinates.py
 pio run
 ```
 
@@ -718,6 +826,15 @@ Nach dem Ergänzen neuer Flughafencodes wird die Koordinatentabelle mit
 `python3 tools/update_airport_coordinates.py` aus dem aktuellen
 OurAirports-Datensatz aktualisiert. Das optionale Argument ist der Pfad zu
 einer bereits heruntergeladenen `airports.csv`.
+
+Empfohlene Reihenfolge vor einem Controllerneustart:
+
+1. unbekannte Codes auf **beiden** Controllern prüfen oder herunterladen,
+2. Codes und Klartexte in die JSON-Quelldateien eintragen,
+3. bei Flughäfen zusätzlich Koordinaten und Höhe ergänzen,
+4. generierte C++-Tabellen neu erzeugen und alle Validatoren ausführen,
+5. beide Firmwarevarianten bauen und erst danach OTA beziehungsweise Neustart
+   durchführen.
 
 Unbekannte Codes werden während des Betriebs flüchtig gesammelt – jeweils bis
 zu 32 Airports und Airlines. Die Statusseite und `/api/status` zeigen die
@@ -780,6 +897,30 @@ blockieren. Bei WLAN-Verlust werden mDNS, MQTT und OTA kontrolliert beendet;
 der Webserver bleibt über das Einrichtungsnetz erreichbar und die normalen
 Netzdienste werden nach der Wiederverbindung neu gestartet.
 
+## Betrieb und Fehlersuche
+
+Für den normalen Betrieb empfiehlt sich folgende kurze Kontrolle:
+
+- `/status` zeigt eine aktuelle ADS-B-Antwort ohne Fehler,
+- bevorzugte und tatsächlich aktive ADS-B-Quelle stimmen überein oder das
+  Failover ist nachvollziehbar aktiv,
+- unbekannte Codes und Überlaufzähler werden vor geplanten Neustarts geprüft,
+- BME280, MQTT und BH1750 werden nur dann als Fehler bewertet, wenn sie im
+  eigenen Aufbau tatsächlich verwendet werden,
+- OTA-Updates werden ausschließlich mit dem zur Hardware passenden Image
+  durchgeführt.
+
+| Symptom | Prüfung |
+|---|---|
+| Gerät nicht per Namen erreichbar | numerische IP im Router oder seriellen Monitor verwenden; mDNS-Unterstützung des Clients prüfen |
+| Keine Flugzeuge | aktive ADS-B-URL testen, Zeitstempel und Positionen in `aircraft.json` prüfen, Radius/Filter kontrollieren |
+| Falsche oder fehlende Route | Routentest und Cachequelle ansehen, Eintrag gezielt löschen oder neu abfragen |
+| Matrix dunkel | Displayfreigabe, Nachtruhe, Helligkeit, 5-V-Versorgung und HUB75-Richtung prüfen |
+| Wetterseite fehlt | Wetter-Ruheanzeige aktivieren; BME280- und MQTT-Status kontrollieren |
+| WLAN nicht erreichbar | mit `FlightWall-Setup-…` verbinden und `http://192.168.4.1/` öffnen |
+| Webserver träge | Zahl gleichzeitiger Browser reduzieren und Netzwerkdiagnose auf `/status` prüfen |
+| OTA schlägt fehl | Hardwarevariante, OTA-Passwort, Dateiendung, freien Netzwerkzugriff und ausreichend lange Uploadzeit prüfen |
+
 ## Wiederherstellung und Git
 
 Der Stand vor der Integration der Serverfunktionen ist mit dem Tag
@@ -822,10 +963,21 @@ git pull --ff-only origin main
 
 - Konfiguration, Status und JSON-APIs besitzen keine eigene Anmeldung. Das
   Gerät ist für ein vertrauenswürdiges lokales Netz gedacht.
-- Nur die OTA-Seite ist mit Benutzername und Passwort geschützt.
+- Die OTA-Seite ist mit Benutzername und Passwort geschützt. Der Download der
+  vollständigen Konfiguration verwendet bei aktiviertem OTA dieselbe
+  Anmeldung; Status, normale Konfiguration und Wiederherstellungs-Endpunkt
+  bleiben im lokalen Netz ohne eigene Anmeldung erreichbar.
+- Die erzeugte Konfigurationsdatei enthält Geheimnisse unverschlüsselt.
+- Das Einrichtungsnetz verwendet das dokumentierte Standardpasswort
+  `flightwall`. Es sollte nur vorübergehend und nicht als dauerhaftes
+  Betriebsnetz aktiv sein.
 - HTTPS-Verbindungen sind verschlüsselt, die Firmware validiert die
   Serverzertifikate derzeit jedoch nicht, weil beim frühen Systemstart noch
   keine verlässliche Uhrzeit garantiert ist.
+- Bei aktivierten externen Diensten werden Callsign und Flugzeugposition an
+  den konfigurierten Routendienst beziehungsweise Standort und Radius an
+  adsb.fi übertragen. MQTT-Zugangsdaten bleiben im Gerät, werden aber bei
+  unverschlüsseltem Port 1883 im lokalen Netz ohne TLS verwendet.
 - Routen und Klartexte hängen von Verfügbarkeit und Qualität externer Daten ab.
 - CPA und aktueller Streckenabschnitt sind berechnete beziehungsweise
   abgeleitete Werte und keine Flugsicherungsinformationen.
