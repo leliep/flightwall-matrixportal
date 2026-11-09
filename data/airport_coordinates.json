@@ -809,6 +809,11 @@
     "longitude": 10.960713,
     "elevation_ft": 1036
   },
+  "ERZ": {
+    "latitude": 39.955833,
+    "longitude": 41.170556,
+    "elevation_ft": 5764
+  },
   "ESB": {
     "latitude": 40.128101,
     "longitude": 32.995098,

@@ -166,6 +166,7 @@ const AirportName names[] = {
   {"EMA", "East Midlands"},
   {"ERC", "Erzincan"},
   {"ERF", "Erfurt-Weimar"},
+  {"ERZ", "Erzurum"},
   {"ESB", "Ankara"},
   {"EVN", "Jerewan"},
   {"EWR", "New York-Newark"},

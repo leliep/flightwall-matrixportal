@@ -19,7 +19,7 @@ erklärt auch BME280, BH1750, MQTT, Routenauflösung und OTA.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.29` |
+| Firmware | `3.6.1-dual-target.30` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -381,7 +381,8 @@ Der Standort erscheint grün im Zentrum. Der unverzerrte Kreis kennzeichnet
 den normalen Auswahlradius. Seitliche Ziele außerhalb des Kreises werden mit
 demselben Entfernungsmaßstab bis zum Matrixrand dargestellt, ohne dadurch die
 normale Flugzeugauswahl zu verändern. Ist die Wetterseite deaktiviert, bleibt
-das Radar auch ohne ausgewähltes Flugzeug als Leerlaufanzeige sichtbar.
+das Radar auch ohne ausgewähltes Flugzeug als Leerlaufanzeige sichtbar. Ein
+heller Punkt umläuft den Radius ausgehend von 12 Uhr im Uhrzeigersinn.
 
 Die Blickrichtung bezieht sich auf den Standort des Betrachters, nicht auf den
 Track des Flugzeugs. Aus Standort, Entfernung, Höhe und Standorthöhe berechnet
@@ -636,7 +637,7 @@ eingecheckt.
 
 Für stabile Versionen ist **Releases → Latest** der bevorzugte Downloadweg.
 Ein Versionstag im Format `v<APP_VERSION>`, beispielsweise
-`v3.6.1-dual-target.29`, veröffentlicht nach zwei erfolgreichen Builds
+`v3.6.1-dual-target.30`, veröffentlicht nach zwei erfolgreichen Builds
 automatisch:
 
 - `flightwall-matrixportal-<VERSION>.bin`

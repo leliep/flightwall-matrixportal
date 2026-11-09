@@ -43,8 +43,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.29";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-09 headless web radar";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.30";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-09 animated matrix radar sweep";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -605,6 +605,8 @@ uint32_t pageDurationMs[] = {
 bool smoothTransitions = true;
 uint8_t currentPageSlot = 0;
 uint32_t currentPageStarted = 0;
+uint32_t radarSweepStarted = 0;
+uint32_t radarSweepLastDraw = 0;
 int8_t activeRenderedPage = -1;
 uint32_t transitionStarted = 0;
 uint8_t transitionPercent = 100;
@@ -1944,6 +1946,8 @@ uint16_t radarPointColor(const RadarPoint &point) {
 constexpr int16_t RADAR_CENTER_X = MATRIX_WIDTH / 2;
 constexpr int16_t RADAR_CENTER_Y = 15;
 constexpr int16_t RADAR_RADIUS_PIXELS = 15;
+constexpr uint8_t RADAR_RADIUS_DOT_COUNT = 32;
+constexpr uint32_t RADAR_SWEEP_PERIOD_MS = 800;
 // The furthest matrix corner is about 4.4 configured radii away when the
 // same distance scale is used on both axes. A small margin avoids losing
 // edge pixels through rounding or receiver-side distance filtering.
@@ -1981,7 +1985,6 @@ bool radarPointCoordinates(float distanceKm, float bearing,
 
 
 void drawRadarPage() {
-  constexpr uint8_t RADAR_RADIUS_DOT_COUNT = 32;
   for (uint8_t dot = 0; dot < RADAR_RADIUS_DOT_COUNT; ++dot) {
     const float angle = 2.0F * PI * dot / RADAR_RADIUS_DOT_COUNT;
     matrix.drawPixel(
@@ -1991,6 +1994,23 @@ void drawRadarPage() {
             roundf(sinf(angle) * RADAR_RADIUS_PIXELS)),
         blue);
   }
+  const uint32_t now = millis();
+  if (!radarSweepStarted || now - radarSweepLastDraw > 200U)
+    radarSweepStarted = now;
+  radarSweepLastDraw = now;
+  const uint32_t sweepElapsed =
+      (now - radarSweepStarted) % RADAR_SWEEP_PERIOD_MS;
+  const uint8_t sweepDot = static_cast<uint8_t>(
+      sweepElapsed * RADAR_RADIUS_DOT_COUNT / RADAR_SWEEP_PERIOD_MS);
+  // Start at 12 o'clock and advance clockwise around the configured radius.
+  const float sweepAngle = -PI / 2.0F +
+      2.0F * PI * sweepDot / RADAR_RADIUS_DOT_COUNT;
+  matrix.drawPixel(
+      RADAR_CENTER_X + static_cast<int16_t>(
+          roundf(cosf(sweepAngle) * RADAR_RADIUS_PIXELS)),
+      RADAR_CENTER_Y + static_cast<int16_t>(
+          roundf(sinf(sweepAngle) * RADAR_RADIUS_PIXELS)),
+      white);
   // Own position remains visible even when no aircraft is present.
   matrix.drawPixel(RADAR_CENTER_X, RADAR_CENTER_Y, green);
   matrix.drawPixel(RADAR_CENTER_X - 1, RADAR_CENTER_Y, green);
@@ -3394,6 +3414,8 @@ bool fetchLocalFlight() {
       next.airline = "Bundespolizei";
     } else if (isGermanAirforceCallsign(selected.flight)) {
       next.airline = "German Airforce";
+    } else if (selected.flight.startsWith("IAM")) {
+      next.airline = "Italian Air Force";
     } else if (isMilitaryCallsign(selected.flight)) {
       next.airline = "Military";
     } else {
@@ -6839,11 +6861,17 @@ uint32_t displayDrawIntervalMs() {
       static_cast<int32_t>(brightnessMessageUntil - millis()) > 0) {
     return 50;
   }
-  if (!aircraftIsInsideDisplayRadius()) return 500;
+  if (!aircraftIsInsideDisplayRadius()) {
+#if FLIGHTWALL_HAS_MATRIX
+    if (!environmentIdleDisplayEnabled && pageEnabled[7]) return 25;
+#endif
+    return 500;
+  }
   if (currentPageSlot < PAGE_COUNT) {
     const uint8_t page = pageOrder[currentPageSlot];
     // Route-name and custom-text pages scroll pixel by pixel. The compact
     // airport page can also contain scrolling multi-hop routes.
+    if (page == 7) return 25;
     if (page == 4 && customScrollSpeed == 2) return 25;
     if (page == 3 || page == 4 || page == 6) return 50;
   }

@@ -25,5 +25,5 @@ inline bool isMilitaryCallsign(const String& callsign) {
   // codewords so the unrelated civil ICAO operator prefixes SON and FEL
   // remain available.
   return isGermanAirforceCallsign(callsign) || callsign.startsWith("SONIC") ||
-         callsign.startsWith("FELON");
+         callsign.startsWith("FELON") || callsign.startsWith("IAM");
 }

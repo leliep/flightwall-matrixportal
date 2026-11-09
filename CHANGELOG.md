@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.6.1-dual-target.30 – 2026-11-09
+
+- testweise heller Radar-Umlaufpunkt auf der Matrix: Start bei 12 Uhr,
+  Bewegung im Uhrzeigersinn und vollständige Runde in 800 ms
+- Matrix-Radar während der sichtbaren Seite mit 25 ms Zeichenintervall
+  aktualisiert; Webradar und übrige Seiten bleiben unverändert
+- Airport ERZ (Erzurum) sowie Airlines ARC, AUD, BEA, IAM, JBD, NTF und WLF
+  ergänzt; IAM zusätzlich als militärischer Flug klassifiziert
+
 ## 3.6.1-dual-target.29 – 2026-11-09
 
 - Headless-Webdisplay um ein responsives Radarbild im 128×32-Seitenverhältnis
