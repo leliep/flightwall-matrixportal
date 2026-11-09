@@ -265,6 +265,9 @@ Der Radar-Kreis entspricht unverzerrt dem konfigurierten Auswahlradius. Die
 maßstabstreue Umgebung wird links und rechts bis zum Matrixrand fortgesetzt.
 Ist die Wetteranzeige deaktiviert und die Radaransicht aktiviert, bleibt das
 Radar auch ohne aktuell ausgewähltes Flugzeug sichtbar.
+Der helle Radar-Umlaufpunkt wird in der Konfiguration auf ein Intervall von
+1 bis 10 Sekunden eingestellt. Ein Umlauf dauert etwa 0,8 Sekunden; mit dem
+Wert `0` wird der Umlaufpunkt vollständig ausgeschaltet.
 Auf der Headless-Variante zeigt das responsive Webdisplay denselben
 Radar-Ausschnitt in kompakter Form unterhalb der aktuellen Flugzeugdaten.
 Mit dem integrierten Matrixtest lassen sich Farben, Pixel, Linien, Schriften

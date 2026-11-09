@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.6.1-dual-target.31 – 2026-11-09
+
+- Radar-Umlauf auf einen kurzen Umlauf von etwa 800 ms pro konfiguriertem
+  Intervall begrenzt; kein kontinuierlicher Umlauf mehr
+- Umlaufintervall in der Matrix-Konfiguration von 0 bis 10 Sekunden
+  einstellbar; `0` schaltet den Umlaufpunkt aus, Standardwert ist 5 Sekunden
+- Zeichenlast des Matrix-Radars während der Umlaufpausen reduziert
+- Einstellung in Status-API sowie Konfigurationssicherung und
+  -wiederherstellung aufgenommen
+
 ## 3.6.1-dual-target.30 – 2026-11-09
 
 - testweise heller Radar-Umlaufpunkt auf der Matrix: Start bei 12 Uhr,

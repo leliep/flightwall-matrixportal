@@ -43,8 +43,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.30";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-09 animated matrix radar sweep";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.31";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-09 configurable matrix radar sweep";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -63,6 +63,7 @@ constexpr char WIFI_SETUP_AP_PASSWORD[] = "flightwall";
 constexpr uint32_t POLL_INTERVAL_MS = 5000;
 constexpr uint32_t ADSB_PREFERRED_RETRY_MS = 60000;
 constexpr uint32_t DEFAULT_PAGE_INTERVAL_MS = 5000;
+constexpr uint8_t DEFAULT_RADAR_SWEEP_INTERVAL_SECONDS = 5;
 constexpr uint32_t PAGE_TRANSITION_MS = 350;
 constexpr uint32_t STALE_AFTER_MS = 20000;
 constexpr uint32_t EMERGENCY_PAGE_DURATION_MS = 5000;
@@ -595,6 +596,7 @@ bool specialChronicleLimitReached = false;
 
 String customPageText;
 uint8_t customScrollSpeed = 1;
+uint8_t radarSweepIntervalSeconds = DEFAULT_RADAR_SWEEP_INTERVAL_SECONDS;
 bool pageEnabled[] = {true, true, true, true, true, true, true, true};
 uint8_t pageOrder[] = {0, 1, 2, 3, 4, 5, 6, 7};
 uint32_t pageDurationMs[] = {
@@ -1948,6 +1950,7 @@ constexpr int16_t RADAR_CENTER_Y = 15;
 constexpr int16_t RADAR_RADIUS_PIXELS = 15;
 constexpr uint8_t RADAR_RADIUS_DOT_COUNT = 32;
 constexpr uint32_t RADAR_SWEEP_PERIOD_MS = 800;
+constexpr uint32_t RADAR_SWEEP_SESSION_GAP_MS = 750;
 // The furthest matrix corner is about 4.4 configured radii away when the
 // same distance scale is used on both axes. A small margin avoids losing
 // edge pixels through rounding or receiver-side distance filtering.
@@ -1995,22 +1998,32 @@ void drawRadarPage() {
         blue);
   }
   const uint32_t now = millis();
-  if (!radarSweepStarted || now - radarSweepLastDraw > 200U)
-    radarSweepStarted = now;
-  radarSweepLastDraw = now;
-  const uint32_t sweepElapsed =
-      (now - radarSweepStarted) % RADAR_SWEEP_PERIOD_MS;
-  const uint8_t sweepDot = static_cast<uint8_t>(
-      sweepElapsed * RADAR_RADIUS_DOT_COUNT / RADAR_SWEEP_PERIOD_MS);
-  // Start at 12 o'clock and advance clockwise around the configured radius.
-  const float sweepAngle = -PI / 2.0F +
-      2.0F * PI * sweepDot / RADAR_RADIUS_DOT_COUNT;
-  matrix.drawPixel(
-      RADAR_CENTER_X + static_cast<int16_t>(
-          roundf(cosf(sweepAngle) * RADAR_RADIUS_PIXELS)),
-      RADAR_CENTER_Y + static_cast<int16_t>(
-          roundf(sinf(sweepAngle) * RADAR_RADIUS_PIXELS)),
-      white);
+  if (radarSweepIntervalSeconds > 0) {
+    if (!radarSweepStarted ||
+        now - radarSweepLastDraw > RADAR_SWEEP_SESSION_GAP_MS)
+      radarSweepStarted = now;
+    radarSweepLastDraw = now;
+    const uint32_t sweepCycleMs =
+        static_cast<uint32_t>(radarSweepIntervalSeconds) * 1000U;
+    const uint32_t sweepElapsed =
+        (now - radarSweepStarted) % sweepCycleMs;
+    if (sweepElapsed < RADAR_SWEEP_PERIOD_MS) {
+      const uint8_t sweepDot = static_cast<uint8_t>(
+          sweepElapsed * RADAR_RADIUS_DOT_COUNT / RADAR_SWEEP_PERIOD_MS);
+      // Start at 12 o'clock and advance clockwise exactly once per interval.
+      const float sweepAngle = -PI / 2.0F +
+          2.0F * PI * sweepDot / RADAR_RADIUS_DOT_COUNT;
+      matrix.drawPixel(
+          RADAR_CENTER_X + static_cast<int16_t>(
+              roundf(cosf(sweepAngle) * RADAR_RADIUS_PIXELS)),
+          RADAR_CENTER_Y + static_cast<int16_t>(
+              roundf(sinf(sweepAngle) * RADAR_RADIUS_PIXELS)),
+          white);
+    }
+  } else {
+    radarSweepStarted = 0;
+    radarSweepLastDraw = now;
+  }
   // Own position remains visible even when no aircraft is present.
   matrix.drawPixel(RADAR_CENTER_X, RADAR_CENTER_Y, green);
   matrix.drawPixel(RADAR_CENTER_X - 1, RADAR_CENTER_Y, green);
@@ -3655,6 +3668,7 @@ String configurationJson() {
 #if FLIGHTWALL_HAS_MATRIX
   settings["custom_text"] = customPageText;
   settings["custom_scroll_speed"] = customScrollSpeed;
+  settings["radar_sweep_interval_seconds"] = radarSweepIntervalSeconds;
   settings["smooth_transitions"] = smoothTransitions;
   JsonArray pages = settings["pages"].to<JsonArray>();
   for (uint8_t page = 0; page < PAGE_COUNT; ++page) {
@@ -3742,6 +3756,7 @@ void handleConfigurationRestore() {
 #if FLIGHTWALL_HAS_MATRIX
   putString("customText", "custom_text");
   if (!s["custom_scroll_speed"].isNull()) preferences.putUChar("customSpd", constrain(s["custom_scroll_speed"].as<int>(), 0, 2));
+  if (!s["radar_sweep_interval_seconds"].isNull()) preferences.putUChar("radarSweepSec", constrain(s["radar_sweep_interval_seconds"].as<int>(), 0, 10));
   putBool("smooth", "smooth_transitions");
   if (s["pages"].is<JsonArrayConst>()) {
     uint8_t page = 0;
@@ -3946,6 +3961,8 @@ void translateWebPageToEnglish(String &html) {
     {"Freitext (maximal 128 Zeichen)", "Custom text (maximum 128 characters)"},
     {"Freitext-Scrollgeschwindigkeit", "Custom text scroll speed"}, {">schnell<", ">fast<"},
     {">mittel<", ">medium<"}, {">langsam<", ">slow<"},
+    {"Radar-Umlaufintervall", "Radar sweep interval"}, {">Aus<", ">Off<"},
+    {"Ein Umlauf dauert etwa 0,8 Sekunden. 0 schaltet ihn aus.", "One sweep takes about 0.8 seconds. 0 disables it."},
     {"Ein leerer Freitext überspringt die Seite automatisch.", "An empty custom text automatically skips the page."},
     {"Dauer (Sekunden)", "Duration (seconds)"}, {"Reihenfolge:", "Order:"}, {"Position ", "Position "},
     {"Helligkeit", "Brightness"}, {"BH1750-Automatik", "BH1750 automatic mode"},
@@ -4283,7 +4300,15 @@ String webPage(bool configurationPage = false, bool includeRouteCache = true) {
   html += selected(customScrollSpeed == 1);
   html += F(">mittel</option><option value='0'");
   html += selected(customScrollSpeed == 0);
-  html += F(">langsam</option></select></label></div><p class='muted'>Ein leerer Freitext überspringt die Seite automatisch.</p><div class='pageSettings'>");
+  html += F(">langsam</option></select></label><label>Radar-Umlaufintervall<select name='radarSweepInterval'><option value='0'");
+  html += selected(radarSweepIntervalSeconds == 0);
+  html += F(">Aus</option>");
+  for (uint8_t seconds = 1; seconds <= 10; ++seconds) {
+    html += "<option value='" + String(seconds) + "'" +
+            selected(radarSweepIntervalSeconds == seconds) + ">" +
+            String(seconds) + " s</option>";
+  }
+  html += F("</select></label></div><p class='muted'>Ein Umlauf dauert etwa 0,8 Sekunden. 0 schaltet ihn aus. Ein leerer Freitext überspringt die Seite automatisch.</p><div class='pageSettings'>");
   for (uint8_t page = 0; page < PAGE_COUNT; ++page) {
     html += "<label><input type='checkbox' name='page" + String(page) + "On' value='1'";
     html += checked(pageEnabled[page]);
@@ -5003,6 +5028,10 @@ void applyWebSettings() {
                                 requestedCustomScrollSpeed <= 2
                             ? requestedCustomScrollSpeed
                             : 1;
+    radarSweepIntervalSeconds = constrain(
+        webServer.arg("radarSweepInterval").toInt(), 0, 10);
+    radarSweepStarted = 0;
+    radarSweepLastDraw = 0;
 #endif
     String requestedAdsbUrl1 = webServer.arg("adsbUrl1");
     requestedAdsbUrl1.trim();
@@ -5128,6 +5157,7 @@ void applyWebSettings() {
 #if FLIGHTWALL_HAS_MATRIX
     preferences.putString("customText", customPageText);
     preferences.putUChar("customSpd", customScrollSpeed);
+    preferences.putUChar("radarSweepSec", radarSweepIntervalSeconds);
     preferences.putBool("smooth", smoothTransitions);
     for (uint8_t page = 0; page < PAGE_COUNT; ++page) {
       preferences.putBool(("p" + String(page) + "On").c_str(), pageEnabled[page]);
@@ -5403,6 +5433,8 @@ void handleDisplayApi() {
          ",\"error\":\"" + jsonEscape(error) + "\"" +
          ",\"custom_text\":\"" + jsonEscape(customPageText) + "\"" +
          ",\"custom_scroll_speed\":\"" + customScrollSpeedName() + "\"" +
+         ",\"radar_sweep_interval_seconds\":" +
+             String(radarSweepIntervalSeconds) +
          ",\"page_enabled\":[";
   for (uint8_t page = 0; page < PAGE_COUNT; ++page) {
     if (page) json += ',';
@@ -5610,6 +5642,8 @@ void handleStatusApi() {
       ",\"site_longitude\":" + String(siteLongitude, 6) +
       ",\"view_heading\":" + String(viewHeading, 0) +
       ",\"display_radius_km\":" + String(displayRadiusKm, 1) +
+      ",\"radar_sweep_interval_seconds\":" +
+          String(radarSweepIntervalSeconds) +
       ",\"effective_radius_km\":" + jsonNumberOrNull(effectiveRadiusKm) +
       ",\"routes_enabled\":" + String(routesEnabled ? "true" : "false") +
       ",\"adsbdb_route_fallback_enabled\":" +
@@ -6769,6 +6803,10 @@ void setup() {
   if (customPageText.length() > 128) customPageText.remove(128);
   customScrollSpeed = preferences.getUChar("customSpd", 1);
   if (customScrollSpeed > 2) customScrollSpeed = 1;
+  radarSweepIntervalSeconds = constrain(
+      preferences.getUChar(
+          "radarSweepSec", DEFAULT_RADAR_SWEEP_INTERVAL_SECONDS),
+      static_cast<uint8_t>(0), static_cast<uint8_t>(10));
   smoothTransitions = preferences.getBool("smooth", true);
   for (uint8_t page = 0; page < PAGE_COUNT; ++page) {
     pageEnabled[page] = preferences.getBool(
@@ -6778,7 +6816,7 @@ void setup() {
     pageOrder[page] = preferences.getUChar(
         ("order" + String(page)).c_str(), page);
   }
-  if (settingsVersion < 14) preferences.putUChar("settingsVer", 14);
+  if (settingsVersion < 15) preferences.putUChar("settingsVer", 15);
   displayRadiusKm = constrain(displayRadiusKm, 1.0f, 100.0f);
   siteLatitude = constrain(siteLatitude, -90.0, 90.0);
   siteLongitude = constrain(siteLongitude, -180.0, 180.0);
@@ -6863,7 +6901,15 @@ uint32_t displayDrawIntervalMs() {
   }
   if (!aircraftIsInsideDisplayRadius()) {
 #if FLIGHTWALL_HAS_MATRIX
-    if (!environmentIdleDisplayEnabled && pageEnabled[7]) return 25;
+    if (!environmentIdleDisplayEnabled && pageEnabled[7]) {
+      if (!radarSweepIntervalSeconds) return 500;
+      if (!radarSweepStarted) return 25;
+      const uint32_t cycleMs =
+          static_cast<uint32_t>(radarSweepIntervalSeconds) * 1000U;
+      const uint32_t elapsed = (millis() - radarSweepStarted) % cycleMs;
+      if (elapsed < RADAR_SWEEP_PERIOD_MS) return 25;
+      return min(250U, cycleMs - elapsed);
+    }
 #endif
     return 500;
   }
@@ -6871,7 +6917,15 @@ uint32_t displayDrawIntervalMs() {
     const uint8_t page = pageOrder[currentPageSlot];
     // Route-name and custom-text pages scroll pixel by pixel. The compact
     // airport page can also contain scrolling multi-hop routes.
-    if (page == 7) return 25;
+    if (page == 7) {
+      if (!radarSweepIntervalSeconds) return 250;
+      if (!radarSweepStarted) return 25;
+      const uint32_t cycleMs =
+          static_cast<uint32_t>(radarSweepIntervalSeconds) * 1000U;
+      const uint32_t elapsed = (millis() - radarSweepStarted) % cycleMs;
+      if (elapsed < RADAR_SWEEP_PERIOD_MS) return 25;
+      return min(250U, cycleMs - elapsed);
+    }
     if (page == 4 && customScrollSpeed == 2) return 25;
     if (page == 3 || page == 4 || page == 6) return 50;
   }
