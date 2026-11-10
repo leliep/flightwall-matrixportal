@@ -15,6 +15,7 @@
   Controllerkonfigurationen erhalten
 - EDWF (Leer-Papenburg) und BMA (Stockholm-Bromma) samt OurAirports-Koordinaten
   aus dem Matrixstatus ergänzt; beide Controller vorab auf Codes geprüft
+- Vor OTA zusätzlich aufgelaufenen Operator RFR (Royal Air Force) ergänzt
 - Hosttests mit Speicherfehler-Simulation und Address-/UndefinedBehaviorSanitizer
   für Textverwaltung, volle Journale/Caches sowie echte Aktualisierungs-/Resetpfade
 

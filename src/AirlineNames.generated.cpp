@@ -295,6 +295,7 @@ const AirlineName names[] = {
   {"RAZ", "Rijnmond Air Services"},
   {"RCH", "US Air Mobility Command"},
   {"RES", "Australian Maritime Safety Authority"},
+  {"RFR", "Royal Air Force"},
   {"RGN", "Cygnus Air"},
   {"RHH", "Redstar Aviation"},
   {"RJA", "Royal Jordanian"},
