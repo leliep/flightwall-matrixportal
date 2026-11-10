@@ -20,6 +20,10 @@ jobs:
         run: pip install platformio
       - name: Prepare build-only secrets
         run: cp include/secrets.h.example include/secrets.h
+      - name: Test PSRAM persistent text storage and diagnostic output
+        run: |
+          python3 tools/test_psram_text.py
+          python3 tools/test_route_diagnostic_output.py
       - name: Build MatrixPortal firmware
         run: pio run -e adafruit_matrixportal_esp32s3
       - name: Build headless ESP32-S3 N16R8 firmware

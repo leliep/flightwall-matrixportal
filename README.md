@@ -57,7 +57,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.35` |
+| Firmware | `3.6.1-dual-target.36` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -422,6 +422,51 @@ Konfigurationsseite zeigt Callsign, Route, Alter, Speicherort und Zustand.
 Einträge können einzeln gelöscht, für das aktuelle Flugzeug neu abgefragt oder
 vollständig geleert werden. Statusseite, Routentest und Cachetabelle zeigen
 zusätzlich, aus welcher Quelle das Ergebnis stammt.
+
+Ab Version `.36` liegen auch sämtliche dauerhaft gehaltenen Texte des
+RAM-Routencaches, Tagesjournals und der Special-Chronik im externen PSRAM.
+Das betrifft unter anderem Callsigns, Flugzeugbeschreibungen, Airline- und
+Flughafennamen, Routen und Auswahlbegründungen. Eintragsmetadaten und Zeiger bleiben
+intern; für die aktuelle Flugzeuganzeige und Downloads entstehen weiterhin
+vorübergehende normale Textkopien. Es gibt keine globale Umleitung der
+Speicherverwaltung und keine Änderung der TLS-Einstellungen.
+
+Die PSRAM-Texte teilen beim Kopieren zunächst ihren unveränderlichen Puffer.
+Nur geänderte Texte benötigen eine neue Reservierung; identische Daten bei
+wiederholten ADS-B-Abfragen reservieren keinen neuen Textspeicher. Beim
+Ersetzen, Entfernen oder Leeren werden nicht mehr benötigte Puffer tatsächlich
+freigegeben. Abgelaufene Cacheeinträge werden weiterhin erst beim entsprechenden
+Zugriff entfernt, nicht durch einen zusätzlichen Timer. Spurdauer, Journalgrenzen (256/64 Einträge), Routencachegrenzen
+(32 RAM-/32 Flashplätze), Ablaufzeiten und JSON-/CSV-Downloadformate bleiben
+erhalten. Der persistente Flash-Routencache verwendet sein bisheriges Format.
+
+Schlägt eine PSRAM-Textreservierung fehl, wird der vorbereitete Journal- oder
+Cacheeintrag nicht übernommen. Bestehende Texte, Metadaten, Eintragszähler und die
+Cache-Ersetzungsposition bleiben erhalten; eine neue Beobachtung kann dann
+fehlen, bis wieder Speicher verfügbar ist. Routen können weiterhin direkt
+angezeigt werden, auch wenn sie gerade nicht in den RAM-Cache übernommen
+werden können. Es gibt keinen Rückfall auf internen Textspeicher. Ohne
+funktionierenden PSRAM sind entsprechend keine neuen Journal-/Cachetexte
+speicherbar; Gerätekonfiguration und gespeicherte Flashdaten werden nicht
+verändert.
+
+Die Statusseite zeigt belegte Textbytes, Anzahl der Textpuffer und fehlgeschlagene
+Reservierungen. `/api/status` liefert diese Werte unter
+`persistent_text_memory` als `storage: "psram"`, `allocated_bytes`, `blocks`
+und `allocation_failures`. Die Bytezahl enthält die Referenzverwaltungsdaten
+der Textpuffer, jedoch nicht den zusätzlichen Verwaltungsaufwand des
+Speicherallokators. Gemeinsame Puffer werden nur einmal gezählt. Die
+Fehlerzahl ist seit Start kumulativ. Gegenüber `.35` benötigt der Matrix-Build
+zusätzlich rund 40,5 KiB weniger statischen internen RAM; das weitere Wachstum
+der gespeicherten Texte belastet den externen Speicher.
+
+Lokaler Regressionstest der PSRAM-Textverwaltung einschließlich tatsächlicher
+Journal-/Cache-Aktualisierung, vollständiger Belegung, absichtlich simulierter
+Reservierungsfehler sowie Reset- und Freigabepfade:
+
+```bash
+python3 tools/test_psram_text.py
+```
 
 ## Matrixanzeige
 

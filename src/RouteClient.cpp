@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 #include "AirportCoordinates.hpp"
 #include "AirportNames.hpp"
@@ -441,13 +442,17 @@ void RouteClient::rememberInMemory(const String& callsign,
       break;
     }
   }
-  if (target == nullptr) {
-    target = &memoryCache_[nextMemorySlot_++ % memoryCacheSlots_];
-  }
-  target->callsign = callsign;
-  target->route = route;
-  target->updated = now;
-  target->pendingWrite = target->pendingWrite || pendingWrite;
+  const bool newSlot = target == nullptr;
+  if (newSlot) target = &memoryCache_[nextMemorySlot_ % memoryCacheSlots_];
+  const PsramTextTransaction transaction;
+  MemoryCacheEntry next;
+  next.callsign = callsign;
+  next.route = route;
+  next.updated = now;
+  next.pendingWrite = target->pendingWrite || pendingWrite;
+  if (!transaction.succeeded()) return;
+  *target = std::move(next);
+  if (newSlot) ++nextMemorySlot_;
 }
 
 bool RouteClient::hasPendingWrites() const {

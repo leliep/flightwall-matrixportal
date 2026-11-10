@@ -289,6 +289,11 @@
     "longitude": 77.706299,
     "elevation_ft": 3000
   },
+  "BMA": {
+    "latitude": 59.354401,
+    "longitude": 17.9417,
+    "elevation_ft": 47
+  },
   "BNE": {
     "latitude": -27.384199,
     "longitude": 153.117004,
@@ -758,6 +763,11 @@
     "latitude": 50.325558,
     "longitude": 7.528611,
     "elevation_ft": 640
+  },
+  "EDWF": {
+    "latitude": 53.271942,
+    "longitude": 7.441667,
+    "elevation_ft": 3
   },
   "EFL": {
     "latitude": 38.120098,

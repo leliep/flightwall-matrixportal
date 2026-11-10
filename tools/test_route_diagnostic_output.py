@@ -17,6 +17,7 @@ append = source[source.index('  // Append without building a second full JSON'):
 adapter = r'''
 #include "RouteDiagnostics.hpp"
 #include "RadarTrailStorage.hpp"
+#include "PsramText.hpp"
 #include <string>
 #include <iostream>
 #include <type_traits>
@@ -43,6 +44,8 @@ class String {
   const char *c_str() const { return value.c_str(); }
 };
 uint32_t millis() { return 10000; }
+PsramTextMemoryStats textMemoryStats;
+const PsramTextMemoryStats &psramTextMemoryStats() { return textMemoryStats; }
 RadarTrailStorage *radarTrailStorage = nullptr;
 struct { uint32_t getFreePsram() const { return 123456; } } ESP;
 struct { RouteDiagnostics data; const RouteDiagnostics &diagnostics() const { return data; } } routeClient;
@@ -55,6 +58,7 @@ int main() {
 '''+append+r'''
  std::cout << json.c_str() << '\n';
  RadarTrailStorage external; radarTrailStorage=&external;
+ textMemoryStats.allocatedBytes=4321; textMemoryStats.blocks=42; textMemoryStats.allocationFailures=1;
  auto &d=routeClient.data.primary;
  d.begin("adsb.im","DLH2HT",5000,statusMemory);
  d.httpAttempted=true;d.httpCode=-1;d.tlsCode=-32512;
@@ -75,6 +79,8 @@ with tempfile.TemporaryDirectory(prefix='flightwall-diagnostic-test-') as tempor
     subprocess.run(['c++','-std=c++11','-Wall','-Wextra','-pedantic','-I'+str(root/'include'),str(cpp),'-o',str(binary)],check=True)
     empty, populated = map(json.loads, subprocess.check_output([str(binary)],text=True).splitlines())
 assert empty['version'] == 'test'
+assert empty['persistent_text_memory'] == {'storage':'psram','allocated_bytes':0,'blocks':0,'allocation_failures':0}
+assert populated['persistent_text_memory'] == {'storage':'psram','allocated_bytes':4321,'blocks':42,'allocation_failures':1}
 assert empty['radar_trails_storage_bytes'] == 0
 assert populated['radar_trails_storage_bytes'] > 20000
 assert populated['free_psram_bytes'] == 123456

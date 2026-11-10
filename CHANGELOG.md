@@ -1,5 +1,23 @@
 # Changelog
 
+## 3.6.1-dual-target.36 – 2026-11-10
+
+- Länger gespeicherte Texte von Tagesjournal, Special-Chronik und RAM-Routencache
+  gezielt in externem PSRAM statt Arduino-String-Puffern im internen Heap gehalten
+- Unveränderliche, referenzgezählte Textpuffer: identische Inhalte ohne neue
+  Reservierung, tatsächliche Freigabe beim Ersetzen, Entfernen und Leeren
+- Vorbereitete Einträge werden nur bei vollständig erfolgreicher Textreservierung
+  übernommen; bei PSRAM-Mangel bleiben bestehende Einträge und Eintragszähler unverändert
+- Kein Rückfall auf internen Textspeicher; neue Speicherdiagnose unter
+  `persistent_text_memory` mit belegten Bytes, Puffern und Reservierungsfehlern
+- Matrix-Build benötigt gegenüber `.35` etwa 40,5 KiB weniger statischen internen RAM
+- Radarspuren, Journal-/Cachegrenzen, Routenlogik, Downloadformate, Flashdaten und
+  Controllerkonfigurationen erhalten
+- EDWF (Leer-Papenburg) und BMA (Stockholm-Bromma) samt OurAirports-Koordinaten
+  aus dem Matrixstatus ergänzt; beide Controller vorab auf Codes geprüft
+- Hosttests mit Speicherfehler-Simulation und Address-/UndefinedBehaviorSanitizer
+  für Textverwaltung, volle Journale/Caches sowie echte Aktualisierungs-/Resetpfade
+
 ## 3.6.1-dual-target.35 – 2026-11-10
 
 - TLS-Speicherreserve wiederhergestellt: Radarverläufe und Spur-Anzeigekopien

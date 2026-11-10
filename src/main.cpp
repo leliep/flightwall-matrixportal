@@ -13,6 +13,7 @@
 #include <esp_heap_caps.h>
 #include <time.h>
 #include <vector>
+#include <utility>
 
 #ifndef FLIGHTWALL_HAS_MATRIX
 #define FLIGHTWALL_HAS_MATRIX 1
@@ -45,8 +46,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.35";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-10 radar histories in PSRAM";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.36";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-10 journal and route texts in PSRAM";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -557,16 +558,16 @@ struct DailyJournalEntry {
   uint64_t identity = 0;
   time_t firstSeen = 0;
   time_t lastSeen = 0;
-  String hex;
-  String flight;
-  String airline;
-  String type;
-  String typeDescription;
-  String specialType;
-  String squawk;
-  String routeCodes;
-  String routeNames;
-  String selectionReason;
+  PsramText hex;
+  PsramText flight;
+  PsramText airline;
+  PsramText type;
+  PsramText typeDescription;
+  PsramText specialType;
+  PsramText squawk;
+  PsramText routeCodes;
+  PsramText routeNames;
+  PsramText selectionReason;
   float minimumDistanceKm = NAN;
   float minimumCpaKm = NAN;
   float altitudeFt = NAN;
@@ -582,14 +583,14 @@ struct SpecialChronicleEntry {
   uint64_t identity = 0;
   time_t firstSeen = 0;
   time_t lastSeen = 0;
-  String hex;
-  String flight;
-  String type;
-  String typeDescription;
-  String specialType;
-  String squawk;
-  String routeCodes;
-  String selectionReason;
+  PsramText hex;
+  PsramText flight;
+  PsramText type;
+  PsramText typeDescription;
+  PsramText specialType;
+  PsramText squawk;
+  PsramText routeCodes;
+  PsramText selectionReason;
   float minimumDistanceKm = NAN;
   float minimumCpaKm = NAN;
   bool displayed = false;
@@ -2989,11 +2990,11 @@ void updateSpecialChronicleObservation(const Aircraft &aircraft) {
       specialChronicleLimitReached = true;
       return;
     }
-    ++specialChronicleCount;
-    specialChronicle[index].identity = identity;
-    specialChronicle[index].firstSeen = time(nullptr);
   }
-  SpecialChronicleEntry &entry = specialChronicle[index];
+  const bool newEntry = index == specialChronicleCount;
+  const PsramTextTransaction transaction;
+  SpecialChronicleEntry entry = specialChronicle[index];
+  if (newEntry) { entry.identity = identity; entry.firstSeen = time(nullptr); }
   entry.lastSeen = time(nullptr);
   if (aircraft.hex.length()) entry.hex = aircraft.hex;
   if (aircraft.flight.length()) entry.flight = aircraft.flight;
@@ -3008,6 +3009,9 @@ void updateSpecialChronicleObservation(const Aircraft &aircraft) {
   if (aircraft.hasCpa &&
       (isnan(entry.minimumCpaKm) || aircraft.cpaKm < entry.minimumCpaKm))
     entry.minimumCpaKm = aircraft.cpaKm;
+  if (!transaction.succeeded()) return;
+  specialChronicle[index] = std::move(entry);
+  if (newEntry) ++specialChronicleCount;
 }
 
 
@@ -3070,14 +3074,16 @@ void markSpecialChronicleDisplayed(const Aircraft &selected,
                                    const FlightData &shown) {
   const uint64_t identity = aircraftIdentity(selected);
   for (size_t index = 0; index < specialChronicleCount; ++index) {
-    SpecialChronicleEntry &entry = specialChronicle[index];
-    if (entry.identity != identity) continue;
+    if (specialChronicle[index].identity != identity) continue;
+    const PsramTextTransaction transaction;
+    SpecialChronicleEntry entry = specialChronicle[index];
     entry.displayed = true;
     entry.selectionReason = shown.selectionReason;
     if (shown.routeCodes.length()) entry.routeCodes = shown.routeCodes;
     if (!isnan(shown.cpaKm) &&
         (isnan(entry.minimumCpaKm) || shown.cpaKm < entry.minimumCpaKm))
       entry.minimumCpaKm = shown.cpaKm;
+    if (transaction.succeeded()) specialChronicle[index] = std::move(entry);
     return;
   }
 }
@@ -3168,12 +3174,12 @@ void updateDailyJournal(const Aircraft &selected, const FlightData &shown) {
       dailyJournalLimitReached = true;
       return;
     }
-    ++dailyJournalCount;
-    dailyJournal[index].identity = identity;
-    dailyJournal[index].firstSeen = time(nullptr);
   }
 
-  DailyJournalEntry &entry = dailyJournal[index];
+  const bool newEntry = index == dailyJournalCount;
+  const PsramTextTransaction transaction;
+  DailyJournalEntry entry = dailyJournal[index];
+  if (newEntry) { entry.identity = identity; entry.firstSeen = time(nullptr); }
   entry.lastSeen = time(nullptr);
   if (shown.hex.length()) entry.hex = shown.hex;
   if (shown.flight.length()) entry.flight = shown.flight;
@@ -3193,6 +3199,9 @@ void updateDailyJournal(const Aircraft &selected, const FlightData &shown) {
       (isnan(entry.minimumCpaKm) || shown.cpaKm < entry.minimumCpaKm))
     entry.minimumCpaKm = shown.cpaKm;
   if (!isnan(shown.altitudeFt)) entry.altitudeFt = shown.altitudeFt;
+  if (!transaction.succeeded()) return;
+  dailyJournal[index] = std::move(entry);
+  if (newEntry) ++dailyJournalCount;
 }
 
 
@@ -4168,7 +4177,7 @@ void appendDailyJournalStatus(String &html) {
       html += "<tr><td>" + journalTimeText(entry.lastSeen) + "</td><td><b>" +
               htmlEscape(entry.flight.length() ? entry.flight : entry.hex) +
               "</b></td><td>" + htmlEscape(entry.type) + "</td><td>" +
-              htmlEscape(entry.routeCodes.length() ? entry.routeCodes : "-") +
+              htmlEscape(entry.routeCodes.length() ? String(entry.routeCodes) : String("-")) +
               "</td><td>" + htmlEscape(journalClassification(entry)) +
               "</td><td>" + numberOrDash(entry.minimumCpaKm) +
               " km</td><td>" + htmlEscape(entry.selectionReason) + "</td></tr>";
@@ -4196,6 +4205,13 @@ void appendRouteMemoryJson(String &json, const RouteMemorySnapshot &memory) {
   json += "{\"free_internal_bytes\":" + String(memory.freeInternal) +
           ",\"largest_internal_block_bytes\":" + String(memory.largestInternal) +
           ",\"minimum_internal_bytes\":" + String(memory.minimumInternal) + '}';
+}
+
+void appendPersistentTextMemoryJson(String &json) {
+  const auto &memory = psramTextMemoryStats();
+  json += "{\"storage\":\"psram\",\"allocated_bytes\":" + String(memory.allocatedBytes) +
+          ",\"blocks\":" + String(memory.blocks) +
+          ",\"allocation_failures\":" + String(memory.allocationFailures) + '}';
 }
 
 void appendRouteRequestJson(String &json, const RouteRequestDiagnostics &d) {
@@ -4857,6 +4873,12 @@ String webPage(bool configurationPage = false, bool includeRouteCache = true) {
   html += radarTrailStorage
       ? "PSRAM · " + String(sizeof(RadarTrailStorage)) + " Bytes"
       : String(uiText("Nicht verfügbar; Live-Radar bleibt aktiv", "Unavailable; live radar remains active"));
+  const auto &textMemory = psramTextMemoryStats();
+  html += "</b><span>" + String(uiText("Journal-/Cachetexte", "Journal/cache text")) + "</span><b>PSRAM · " +
+          String(textMemory.allocatedBytes) + " Bytes / " + String(textMemory.blocks) +
+          " " + uiText("Textpuffer", "text buffers");
+  html += "</b><span>" + String(uiText("Textspeicher-Fehler", "Text allocation failures")) + "</span><b>" +
+          String(textMemory.allocationFailures);
   html += F("</b><span>ESP32-S3-Chiptemperatur</span><b>");
   html += numberOrDash(chipTemperatureC()) + " °C";
   html += F("</b></div></details><section class='statusCard'><h3>Wetter und Sensoren</h3><div class='status'><span>BME280</span><b>");
@@ -6009,6 +6031,8 @@ void handleStatusApi() {
   json.remove(json.length() - 1);
   json += ",\"radar_trails_storage_bytes\":" + String(radarTrailStorage ? sizeof(RadarTrailStorage) : 0) +
           ",\"free_psram_bytes\":" + String(ESP.getFreePsram());
+  json += ",\"persistent_text_memory\":";
+  appendPersistentTextMemoryJson(json);
   json += ",\"route_memory\":";
   appendRouteMemoryJson(json, statusMemory);
   json += ",\"route_diagnostics\":{\"primary\":";
