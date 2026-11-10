@@ -46,8 +46,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.37";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-10 CPA return scroll and Robinson type names";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.38";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-10 airport names forward and return scroll";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -1727,8 +1727,8 @@ void drawAirportNamesPage() {
     String codes = displayAscii(flight.routeCodes);
     codes.replace("-", ">");
     const String names = displayAscii(flight.routeNames);
-    drawLine(scrollingTextX(codes, elapsed), 11, codes, white);
-    drawLine(scrollingTextX(names, elapsed), 22, names, yellow);
+    drawLine(airportTextX(codes, MATRIX_WIDTH, elapsed), 11, codes, white);
+    drawLine(airportTextX(names, MATRIX_WIDTH, elapsed), 22, names, yellow);
     return;
   }
   String originText = "S " + (flight.originName.length() ?
@@ -1737,8 +1737,8 @@ void drawAirportNamesPage() {
       flight.destinationName : (flight.destination.length() ? flight.destination : uiText("unbekannt", "unknown")));
   originText = displayAscii(originText);
   destinationText = displayAscii(destinationText);
-  drawLine(scrollingTextX(originText, elapsed), 11, originText, white);
-  drawLine(scrollingTextX(destinationText, elapsed), 22, destinationText, yellow);
+  drawLine(airportTextX(originText, MATRIX_WIDTH, elapsed), 11, originText, white);
+  drawLine(airportTextX(destinationText, MATRIX_WIDTH, elapsed), 22, destinationText, yellow);
 }
 
 
@@ -1752,15 +1752,15 @@ uint32_t airportNamesPageDuration() {
   if (flightHasMultiHopRoute()) {
     String codes = displayAscii(flight.routeCodes);
     codes.replace("-", ">");
-    return max(scrollingTextDuration(codes),
-               scrollingTextDuration(displayAscii(flight.routeNames)));
+    return max(airportScrollDuration(codes, MATRIX_WIDTH),
+               airportScrollDuration(displayAscii(flight.routeNames), MATRIX_WIDTH));
   }
   String originText = displayAscii("S " + (flight.originName.length() ?
       flight.originName : flight.origin));
   String destinationText = displayAscii("Z " + (flight.destinationName.length() ?
       flight.destinationName : flight.destination));
-  return max(scrollingTextDuration(originText),
-             scrollingTextDuration(destinationText));
+  return max(airportScrollDuration(originText, MATRIX_WIDTH),
+             airportScrollDuration(destinationText, MATRIX_WIDTH));
 }
 
 

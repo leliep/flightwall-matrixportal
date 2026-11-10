@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.6.1-dual-target.38 – 2026-11-10
+
+- Separate Seite „Flughafennamen“ auf den gemeinsamen Vor-/Rücklauf von CPA
+  und Kompaktseite umgestellt: 800-ms-Pausen, 80 ms/Pixel vorwärts, 20 ms/Pixel zurück
+- Start-/Zielzeilen sowie vollständige Multi-Hop-Codes und -Namen berücksichtigt;
+  die längste Zeile bestimmt die vollständige Seitendauer einschließlich Rücklauf
+- Bestehendes 50-ms-Zeichenintervall, Konfiguration und WLAN-Setup-Lauftext erhalten
+- Regressionstests zeichnen normale und Multi-Hop-Flughafenseiten über den
+  vollständigen Ablauf auf; kurze Zeilen bleiben stehen bzw. warten am Anfang
+- Beide Controller vorab auf unbekannte Codes geprüft: Listen leer
+
 ## 3.6.1-dual-target.37 – 2026-11-10
 
 - CPA-/Sondertyp-Detailzeile nutzt den Vor-/Rücklauf der Kompakt-Flughafenanzeige:

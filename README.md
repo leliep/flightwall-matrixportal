@@ -57,7 +57,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.37` |
+| Firmware | `3.6.1-dual-target.38` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -493,8 +493,11 @@ Auf **CPA und Sondertyp** läuft eine zu lange Detailzeile wie auf
 0,8 Sekunden Pause am Textende, Rücklauf mit 20 ms pro Pixel und 0,8 Sekunden
 Pause am Anfang. Das Zeichenintervall beträgt 50 ms. Die Seitendauer wird bei
 Bedarf bis zum vollständigen Vor-/Rücklauf einschließlich Pausen verlängert;
-kurze Texte stehen still. Die separate Seite **Flughafennamen** behält ihren
-bisherigen einmaligen Vorlauf.
+kurze Texte stehen still. Auch die separate Seite **Flughafennamen** verwendet diesen Vor-/Rücklauf
+für Start und Ziel sowie bei Multi-Hop-Routen für die vollständigen Codes und
+Flughafennamen. Die jeweils längste Zeile bestimmt die Mindestdauer; kürzere
+Zeilen warten nach ihrem Rücklauf am Anfang. Auch hier beträgt das
+Zeichenintervall 50 ms.
 
 Die konkrete Typenbeschreibung kommt bevorzugt aus der ADS-B-Quelle. Fehlt sie
 oder enthält sie nur eine allgemeine Angabe wie „Helicopter“, ergänzt eine
