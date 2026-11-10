@@ -57,7 +57,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.34-diag` (Diagnoseversion) |
+| Firmware | `3.6.1-dual-target.35` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -468,6 +468,28 @@ und sind nach einem Neustart leer. Nur aktuell im Radar enthaltene Ziele erhalte
 eine Spur; bei Abruffehlern laufen vorhandene Spurpunkte trotzdem nach 60 Sekunden ab.
 Die Einstellung ist in Konfigurationssicherung und -wiederherstellung enthalten.
 
+Ab Version `.35` liegen Verlaufsspeicher und beide Spur-Anzeigekopien in einem
+beim Start einmalig reservierten **externen PSRAM-Block** (24.064 Byte auf dem
+ESP32-S3). Interner RAM enthält nur die aktuellen Radarpositionen. Die bereits
+vorhandenen PSRAM-Bausteine beider unterstützter Controller reichen dafür aus;
+Spurdauer, maximal 64 Ziele und Darstellung bleiben erhalten. Beim Matrix-Build
+belegt die Firmware dadurch rund 23,5 KiB weniger statischen internen RAM als
+`.34-diag`. Die zusätzliche Reserve steht insbesondere den internen
+TLS-Speicherzuteilungen der Routendienste zur Verfügung.
+
+Kann der externe Speicher beim Start nicht reserviert werden, bleibt das
+Live-Radar verfügbar und nur die Spuren werden für diese Laufzeit ausgelassen.
+Es gibt bewusst keinen Rückfall auf großen internen Verlaufsspeicher, der das
+TLS-Speicherproblem wieder auslösen würde. Die gespeicherte Spuren-Einstellung
+bleibt unverändert. Konfiguration, Status und Headless-Webradar zeigen die
+fehlende Verfügbarkeit an. `/api/status` und `/api/display` liefern zusätzlich
+`radar_trails_available`; `/api/status` zeigt `radar_trails_storage_bytes` und
+`free_psram_bytes`. `radar_trails_enabled` beschreibt weiterhin die gespeicherte
+Auswahl; tatsächlich aktiv sind die Spuren nur bei aktivierter Auswahl und
+verfügbarem Speicher. Die Routen-Verbindungsdiagnose bleibt zur Überprüfung
+der internen Speicherreserven und möglicher weiterer TLS-Fehler erhalten.
+
+
 Die Blickrichtung bezieht sich auf den Standort des Betrachters, nicht auf den
 Track des Flugzeugs. Aus Standort, Entfernung, Höhe und Standorthöhe berechnet
 die Firmware den vertikalen Blickwinkel. Unterhalb des konfigurierbaren
@@ -877,7 +899,7 @@ Die Statusseite zeigt unter anderem:
 
 ### Routen-Verbindungsdiagnose
 
-Die Diagnoseversion `3.6.1-dual-target.34-diag` erfasst echte HTTP-Abfragen
+Seit Diagnoseversion `3.6.1-dual-target.34-diag` erfasst die Firmware echte HTTP-Abfragen
 beim Hauptdienst und beim ADSBDB-Fallback getrennt. Unter **Status →
 Routen-Verbindungsdiagnose** stehen Quelle, Callsign, Anzahl und Alter der
 Anfragen, Dauer, HTTP-Code sowie der negative Fehlercode des Secure-Clients.

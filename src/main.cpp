@@ -10,6 +10,7 @@
 #include <WiFi.h>
 #include <Wire.h>
 #include <esp_system.h>
+#include <esp_heap_caps.h>
 #include <time.h>
 #include <vector>
 
@@ -28,7 +29,7 @@
 #include "AirlineNames.hpp"
 #include "CallsignClassifier.hpp"
 #include "Geo.hpp"
-#include "RadarTrails.hpp"
+#include "RadarTrailStorage.hpp"
 #include "RouteClient.hpp"
 #include "StatusLed.hpp"
 #include "UnknownCodes.hpp"
@@ -44,8 +45,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.34-diag";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-10 route TLS and heap diagnostics";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.35";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-10 radar histories in PSRAM";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -200,14 +201,7 @@ struct FlightData {
 FlightData flight;
 FlightData networkFlight;
 
-struct RadarTrailDot {
-  uint32_t time = 0;
-  int8_t x = 0, y = 0;
-};
-
 struct RadarPoint {
-  RadarTrailDot trail[RadarTrails::Samples - 1];
-  uint8_t trailCount = 0;
   float distanceKm = 0.0F;
   float bearing = 0.0F;
   uint8_t flags = 0;
@@ -223,7 +217,7 @@ RadarPoint radarPoints[RADAR_POINT_LIMIT];
 RadarPoint networkRadarPoints[RADAR_POINT_LIMIT];
 size_t radarPointCount = 0;
 size_t networkRadarPointCount = 0;
-RadarTrails radarTrails;
+RadarTrailStorage *radarTrailStorage = nullptr;
 bool radarTrailsEnabled = true;
 // A separate display-core copy avoids reading configuration during rendering.
 bool displayedRadarTrailsEnabled = true;
@@ -2002,13 +1996,14 @@ bool radarPointCoordinates(float distanceKm, float bearing,
 
 void drawRadarPage() {
   // Trails are drawn first so the ring, own position and live targets win.
-  if (displayedRadarTrailsEnabled && transitionPercent > 0) {
+  if (displayedRadarTrailsEnabled && radarTrailStorage && transitionPercent > 0) {
     const uint32_t now = millis();
     for (size_t i = 0; i < radarPointCount; ++i) {
       const RadarPoint &point = radarPoints[i];
       const uint16_t base = radarPointColor(point);
-      for (uint8_t j = 0; j < point.trailCount; ++j) {
-        const RadarTrailDot &dot = point.trail[j];
+      const auto &trail = radarTrailStorage->consumer[i];
+      for (uint8_t j = 0; j < trail.trailCount; ++j) {
+        const RadarTrailDot &dot = trail.trail[j];
         const uint32_t age = now - dot.time;
         if (age >= RadarTrails::LifetimeMs) continue;
         // At minimum brightness a distinct darker native level is impossible.
@@ -2766,6 +2761,9 @@ void syncNetworkState() {
     radarPointCount = min(networkRadarPointCount, RADAR_POINT_LIMIT);
     for (size_t index = 0; index < radarPointCount; ++index)
       radarPoints[index] = networkRadarPoints[index];
+#if FLIGHTWALL_HAS_MATRIX
+    if (radarTrailStorage) radarTrailStorage->publish(radarPointCount);
+#endif
     lastSuccessfulPoll = networkLastSuccessfulPoll;
     lastError = networkLastError;
     xSemaphoreGive(flightMutex);
@@ -3532,7 +3530,7 @@ bool fetchLocalFlight() {
       trailHeading != viewHeading || trailSport != hideSportAircraft ||
       trailAltitude != altitudeFilterEnabled || trailMaxAltitude != maximumAltitudeFt ||
       trailSource != successfulSource) {
-    radarTrails.clear();
+    if (radarTrailStorage) radarTrailStorage->tracker.clear();
     trailLatitude = siteLatitude; trailLongitude = siteLongitude;
     trailRadius = displayRadiusKm; trailHeading = viewHeading;
     trailSport = hideSportAircraft; trailAltitude = altitudeFilterEnabled;
@@ -3566,11 +3564,13 @@ bool fetchLocalFlight() {
                 candidate.distanceKm, candidate.bearing, radarX, radarY))
           continue;
         RadarPoint &point = networkRadarPoints[networkRadarPointCount++];
-        point.trailCount = 0;
-        if (radarTrailsEnabled &&
+        RadarTrailSnapshot *trail = radarTrailStorage
+            ? &radarTrailStorage->network[networkRadarPointCount - 1] : nullptr;
+        if (trail) trail->trailCount = 0;
+        if (radarTrailsEnabled && trail &&
             (candidate.hex.length() || candidate.registration.length() || candidate.flight.length())) {
           const float angle = candidate.bearing * PI / 180.0F;
-          const auto *track = radarTrails.update(aircraftIdentity(candidate),
+          const auto *track = radarTrailStorage->tracker.update(aircraftIdentity(candidate),
               sinf(angle) * candidate.distanceKm,
               cosf(angle) * candidate.distanceKm, trailNow);
           if (track) {
@@ -3581,14 +3581,14 @@ bool fetchLocalFlight() {
                       atan2f(fix.east, fix.north) * 180.0F / PI, x, y) ||
                   (x == radarX && y == radarY)) continue;
               bool duplicate = false;
-              for (uint8_t k = 0; k < point.trailCount; ++k) {
-                auto &dot = point.trail[k];
+              for (uint8_t k = 0; k < trail->trailCount; ++k) {
+                auto &dot = trail->trail[k];
                 if (dot.x == x && dot.y == y) {
                   dot.time = fix.time; duplicate = true; break;
                 }
               }
               if (!duplicate) {
-                auto &dot = point.trail[point.trailCount++];
+                auto &dot = trail->trail[trail->trailCount++];
                 dot.x = x; dot.y = y; dot.time = fix.time;
               }
             }
@@ -4464,7 +4464,12 @@ String webPage(bool configurationPage = false, bool includeRouteCache = true) {
   html += F("'></label></div><p class='muted'>Regen wird für die Anzeige von cm in mm umgerechnet. Ein leeres Passwortfeld behält das gespeicherte Passwort bei.</p></fieldset>");
   html += F("<fieldset><legend>Radar</legend><label class='check'><input type='checkbox' name='radarTrails' value='1'");
   html += checked(radarTrailsEnabled);
-  html += F("> Radarspuren (60 Sekunden)</label></fieldset>");
+  html += F("> Radarspuren (60 Sekunden)</label>");
+  if (!radarTrailStorage)
+    html += "<p class='pill warn'>" + String(uiText(
+        "Radarspuren nicht verfügbar: externer Speicher konnte nicht reserviert werden.",
+        "Radar trails unavailable: external memory could not be reserved.")) + "</p>";
+  html += F("</fieldset>");
 #if FLIGHTWALL_HAS_MATRIX
   html += F("<fieldset><legend>Anzeigeseiten</legend><div class='fieldGrid'><label class='check'><input type='checkbox' name='smooth' value='1'");
   html += checked(smoothTransitions);
@@ -4848,6 +4853,10 @@ String webPage(bool configurationPage = false, bool includeRouteCache = true) {
           String(statusMemory.minimumInternal / 1024) + " KiB)";
   html += "</b><span>" + String(uiText("Größter freier interner Block", "Largest free internal block")) +
           "</span><b>" + String(statusMemory.largestInternal) + " Bytes";
+  html += "</b><span>" + String(uiText("Radarspuren-Speicher", "Radar trail storage")) + "</span><b>";
+  html += radarTrailStorage
+      ? "PSRAM · " + String(sizeof(RadarTrailStorage)) + " Bytes"
+      : String(uiText("Nicht verfügbar; Live-Radar bleibt aktiv", "Unavailable; live radar remains active"));
   html += F("</b><span>ESP32-S3-Chiptemperatur</span><b>");
   html += numberOrDash(chipTemperatureC()) + " °C";
   html += F("</b></div></details><section class='statusCard'><h3>Wetter und Sensoren</h3><div class='status'><span>BME280</span><b>");
@@ -5215,10 +5224,12 @@ void applyWebSettings() {
 #endif
     radarTrailsEnabled = webServer.hasArg("radarTrails");
     // Saving configuration starts a fresh trail, including source URL edits.
-    radarTrails.clear();
+    if (radarTrailStorage) radarTrailStorage->tracker.clear();
     if (xSemaphoreTake(flightMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-      for (size_t i = 0; i < networkRadarPointCount; ++i)
-        networkRadarPoints[i].trailCount = 0;
+      if (radarTrailStorage) {
+        for (size_t i = 0; i < networkRadarPointCount; ++i)
+          radarTrailStorage->network[i].trailCount = 0;
+      }
       xSemaphoreGive(flightMutex);
     }
     String requestedAdsbUrl1 = webServer.arg("adsbUrl1");
@@ -5610,6 +5621,7 @@ void handleDisplayApi() {
     webRadarPointCount = min(networkRadarPointCount, RADAR_POINT_LIMIT);
     for (size_t index = 0; index < webRadarPointCount; ++index)
       webRadarPoints[index] = networkRadarPoints[index];
+    if (radarTrailStorage) radarTrailStorage->publish(webRadarPointCount);
 #endif
     error = networkLastError;
     updated = networkLastSuccessfulPoll;
@@ -5644,6 +5656,7 @@ void handleDisplayApi() {
     json += String(pageDurationMs[page]);
   }
   json += "],\"radar_trails_enabled\":" + String(radarTrailsEnabled ? "true" : "false") +
+          ",\"radar_trails_available\":" + String(radarTrailStorage ? "true" : "false") +
           ",\"radar\":{\"radius_km\":" + String(displayRadiusKm, 1) +
           ",\"view_heading\":" + String(viewHeading, 1) +
           ",\"points\":[";
@@ -5656,8 +5669,9 @@ void handleDisplayApi() {
             String(webRadarPoints[index].flags);
     json += ",[";
     bool firstDot = true;
-    if (radarTrailsEnabled) for (uint8_t j = 0; j < webRadarPoints[index].trailCount; ++j) {
-      const auto &dot = webRadarPoints[index].trail[j];
+    const auto *trail = radarTrailStorage ? &radarTrailStorage->consumer[index] : nullptr;
+    if (radarTrailsEnabled && trail) for (uint8_t j = 0; j < trail->trailCount; ++j) {
+      const auto &dot = trail->trail[j];
       const uint32_t age = millis() - dot.time;
       if (age >= RadarTrails::LifetimeMs) continue;
       if (!firstDot) json += ',';
@@ -5860,6 +5874,7 @@ void handleStatusApi() {
       ",\"received_aircraft\":" + String(lastReceivedAircraft) +
       ",\"candidate_aircraft\":" + String(lastCandidateAircraft) +
       ",\"radar_trails_enabled\":" + String(radarTrailsEnabled ? "true" : "false") +
+          ",\"radar_trails_available\":" + String(radarTrailStorage ? "true" : "false") +
       ",\"radar_aircraft\":" + String(networkRadarPointCount) +
       ",\"last_adsb_attempt_age_seconds\":" +
           (lastAdsbAttempt ? String((millis() - lastAdsbAttempt) / 1000) : "null") +
@@ -5992,6 +6007,8 @@ void handleStatusApi() {
           ",\"flash\":" + String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Flash)]) + "}}";
   // Append without building a second full JSON document or large stack copy.
   json.remove(json.length() - 1);
+  json += ",\"radar_trails_storage_bytes\":" + String(radarTrailStorage ? sizeof(RadarTrailStorage) : 0) +
+          ",\"free_psram_bytes\":" + String(ESP.getFreePsram());
   json += ",\"route_memory\":";
   appendRouteMemoryJson(json, statusMemory);
   json += ",\"route_diagnostics\":{\"primary\":";
@@ -6886,6 +6903,15 @@ void setup() {
   setStatusLed(LedStatus::Starting);
   updateStatusLed(false);
   initializeNetworkDiagnostics();
+  // Arduino initializes board PSRAM before setup(). Allocate only external
+  // memory, once, before Protomatter reserves internal DMA buffers.
+  radarTrailStorage = allocateRadarTrailStorage([](size_t bytes) -> void * {
+    return heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  });
+  Serial.printf("Radar history: %s (%u bytes), PSRAM free: %u bytes\n",
+      radarTrailStorage ? "external PSRAM" : "unavailable",
+      static_cast<unsigned>(radarTrailStorage ? sizeof(RadarTrailStorage) : 0),
+      ESP.getFreePsram());
   displayTaskHandle = xTaskGetCurrentTaskHandle();
   flightMutex = xSemaphoreCreateMutex();
   preferencesMutex = xSemaphoreCreateMutex();

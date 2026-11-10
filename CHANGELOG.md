@@ -1,5 +1,21 @@
 # Changelog
 
+## 3.6.1-dual-target.35 – 2026-11-10
+
+- TLS-Speicherreserve wiederhergestellt: Radarverläufe und Spur-Anzeigekopien
+  einmalig in externem PSRAM statt statischem internem RAM reserviert
+- Matrix-Build benötigt 24.056 Byte weniger statischen internen RAM als
+  `.34-diag`; Headless-Build 30.464 Byte weniger; externer Block 24.064 Byte
+- Punktierte 60-Sekunden-Spuren für bis zu 64 Ziele auf beiden Varianten
+  einschließlich getrennter Netzwerk-/Anzeigekopien erhalten
+- Bei fehlendem externem Speicher bleiben Live-Radar und Konfiguration
+  erhalten; nur Spuren werden ohne internen Speicher-Fallback ausgelassen
+- Speicherverfügbarkeit in Konfiguration, Status, Webradar und APIs sichtbar;
+  Routen-/TLS-Diagnose bleibt erhalten
+- Tests für fehlgeschlagene Reservierung, Initialisierung, volle Kapazität,
+  unabhängige Anzeigekopien und Webanzeige ohne Spurenspeicher ergänzt
+- Unbekannte Codes beider Controller vorab geprüft: beide Listen leer
+
 ## 3.6.1-dual-target.34-diag – 2026-11-10
 
 - Diagnoseversion für Routenverbindungsfehler: interner freier Heap, größter

@@ -26,6 +26,11 @@ now=60000;draw();
 assert(!draws.some(p=>p.x===60 && p.y===10));
 now=0;state.radar_trails_enabled=false;draw();
 assert(!draws.some(p=>p.x===60 && p.y===10));
+state.radar_trails_enabled=true;state.radar_trails_available=false;draw();
+assert(!draws.some(p=>p.x===60 && p.y===10));
+assert(elements.radarMeta.textContent.includes('Spuren nicht verfügbar'));
+state.radar_trails_available=true;draw();
+assert(draws.some(p=>p.x===60 && p.y===10));
 state.web_radar=false;draw();assert(elements.radarPanel.hidden);
 state.web_radar=true;state.radar_trails_enabled=true;state.radar.points=[[5,90,1]];
 draw();assert.equal(elements.radarPanel.hidden,false); // legacy points without trails
