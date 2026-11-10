@@ -24,6 +24,8 @@ jobs:
         run: |
           python3 tools/test_psram_text.py
           python3 tools/test_route_diagnostic_output.py
+          python3 tools/validate_aircraft_type_names.py
+          python3 tools/test_cpa_page.py
       - name: Build MatrixPortal firmware
         run: pio run -e adafruit_matrixportal_esp32s3
       - name: Build headless ESP32-S3 N16R8 firmware

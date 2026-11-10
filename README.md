@@ -57,7 +57,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.36` |
+| Firmware | `3.6.1-dual-target.37` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -487,6 +487,28 @@ einer Dauer von 2 bis 60 Sekunden versehen werden:
 Lange Texte verlängern die Seitendauer automatisch, bis der Lauf vollständig
 sichtbar war. Seiten ohne verwertbaren Inhalt werden übersprungen. Sanfte
 Übergänge sind optional.
+
+Auf **CPA und Sondertyp** läuft eine zu lange Detailzeile wie auf
+**Kompakt + Flughäfen**: 0,8 Sekunden Startpause, Vorlauf mit 80 ms pro Pixel,
+0,8 Sekunden Pause am Textende, Rücklauf mit 20 ms pro Pixel und 0,8 Sekunden
+Pause am Anfang. Das Zeichenintervall beträgt 50 ms. Die Seitendauer wird bei
+Bedarf bis zum vollständigen Vor-/Rücklauf einschließlich Pausen verlängert;
+kurze Texte stehen still. Die separate Seite **Flughafennamen** behält ihren
+bisherigen einmaligen Vorlauf.
+
+Die konkrete Typenbeschreibung kommt bevorzugt aus der ADS-B-Quelle. Fehlt sie
+oder enthält sie nur eine allgemeine Angabe wie „Helicopter“, ergänzt eine
+kleine lokale Tabelle derzeit Robinson R22, R44 und R66. Unbekannte Modelle
+zeigen zumindest ihren ICAO-Typcode; eine Variante wie Raven II wird nicht aus
+dem allgemeinen Code R44 geraten. Eine tatsächlich gelieferte ausführliche
+Beschreibung bleibt erhalten. Die Ergänzung erfolgt zentral für Matrix,
+Webdisplay und Journal, nach der bestehenden Klassifizierung. Es entstehen
+keine zusätzlichen Netzwerkabfragen. Quelldatei ist
+`data/aircraft_type_names.json`; Generator und Validator heißen
+`tools/generate_aircraft_type_names.py` und `tools/validate_aircraft_type_names.py`.
+Die Robinson-Zuordnung folgt den
+[FAA Aircraft Type Designators](https://www.faa.gov/documentLibrary/media/Order/JO_7360.1G_Aircraft_Type_Designators_FINAL.pdf).
+
 
 In der Radaransicht sind normale Ziele cyan, das ausgewählte Ziel gelb,
 Specials violett, Bodenverkehr orange und Transpondernotfälle blinkend rot.

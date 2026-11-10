@@ -46,8 +46,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.36";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-10 journal and route texts in PSRAM";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.37";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-10 CPA return scroll and Robinson type names";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -1307,6 +1307,9 @@ void drawRoutePage() {
 }
 
 
+uint32_t airportScrollDuration(const String &text, int16_t regionWidth);
+int16_t airportTextX(const String &text, int16_t regionWidth, uint32_t elapsedMs);
+
 uint32_t scrollingTextDuration(const String &text);
 int16_t scrollingTextX(const String &text, uint32_t elapsedMs);
 
@@ -1315,6 +1318,7 @@ String cpaPageDetails() {
   String details = flight.specialType;
   String description = flight.typeDescription;
   description.trim();
+  if (!description.length()) description = flight.type;
   if (description.length()) {
     if (details.length()) details += " | ";
     details += description;
@@ -1345,12 +1349,12 @@ void drawCpaPage() {
 
   const String details = cpaPageDetails();
   const uint32_t elapsed = millis() - currentPageStarted;
-  drawLine(scrollingTextX(details, elapsed), 24, details, aircraftColor());
+  drawLine(airportTextX(details, MATRIX_WIDTH, elapsed), 24, details, aircraftColor());
 }
 
 
 uint32_t cpaPageDuration() {
-  return scrollingTextDuration(cpaPageDetails());
+  return airportScrollDuration(cpaPageDetails(), MATRIX_WIDTH);
 }
 
 
@@ -1501,7 +1505,7 @@ String limitedAirlineText() {
 
 uint32_t airportScrollDuration(const String &text, int16_t regionWidth) {
   const uint32_t textWidth = text.length() * 6UL;
-  if (textWidth <= regionWidth) return 0;
+  if (textWidth <= static_cast<uint32_t>(regionWidth)) return 0;
   const uint32_t travelPixels = textWidth - regionWidth;
   return AIRPORT_HALF_PAUSE_MS +
          travelPixels * AIRPORT_HALF_PIXEL_MS +
@@ -7198,7 +7202,7 @@ uint32_t displayDrawIntervalMs() {
       return min(250U, cycleMs - elapsed);
     }
     if (page == 4 && customScrollSpeed == 2) return 25;
-    if (page == 3 || page == 4 || page == 6) return 50;
+    if (page == 2 || page == 3 || page == 4 || page == 6) return 50;
   }
   // Static pages only need a periodic deadline check; ADS-B changes and page
   // changes are detected comfortably within a quarter second.

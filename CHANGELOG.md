@@ -1,5 +1,22 @@
 # Changelog
 
+## 3.6.1-dual-target.37 – 2026-11-10
+
+- CPA-/Sondertyp-Detailzeile nutzt den Vor-/Rücklauf der Kompakt-Flughafenanzeige:
+  800-ms-Pausen, 80 ms pro Pixel vorwärts und 20 ms pro Pixel zurück
+- Zeichenintervall der CPA-Seite auf 50 ms gesetzt; Seitendauer berücksichtigt
+  den vollständigen Hin-/Rücklauf einschließlich Schluss-Pause
+- Fehlende/allgemeine Typenbeschreibungen anhand einer lokalen generierten
+  Tabelle für Robinson R22/R44/R66 ergänzt; echte Quellbeschreibungen behalten
+  Vorrang, unbekannte Typen fallen auf ihren ICAO-Code zurück
+- Ursache anhand der Controller-Chroniken eingegrenzt: R44 wurde ohne
+  Beschreibung geliefert; Modellergänzung erfolgt nach der Klassifizierung
+  gemeinsam für Matrix, Webdisplay und Journal, ohne weitere Netzwerkabfragen
+- Operator-Codes MYJ (My Jet) und AME (spanische Militärluftfahrt) aus den
+  vorab geprüften Code-Listen ergänzt; Lookup-Tabellen neu erzeugt/validiert
+- Regressionstests für Scrollphasen, Dauer, Zeichenintervall und Modell-Fallback
+  für beide Varianten ergänzt
+
 ## 3.6.1-dual-target.36 – 2026-11-10
 
 - Länger gespeicherte Texte von Tagesjournal, Special-Chronik und RAM-Routencache

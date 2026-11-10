@@ -4,6 +4,7 @@
 
 #include "CallsignClassifier.hpp"
 #include "Geo.hpp"
+#include "AircraftTypeNames.hpp"
 
 namespace {
 
@@ -220,6 +221,8 @@ bool aircraftFromJson(JsonObjectConst raw, const ProcessingConfig& config,
 
   detectSpecialTypes(aircraft);
   aircraft.sportAircraft = isSportAircraft(aircraft);
+  // Classify using the original source/category before enriching display text.
+  aircraft.description = resolvedAircraftTypeDescription(aircraft.type, aircraft.description);
   return true;
 }
 
