@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-11-09T22:54:40+01:00",
+  "updated_at": "2026-11-10T09:28:44+01:00",
   "status": "integrated",
   "airports": [
     "ACH",
@@ -96,6 +96,7 @@
     "BGF",
     "BOH",
     "BQB",
+    "BRJ",
     "BSF",
     "CAL",
     "CAT",
@@ -118,6 +119,7 @@
     "GER",
     "GRZ",
     "GSR",
+    "HER",
     "HTT",
     "HZA",
     "IAM",
@@ -129,16 +131,16 @@
     "JSF",
     "JVW",
     "KLJ",
-    "LZB",
     "LOG",
+    "LZB",
     "MAC",
     "MBK",
     "MMZ",
     "N9",
     "NAF",
+    "NCR",
     "NIT",
     "NTF",
-    "NCR",
     "NVD",
     "OLI",
     "PEA",
@@ -795,6 +797,25 @@
       "unknown_airports": [
         "EGSY"
       ],
+      "unknown_airlines": [],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "matrixportal_s3",
+      "firmware_version": "3.6.1-dual-target.33",
+      "unknown_airports": [],
+      "unknown_airlines": [
+        "HER",
+        "BRJ"
+      ],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "esp32s3_n16r8_headless",
+      "firmware_version": "3.6.1-dual-target.33",
+      "unknown_airports": [],
       "unknown_airlines": [],
       "dropped_unknown_airports": 0,
       "dropped_unknown_airlines": 0

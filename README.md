@@ -57,7 +57,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.33` |
+| Firmware | `3.6.1-dual-target.34-diag` (Diagnoseversion) |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -862,7 +862,9 @@ Die Statusseite zeigt unter anderem:
 
 - Firmwareversion, Build, Laufzeit und Neustartgrund
 - Hardwarevariante sowie Zustand und Helligkeitsmodus der RGB-Status-LED
-- freien Heap, aktuelle IP, Hostname, verbundene und gespeicherte SSID,
+- freien internen Heap, Minimum seit Start und größten zusammenhängenden
+  freien internen 8-Bit-Speicherblock (vor Aufbau der Statusantwort gemessen)
+- aktuelle IP, Hostname, verbundene und gespeicherte SSID,
   Signalqualität, Gateway, Subnetz, DNS, WLAN-Kanal, MAC-Adresse,
   Einrichtungsnetz und Wiederverbindungen
 - aktive ADS-B-Quelle, Abrufalter, empfangene und geeignete Flugzeuge
@@ -873,7 +875,67 @@ Die Statusseite zeigt unter anderem:
 - Matrix-Farbtiefe, Bildwiederholrate sowie letzte/maximale `show()`-Dauer
 - maximale Laufzeiten einzelner Netzwerkphasen und Taskdiagnose
 
-Verfügbare Tests:
+### Routen-Verbindungsdiagnose
+
+Die Diagnoseversion `3.6.1-dual-target.34-diag` erfasst echte HTTP-Abfragen
+beim Hauptdienst und beim ADSBDB-Fallback getrennt. Unter **Status →
+Routen-Verbindungsdiagnose** stehen Quelle, Callsign, Anzahl und Alter der
+Anfragen, Dauer, HTTP-Code sowie der negative Fehlercode des Secure-Clients.
+Bei einem konkreten mbedTLS-Fehler erscheinen zusätzlich Hexadezimalcode und
+Fehlertext. Der allgemeine Secure-Client-Code `-1` und ein fehlender TLS-Code
+werden ausdrücklich als **ohne TLS-Details** gekennzeichnet; daraus lässt sich
+kein bestimmter DNS-, Socket- oder TLS-Fehler ableiten. Ein HTTP-Fehler nach
+erfolgreichem TLS-Aufbau wird nicht als TLS-Fehler ausgegeben.
+
+Der interne, byteweise adressierbare RAM wird an drei Grenzen gemessen:
+
+1. vor dem Erzeugen des Secure-Clients und der Anfrage,
+2. unmittelbar vor `POST` beziehungsweise `GET`,
+3. unmittelbar nach deren Rückkehr, vor Fehlertextaufbereitung und `http.end()`.
+
+Jede Messung enthält freien RAM, den größten zusammenhängenden freien Block
+und das Heap-Minimum seit dem Start. Die verwendete TLS-Bibliothek nutzt
+internen Speicher; PSRAM wird diesen Werten nicht zugerechnet. Die Messungen
+sind **keine Messung innerhalb des TLS-Handshakes**: Die Bibliothek kann ihre
+TLS-Puffer bei einer fehlgeschlagenen Verbindung bereits vor der Rückkehr
+freigegeben haben. Auch das Heap-Minimum ist ein Wert seit Gerätestart und
+kein isoliertes Minimum der einzelnen Routenabfrage.
+
+In `/api/status` stehen die Werte unter:
+
+- `route_memory`: aktueller interner Heap vor Aufbau der API-Antwort
+- `route_diagnostics.primary`: letzte HTTP-Anfrage des Hauptdienstes
+- `route_diagnostics.fallback`: letzte HTTP-Anfrage des ADSBDB-Fallbacks
+- `route_diagnostics.last_failure`: letzter Verbindungs-/HTTP-Fehler, auch wenn
+  spätere Anfragen erfolgreich sind oder Routen aus dem Cache kommen
+
+Noch nicht vorhandene Abfragedatensätze sind `null`. Die Datensätze enthalten
+`http_attempted`, `http_code`, `tls_error_code`, `tls_error_hex`,
+`tls_error_detail_available`, `tls_error_text`, `started_ms`, `age_seconds`,
+`duration_ms` und die Speicherstände `entry`, `before_request`, `after_request`.
+Die Speicherfelder heißen `free_internal_bytes`, `largest_internal_block_bytes`
+und `minimum_internal_bytes`; alle Größen sind Bytes. Die Dauer beginnt vor
+der Anfragevorbereitung und endet nach dem Empfang der HTTP-Antwortheader.
+
+Cachetreffer lösen keine neue Messung aus; Callsign und Alter zeigen, zu welcher
+Anfrage die Diagnose gehört. HTTP 404 beim ADSBDB-Dienst bedeutet keine gefundene
+Route und ersetzt den gespeicherten Verbindungsfehler nicht. Die Aufzeichnung
+liegt mit 732 Byte festem Speicher ausschließlich im RAM, benötigt bei der
+Erfassung keine zusätzlichen dynamischen Textpuffer und endet mit einem
+Neustart. URLs, Positionen und Zugangsdaten werden nicht in die neuen
+Diagnosedatensätze aufgenommen. Routenwahl, Cache-Regeln, TLS-Einstellungen und
+Controllerkonfiguration bleiben unverändert.
+
+Lokale Diagnoseprüfungen ohne Controller:
+
+```bash
+c++ -std=c++11 -Wall -Wextra -pedantic -Iinclude tools/test_route_diagnostics.cpp -o /tmp/flightwall-route-diagnostics
+/tmp/flightwall-route-diagnostics
+python3 tools/test_route_diagnostic_output.py
+```
+
+### Verfügbare Tests
+
 
 - ADS-B-Verbindungstest der ausgewählten Quelle
 - Routendiensttest mit frei eingegebenem Callsign

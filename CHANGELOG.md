@@ -1,5 +1,23 @@
 # Changelog
 
+## 3.6.1-dual-target.34-diag – 2026-11-10
+
+- Diagnoseversion für Routenverbindungsfehler: interner freier Heap, größter
+  zusammenhängender Block und Heap-Minimum vor Vorbereitung, vor HTTP sowie
+  unmittelbar nach HTTP für Hauptdienst und ADSBDB getrennt erfasst
+- Negativen Secure-Client-Fehler vor dem Aufräumen ausgelesen; konkrete
+  mbedTLS-Fehler mit Dezimal-/Hexadezimalcode und Text, allgemeine
+  Verbindungsfehler ausdrücklich ohne erfundene TLS-Details
+- Letzten Verbindungs-/HTTP-Fehler über erfolgreiche Anfragen und Cachetreffer
+  hinweg bis zum nächsten Fehler oder Neustart im RAM erhalten
+- Diagnose in Statusseite und `/api/status`; aktuelle Speicherwerte vor
+  Aufbau der Statusantwort gemessen; feste Diagnosedaten belegen 732 Byte
+- Airline-Codes HER (Hera Flight) und BRJ (Bairline) aus dem Matrixstatus
+  anhand des aktuellen FAA-Verzeichnisses ergänzt, beide Controller geprüft
+- Lookup-Tabellen neu erzeugt/validiert; Tests für Fehlererfassung,
+  Speichergrenzen, Zeitüberlauf, JSON-Ausgabe und Fehlererhalt ergänzt
+- Routenlogik und Konfiguration unverändert; kein OTA als Teil dieser Änderung
+
 ## 3.6.1-dual-target.33 – 2026-11-09
 
 - Punktierte Radarspuren über 60 Sekunden für Matrix und Headless-Webradar;

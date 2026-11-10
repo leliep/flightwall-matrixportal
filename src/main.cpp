@@ -44,8 +44,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.33";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-09 dotted radar trails";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.34-diag";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-10 route TLS and heap diagnostics";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -4192,7 +4192,86 @@ void appendDailyJournalStatus(String &html) {
 }
 
 
+void appendRouteMemoryJson(String &json, const RouteMemorySnapshot &memory) {
+  json += "{\"free_internal_bytes\":" + String(memory.freeInternal) +
+          ",\"largest_internal_block_bytes\":" + String(memory.largestInternal) +
+          ",\"minimum_internal_bytes\":" + String(memory.minimumInternal) + '}';
+}
+
+void appendRouteRequestJson(String &json, const RouteRequestDiagnostics &d) {
+  if (!d.available) { json += "null"; return; }
+  char hex[16];
+  snprintf(hex, sizeof(hex), "-0x%04lX", static_cast<unsigned long>(0U - static_cast<uint32_t>(d.tlsCode)));
+  json += "{\"source\":\"" + jsonEscape(d.source) +
+          "\",\"callsign\":\"" + jsonEscape(d.callsign) +
+          "\",\"attempts\":" + String(d.attempts) +
+          ",\"started_ms\":" + String(d.startedMs) +
+          ",\"age_seconds\":" + String((millis() - d.startedMs) / 1000U) +
+          ",\"duration_ms\":" + String(d.durationMs) +
+          ",\"http_attempted\":" + String(d.httpAttempted ? "true" : "false") +
+          ",\"http_code\":" + String(d.httpCode) +
+          ",\"tls_error_code\":" + String(d.tlsCode) +
+          ",\"tls_error_hex\":\"" + String(d.tlsCode < 0 ? hex : "") +
+          "\",\"tls_error_detail_available\":" + String(d.tlsCode < -1 ? "true" : "false") +
+          ",\"tls_error_text\":\"" + jsonEscape(d.tlsMessage) +
+          "\",\"entry\":";
+  appendRouteMemoryJson(json, d.entry);
+  json += ",\"before_request\":";
+  appendRouteMemoryJson(json, d.before);
+  json += ",\"after_request\":";
+  appendRouteMemoryJson(json, d.after);
+  json += '}';
+}
+
+void appendRouteRequestHtml(String &html, const char *label,
+                            const RouteRequestDiagnostics &d) {
+  html += "<h4>" + String(label) + "</h4>";
+  if (!d.available) {
+    html += "<p>" + String(uiText("Noch keine Anfrage", "No request yet")) + "</p>";
+    return;
+  }
+  html += "<p><b>" + htmlEscape(d.source) + " · " + htmlEscape(d.callsign) +
+          "</b> · " + String((millis() - d.startedMs) / 1000U) + " s · " +
+          String(d.durationMs) + " ms · " + String(d.attempts) +
+          " " + uiText("Anfragen", "requests") + "<br>";
+  if (!d.httpAttempted)
+    html += uiText("HTTP-Anfrage nicht gestartet", "HTTP request not started");
+  else
+    html += "HTTP " + String(d.httpCode) + " · TLS " + String(d.tlsCode);
+  if (d.tlsCode < -1) {
+    char hex[16];
+    snprintf(hex, sizeof(hex), "-0x%04lX", static_cast<unsigned long>(0U - static_cast<uint32_t>(d.tlsCode)));
+    html += " (" + String(hex) + "): " + htmlEscape(d.tlsMessage);
+  } else if (d.httpCode < 0) {
+    html += " · " + String(uiText("Keine TLS-Details; DNS-/Transport-/HTTP-Fehler möglich",
+                                  "No TLS detail; DNS/transport/HTTP failure possible"));
+  }
+  html += "<br>" + String(uiText("Interner RAM: frei / größter Block (Bytes)",
+                                 "Internal RAM: free / largest block (bytes)")) +
+          "<br>" + uiText("Vor Vorbereitung: ", "Before preparation: ") +
+          String(d.entry.freeInternal) + " / " + String(d.entry.largestInternal) +
+          "<br>" + uiText("Vor HTTP: ", "Before HTTP: ") +
+          String(d.before.freeInternal) + " / " + String(d.before.largestInternal) +
+          "<br>" + uiText("Nach HTTP: ", "After HTTP: ") +
+          String(d.after.freeInternal) + " / " + String(d.after.largestInternal) +
+          "<br>" + uiText("Minimum seit Start: ", "Minimum since boot: ") +
+          String(d.after.minimumInternal) + "</p>";
+}
+
+void appendRouteDiagnosticsHtml(String &html) {
+  const auto &diagnostics = routeClient.diagnostics();
+  html += "<details class='statusCard wide'><summary>" +
+          String(uiText("Routen-Verbindungsdiagnose", "Route connection diagnostics")) + "</summary>";
+  appendRouteRequestHtml(html, uiText("Hauptdienst", "Primary service"), diagnostics.primary);
+  appendRouteRequestHtml(html, "ADSBDB", diagnostics.fallback);
+  appendRouteRequestHtml(html, uiText("Letzter gespeicherter Fehler", "Last recorded failure"), diagnostics.lastFailure);
+  html += "<p class='muted'>" + String(uiText(
+      "Messungen vor und nach HTTP, nicht während des TLS-Handshakes. Cachetreffer starten keine Messung. Fehler bleiben bis zum Neustart oder nächsten Fehler erhalten.",
+      "Measurements before and after HTTP, not during the TLS handshake. Cache hits do not start measurements. Failures are retained until reboot or the next failure.")) + "</p></details>";
+}
+
 String webPage(bool configurationPage = false, bool includeRouteCache = true) {
+  const RouteMemorySnapshot statusMemory = routeMemorySnapshot();
   FlightData statusFlight;
   String statusError;
   uint32_t statusUpdated = 0;
@@ -4718,7 +4797,9 @@ String webPage(bool configurationPage = false, bool includeRouteCache = true) {
   html += String(lastReceivedAircraft) + " / " + String(lastCandidateAircraft);
   html += F("</b><span>Letzter Erfolg</span><b>");
   html += ageText(lastAdsbSuccess);
-  html += F("</b></div></section><section class='statusCard'><h3>Konfiguration</h3><div class='status'><span>Standort / Blickrichtung</span><b>");
+  html += F("</b></div></section>");
+  appendRouteDiagnosticsHtml(html);
+  html += F("<section class='statusCard'><h3>Konfiguration</h3><div class='status'><span>Standort / Blickrichtung</span><b>");
   html += String(siteLatitude, 6) + " / " + String(siteLongitude, 6) +
           " / " + String(viewHeading, 0) + "°";
   html += F("</b><span>Anzeigeradius</span><b>");
@@ -4763,8 +4844,10 @@ String webPage(bool configurationPage = false, bool includeRouteCache = true) {
   html += F("</b><span>Laufzeit</span><b>");
   html += uptimeText();
   html += F("</b><span>Freier RAM</span><b>");
-  html += String(ESP.getFreeHeap() / 1024) + " KiB (Minimum " +
-          String(ESP.getMinFreeHeap() / 1024) + " KiB)";
+  html += String(statusMemory.freeInternal / 1024) + " KiB (Minimum " +
+          String(statusMemory.minimumInternal / 1024) + " KiB)";
+  html += "</b><span>" + String(uiText("Größter freier interner Block", "Largest free internal block")) +
+          "</span><b>" + String(statusMemory.largestInternal) + " Bytes";
   html += F("</b><span>ESP32-S3-Chiptemperatur</span><b>");
   html += numberOrDash(chipTemperatureC()) + " °C";
   html += F("</b></div></details><section class='statusCard'><h3>Wetter und Sensoren</h3><div class='status'><span>BME280</span><b>");
@@ -5633,6 +5716,7 @@ void handleDisplayApi() {
 
 
 void handleStatusApi() {
+  const RouteMemorySnapshot statusMemory = routeMemorySnapshot();
   FlightData statusFlight;
   String statusError;
   uint32_t statusUpdated = 0;
@@ -5906,6 +5990,17 @@ void handleStatusApi() {
           ",\"adsb\":" + String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Adsb)]) +
           ",\"route\":" + String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Route)]) +
           ",\"flash\":" + String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Flash)]) + "}}";
+  // Append without building a second full JSON document or large stack copy.
+  json.remove(json.length() - 1);
+  json += ",\"route_memory\":";
+  appendRouteMemoryJson(json, statusMemory);
+  json += ",\"route_diagnostics\":{\"primary\":";
+  appendRouteRequestJson(json, routeClient.diagnostics().primary);
+  json += ",\"fallback\":";
+  appendRouteRequestJson(json, routeClient.diagnostics().fallback);
+  json += ",\"last_failure\":";
+  appendRouteRequestJson(json, routeClient.diagnostics().lastFailure);
+  json += "}}";
   webServer.sendHeader("Cache-Control", "no-store");
   webServer.sendHeader("Connection", "close");
   webServer.send(200, "application/json; charset=utf-8", json);

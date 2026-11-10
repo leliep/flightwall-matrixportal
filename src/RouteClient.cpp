@@ -4,6 +4,7 @@
 #include <HTTPClient.h>
 #include <Preferences.h>
 #include <WiFiClientSecure.h>
+#include <esp_heap_caps.h>
 
 #include <algorithm>
 #include <cmath>
@@ -13,6 +14,15 @@
 #include "CallsignClassifier.hpp"
 #include "Geo.hpp"
 #include "UnknownCodes.hpp"
+
+RouteMemorySnapshot routeMemorySnapshot() {
+  constexpr uint32_t caps = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
+  RouteMemorySnapshot result;
+  result.freeInternal = heap_caps_get_free_size(caps);
+  result.largestInternal = heap_caps_get_largest_free_block(caps);
+  result.minimumInternal = heap_caps_get_minimum_free_size(caps);
+  return result;
+}
 
 namespace {
 constexpr size_t cacheSlots = 32;
@@ -639,6 +649,8 @@ RouteResult RouteClient::fetchPrimary(const String& callsign,
                                       const RouteContext& context) {
   RouteResult result;
   result.source = primarySourceName(url_);
+  auto &diagnostic = diagnostics_.primary;
+  diagnostic.begin(result.source.c_str(), callsign.c_str(), millis(), routeMemorySnapshot());
   WiFiClientSecure client;
   // The ESP32 has no trusted wall clock before ADS-B data arrives. HTTPS still
   // encrypts transport, but certificate verification is therefore disabled.
@@ -648,6 +660,9 @@ RouteResult RouteClient::fetchPrimary(const String& callsign,
   http.setTimeout(8000);
   if (!http.begin(client, url_)) {
     result.error = "Ungültige Routen-Adresse";
+    diagnostic.after = routeMemorySnapshot();
+    diagnostic.durationMs = millis() - diagnostic.startedMs;
+    diagnostics_.rememberFailure(diagnostic);
     return result;
   }
 
@@ -660,7 +675,9 @@ RouteResult RouteClient::fetchPrimary(const String& callsign,
   serializeJson(request, body);
   http.addHeader("Content-Type", "application/json");
   http.addHeader("Accept", "application/json");
-  const int status = http.POST(body);
+  const int status = captureRouteHttp(diagnostic, client,
+      [&]() { return http.POST(body); }, routeMemorySnapshot, []() { return millis(); });
+  diagnostics_.rememberFailure(diagnostic);
   if (status != HTTP_CODE_OK) {
     result.error = "Routen-HTTP " + String(status);
     http.end();
@@ -703,6 +720,8 @@ RouteResult RouteClient::fetchAdsbDb(const String& callsign,
                                      const RouteContext& context) {
   RouteResult result;
   result.source = "adsbdb";
+  auto &diagnostic = diagnostics_.fallback;
+  diagnostic.begin("adsbdb", callsign.c_str(), millis(), routeMemorySnapshot());
   WiFiClientSecure client;
   client.setInsecure();
   HTTPClient http;
@@ -710,10 +729,15 @@ RouteResult RouteClient::fetchAdsbDb(const String& callsign,
   http.setTimeout(8000);
   if (!http.begin(client, String(adsbDbUrl) + callsign)) {
     result.error = "Ungültige ADSBDB-Adresse";
+    diagnostic.after = routeMemorySnapshot();
+    diagnostic.durationMs = millis() - diagnostic.startedMs;
+    diagnostics_.rememberFailure(diagnostic);
     return result;
   }
   http.addHeader("Accept", "application/json");
-  const int status = http.GET();
+  const int status = captureRouteHttp(diagnostic, client,
+      [&]() { return http.GET(); }, routeMemorySnapshot, []() { return millis(); });
+  diagnostics_.rememberFailure(diagnostic);
   if (status == HTTP_CODE_NOT_FOUND) {
     result.status = "not_found";
     http.end();

@@ -2,6 +2,9 @@
 
 #include <Arduino.h>
 #include <vector>
+#include "RouteDiagnostics.hpp"
+
+RouteMemorySnapshot routeMemorySnapshot();
 
 struct RouteResult {
   String routeCodes;
@@ -53,6 +56,7 @@ class RouteClient {
                      uint32_t now);
   RouteResult test(const String& callsign, const RouteContext& context);
   const String& lastError() const { return lastError_; }
+  const RouteDiagnostics &diagnostics() const { return diagnostics_; }
   bool hasPendingWrites() const;
   void flushPendingWrites();
   std::vector<RouteCacheEntryInfo> cacheEntries(uint32_t now) const;
@@ -85,6 +89,7 @@ class RouteClient {
   bool adsbDbFallbackEnabled_ = true;
   String url_;
   String lastError_;
+  RouteDiagnostics diagnostics_;
   static constexpr size_t memoryCacheSlots_ = 32;
   MemoryCacheEntry memoryCache_[memoryCacheSlots_];
   size_t nextMemorySlot_ = 0;
