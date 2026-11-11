@@ -57,7 +57,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.39` |
+| Firmware | `3.6.1-dual-target.40` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -1051,6 +1051,11 @@ fortgeschrieben. Die Statusseite zeigt aus Stabilitätsgründen die neuesten 64
 Einträge in umgekehrter zeitlicher Reihenfolge; die JSON- und CSV-Downloads
 enthalten das vollständige Journal. Journal und Tagesstatistik werden gemeinsam
 bei lokalem Datumswechsel oder Neustart gelöscht.
+
+Die Flugkennungen in Tagesjournal und Special-Chronik verlinken auf die
+zugehörige FlightAware-Seite in einem neuen Tab. Ohne Flugkennung bleibt die
+Hex-Kennung normaler Text. Der Link bezeichnet die Flugkennung, nicht zwingend
+den historischen Flug zum Zeitpunkt des Eintrags; JSON-/CSV-Exporte bleiben unverändert.
 
 Die Special-Chronik erfasst unabhängig von der Anzeige bis zu 64 Specials und
 Transpondernotfälle, die der aktive ADS-B-Empfänger innerhalb des

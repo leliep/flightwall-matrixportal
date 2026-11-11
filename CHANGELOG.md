@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.6.1-dual-target.40 – 2026-11-11
+
+- Flugkennungen im Tagesjournal und in der Special-Chronik öffnen die passende
+  FlightAware-Seite in einem neuen Tab, gemeinsam für Matrix und Headless
+- URL-Pfad wird kodiert, Linktext HTML-maskiert; ohne Flugkennung bleibt die
+  Hex-Kennung Text. Journal-Daten und JSON-/CSV-Exporte bleiben unverändert
+- Link-Regressionstests und Builds beider Varianten erfolgreich
+- Beide Code-Listen vorab geprüft: LPI (Linköping) samt OurAirports-Koordinaten,
+  SCT (Saab Aircraft), SKV (Skyside) und GSM (Gestair Aviation Malta) ergänzt
+
 ## 3.6.1-dual-target.39 – 2026-11-11
 
 - Routen-Callsigns mit dreibuchstabigem Airline-Präfix und rein numerischer

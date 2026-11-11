@@ -285,6 +285,7 @@ const AirportName names[] = {
   {"LNZ", "Linz"},
   {"LOS", "Lagos"},
   {"LPA", "Gran Canaria"},
+  {"LPI", "Linköping"},
   {"LPL", "Liverpool"},
   {"LRM", "La Romana"},
   {"LSY", "Lismore"},

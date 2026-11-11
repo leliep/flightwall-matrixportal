@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-11-11T09:34:06+01:00",
+  "updated_at": "2026-11-11T14:40:30+01:00",
   "status": "integrated",
   "airports": [
     "ACH",
@@ -78,7 +78,8 @@
     "WNZ",
     "XMN",
     "ZNZ",
-    "NHT"
+    "NHT",
+    "LPI"
   ],
   "airlines": [
     "AAO",
@@ -167,7 +168,10 @@
     "WLF",
     "WOL",
     "GUN",
-    "IXR"
+    "IXR",
+    "SCT",
+    "SKV",
+    "GSM"
   ],
   "observations": [
     {
@@ -943,6 +947,29 @@
       "firmware_version": "3.6.1-dual-target.38",
       "unknown_airports": [],
       "unknown_airlines": [],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "matrixportal_s3",
+      "firmware_version": "3.6.1-dual-target.39",
+      "unknown_airports": [
+        "LPI"
+      ],
+      "unknown_airlines": [
+        "SCT",
+        "SKV"
+      ],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "esp32s3_n16r8_headless",
+      "firmware_version": "3.6.1-dual-target.39",
+      "unknown_airports": [],
+      "unknown_airlines": [
+        "GSM"
+      ],
       "dropped_unknown_airports": 0,
       "dropped_unknown_airlines": 0
     }

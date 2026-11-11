@@ -46,7 +46,7 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.39";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.40";
 constexpr char BUILD_TIMESTAMP[] = "2026-11-10 airport names forward and return scroll";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
@@ -3670,6 +3670,33 @@ String htmlEscape(String value) {
 }
 
 
+String journalFlightHtml(const String &flight, const String &hex) {
+  String callsign = flight;
+  callsign.trim();
+  if (callsign.isEmpty()) return htmlEscape(hex);
+  String encoded;
+  for (const unsigned char *character =
+           reinterpret_cast<const unsigned char *>(callsign.c_str());
+       *character; ++character) {
+    const unsigned char value = *character;
+    if ((value >= 'A' && value <= 'Z') ||
+        (value >= 'a' && value <= 'z') ||
+        (value >= '0' && value <= '9') || value == '-' || value == '_' ||
+        value == '.' || value == '~') {
+      const char literal[] = {static_cast<char>(value), 0};
+      encoded += literal;
+    } else {
+      const char digits[] = "0123456789ABCDEF";
+      const char escaped[] = {'%', digits[value >> 4], digits[value & 15], 0};
+      encoded += escaped;
+    }
+  }
+  return String("<a href=\"https://www.flightaware.com/live/flight/") +
+         encoded + "\" target=\"_blank\" rel=\"noopener noreferrer\">" +
+         htmlEscape(flight) + "</a>";
+}
+
+
 String pageName(uint8_t page) {
   if (page == 0) return uiText("Flugdaten", "Flight data");
   if (page == 1) return uiText("Airline und Route", "Airline and route");
@@ -4179,7 +4206,7 @@ void appendDailyJournalStatus(String &html) {
       const DailyJournalEntry &entry =
           dailyJournal[dailyJournalCount - 1 - offset];
       html += "<tr><td>" + journalTimeText(entry.lastSeen) + "</td><td><b>" +
-              htmlEscape(entry.flight.length() ? entry.flight : entry.hex) +
+              journalFlightHtml(entry.flight, entry.hex) +
               "</b></td><td>" + htmlEscape(entry.type) + "</td><td>" +
               htmlEscape(entry.routeCodes.length() ? String(entry.routeCodes) : String("-")) +
               "</td><td>" + htmlEscape(journalClassification(entry)) +
@@ -4767,7 +4794,7 @@ String webPage(bool configurationPage = false, bool includeRouteCache = true) {
       const SpecialChronicleEntry &entry =
           specialChronicle[chronologicalOrder[offset]];
       html += "<tr><td>" + journalTimeText(entry.lastSeen) + "</td><td><b>" +
-              htmlEscape(entry.flight.length() ? entry.flight : entry.hex) +
+              journalFlightHtml(entry.flight, entry.hex) +
               "</b></td><td>" + htmlEscape(entry.specialType) +
               "</td><td>" + htmlEscape(entry.type) + "</td><td>" +
               numberOrDash(entry.minimumDistanceKm) + " km</td><td>" +
