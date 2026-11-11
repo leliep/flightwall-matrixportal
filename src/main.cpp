@@ -46,7 +46,7 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.40";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.41";
 constexpr char BUILD_TIMESTAMP[] = "2026-11-10 airport names forward and return scroll";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
@@ -4307,7 +4307,7 @@ void appendRouteRequestHtml(String &html, const char *label,
 
 void appendRouteDiagnosticsHtml(String &html) {
   const auto &diagnostics = routeClient.diagnostics();
-  html += "<details class='statusCard wide'><summary>" +
+  html += "<details id='routeDiagnosis' class='statusCard wide'><summary>" +
           String(uiText("Routen-Verbindungsdiagnose", "Route connection diagnostics")) + "</summary>";
   appendRouteRequestHtml(html, uiText("Hauptdienst", "Primary service"), diagnostics.primary);
   appendRouteRequestHtml(html, "ADSBDB", diagnostics.fallback);

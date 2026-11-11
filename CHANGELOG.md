@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.6.1-dual-target.41 – 2026-11-11
+
+- Routen-Verbindungsdiagnose erhält eine feste HTML-ID: Der vorhandene
+  Status-Refresh bewahrt damit den geöffneten Zustand auch nach 10 Sekunden
+- Manuelles Schließen bleibt erhalten; gemeinsamer Fix für Matrix und Headless
+- Unbekannte Airport-/Airline-Codes beider Controller vorab geprüft: Listen leer
+
 ## 3.6.1-dual-target.40 – 2026-11-11
 
 - Flugkennungen im Tagesjournal und in der Special-Chronik öffnen die passende
