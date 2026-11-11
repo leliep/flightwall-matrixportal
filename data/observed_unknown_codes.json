@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-11-10T13:06:22+01:00",
+  "updated_at": "2026-11-11T09:34:06+01:00",
   "status": "integrated",
   "airports": [
     "ACH",
@@ -77,7 +77,8 @@
     "WIE",
     "WNZ",
     "XMN",
-    "ZNZ"
+    "ZNZ",
+    "NHT"
   ],
   "airlines": [
     "AAO",
@@ -164,7 +165,9 @@
     "UNC",
     "VOS",
     "WLF",
-    "WOL"
+    "WOL",
+    "GUN",
+    "IXR"
   ],
   "observations": [
     {
@@ -725,7 +728,9 @@
     {
       "controller": "matrixportal_s3",
       "firmware_version": "3.6.1-dual-target.20",
-      "unknown_airports": ["BZG"],
+      "unknown_airports": [
+        "BZG"
+      ],
       "unknown_airlines": [],
       "dropped_unknown_airports": 0,
       "dropped_unknown_airlines": 0
@@ -733,16 +738,35 @@
     {
       "controller": "esp32s3_n16r8_headless",
       "firmware_version": "3.6.1-dual-target.20",
-      "unknown_airports": ["SNR", "MEL", "BZG", "WIE"],
-      "unknown_airlines": ["ITL", "AWC", "CMB", "VOS", "MMZ", "NVD", "JVW"],
+      "unknown_airports": [
+        "SNR",
+        "MEL",
+        "BZG",
+        "WIE"
+      ],
+      "unknown_airlines": [
+        "ITL",
+        "AWC",
+        "CMB",
+        "VOS",
+        "MMZ",
+        "NVD",
+        "JVW"
+      ],
       "dropped_unknown_airports": 0,
       "dropped_unknown_airlines": 0
     },
     {
       "controller": "matrixportal_s3",
       "firmware_version": "3.6.1-dual-target.22",
-      "unknown_airports": ["EDRJ", "EDLA"],
-      "unknown_airlines": ["WOL", "JMP"],
+      "unknown_airports": [
+        "EDRJ",
+        "EDLA"
+      ],
+      "unknown_airlines": [
+        "WOL",
+        "JMP"
+      ],
       "dropped_unknown_airports": 0,
       "dropped_unknown_airlines": 0
     },
@@ -757,24 +781,39 @@
     {
       "controller": "matrixportal_s3",
       "firmware_version": "3.6.1-dual-target.23",
-      "unknown_airports": ["EDAZ"],
-      "unknown_airlines": ["UNC"],
+      "unknown_airports": [
+        "EDAZ"
+      ],
+      "unknown_airlines": [
+        "UNC"
+      ],
       "dropped_unknown_airports": 0,
       "dropped_unknown_airlines": 0
     },
     {
       "controller": "esp32s3_n16r8_headless",
       "firmware_version": "3.6.1-dual-target.23",
-      "unknown_airports": ["JJG", "HAU"],
-      "unknown_airlines": ["ALX", "AZE", "UNC"],
+      "unknown_airports": [
+        "JJG",
+        "HAU"
+      ],
+      "unknown_airlines": [
+        "ALX",
+        "AZE",
+        "UNC"
+      ],
       "dropped_unknown_airports": 0,
       "dropped_unknown_airlines": 0
     },
     {
       "controller": "matrixportal_s3",
       "firmware_version": "3.6.1-dual-target.31",
-      "unknown_airports": ["OBF"],
-      "unknown_airlines": ["MAC"],
+      "unknown_airports": [
+        "OBF"
+      ],
+      "unknown_airlines": [
+        "MAC"
+      ],
       "dropped_unknown_airports": 0,
       "dropped_unknown_airlines": 0
     },
@@ -883,6 +922,27 @@
       "unknown_airlines": [
         "AME"
       ],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "matrixportal_s3",
+      "firmware_version": "3.6.1-dual-target.38",
+      "unknown_airports": [
+        "NHT"
+      ],
+      "unknown_airlines": [
+        "GUN",
+        "IXR"
+      ],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "esp32s3_n16r8_headless",
+      "firmware_version": "3.6.1-dual-target.38",
+      "unknown_airports": [],
+      "unknown_airlines": [],
       "dropped_unknown_airports": 0,
       "dropped_unknown_airlines": 0
     }

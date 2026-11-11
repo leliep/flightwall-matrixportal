@@ -1604,6 +1604,11 @@
     "longitude": -76.289299,
     "elevation_ft": 17
   },
+  "NHT": {
+    "latitude": 51.553001,
+    "longitude": -0.418167,
+    "elevation_ft": 124
+  },
   "NKG": {
     "latitude": 31.735032,
     "longitude": 118.865949,

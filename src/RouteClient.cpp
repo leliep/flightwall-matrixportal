@@ -1,4 +1,5 @@
 #include "RouteClient.hpp"
+#include "RouteCallsign.hpp"
 
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
@@ -705,7 +706,8 @@ RouteResult RouteClient::fetchPrimary(const String& callsign,
     rows = document["planes"].as<JsonArrayConst>();
   for (JsonObjectConst row : rows) {
     const String returned = upperTrimmed(row["callsign"] | "");
-    if (!returned.isEmpty() && returned != callsign) continue;
+    if (!returned.isEmpty() &&
+        !routeCallsignMatches(callsign.c_str(), returned.c_str())) continue;
     extractCodes(row, result);
     result.airlineCode = upperTrimmed(row["airline_code"] | "");
     if (result.airlineCode == "UNKNOWN") result.airlineCode = "";
@@ -769,9 +771,15 @@ RouteResult RouteClient::fetchAdsbDb(const String& callsign,
     return result;
   }
   const String returnedCallsign = upperTrimmed(route["callsign"] | "");
-  if ((!returnedCallsign.isEmpty() && returnedCallsign != callsign) ||
-      (context.hasPosition &&
-       !adsbDbRoutePlausible(route, context.latitude, context.longitude))) {
+  if (!returnedCallsign.isEmpty() &&
+      !routeCallsignMatches(callsign.c_str(), returnedCallsign.c_str())) {
+    result.source = "adsbdb-rejected";
+    result.status = "rejected";
+    result.error = "ADSBDB-Callsign stimmt nicht mit der Anfrage überein";
+    return result;
+  }
+  if (context.hasPosition &&
+      !adsbDbRoutePlausible(route, context.latitude, context.longitude)) {
     result.source = "adsbdb-rejected";
     result.status = "rejected";
     result.error = "ADSBDB-Route passt nicht zur Flugposition";

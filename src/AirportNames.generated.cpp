@@ -325,6 +325,7 @@ const AirportName names[] = {
   {"NDR", "Nador"},
   {"NGO", "Nagoya"},
   {"NGU", "Norfolk Naval Station"},
+  {"NHT", "London-Northolt"},
   {"NKG", "Nanjing"},
   {"NKT", "Şırnak"},
   {"NLU", "Mexiko-Stadt-Felipe Ángeles"},

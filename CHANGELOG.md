@@ -1,5 +1,19 @@
 # Changelog
 
+## 3.6.1-dual-target.39 – 2026-11-11
+
+- Routen-Callsigns mit dreibuchstabigem Airline-Präfix und rein numerischer
+  Flugnummer tolerieren führende Nullen, z. B. DLH072 und DLH72; andere
+  Präfixe, Flugnummern und Buchstabensuffixe bleiben strikt getrennt
+- Vergleich gilt für Hauptdienst und ADSBDB; Cache-Schlüssel bleiben unverändert
+- ADSBDB meldet abweichendes Callsign und unplausible Position getrennt;
+  geografische Plausibilitätsprüfung bleibt erhalten
+- Unbekannte Codes beider Controller geprüft: NHT (London-Northolt) samt
+  OurAirports-Koordinaten sowie GUN (Grant Aviation) und IXR (iXAir) ergänzt;
+  Lookup-Tabellen neu erzeugt und validiert
+- Regressionstests für führende Nullen, falsche Präfixe/Nummern, Suffixe und
+  getrennte Fehlerpfade; beide Firmwarevarianten gebaut, kein OTA
+
 ## 3.6.1-dual-target.38 – 2026-11-10
 
 - Separate Seite „Flughafennamen“ auf den gemeinsamen Vor-/Rücklauf von CPA

@@ -57,7 +57,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.38` |
+| Firmware | `3.6.1-dual-target.39` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -1024,6 +1024,9 @@ Lokale Diagnoseprüfungen ohne Controller:
 c++ -std=c++11 -Wall -Wextra -pedantic -Iinclude tools/test_route_diagnostics.cpp -o /tmp/flightwall-route-diagnostics
 /tmp/flightwall-route-diagnostics
 python3 tools/test_route_diagnostic_output.py
+c++ -std=c++11 -Wall -Wextra -pedantic -Iinclude tools/test_route_callsign.cpp -o /tmp/flightwall-route-callsign
+/tmp/flightwall-route-callsign
+python3 tools/test_route_validation.py
 ```
 
 ### Verfügbare Tests
