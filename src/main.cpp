@@ -34,6 +34,8 @@
 #include "RouteClient.hpp"
 #include "StatusLed.hpp"
 #include "UnknownCodes.hpp"
+#include "LookupOverrides.hpp"
+#include "LookupStorage.hpp"
 #include "WebDisplay.hpp"
 #include "secrets.h"
 
@@ -46,7 +48,7 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.41";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.42";
 constexpr char BUILD_TIMESTAMP[] = "2026-11-10 airport names forward and return scroll";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
@@ -3489,7 +3491,9 @@ bool fetchLocalFlight() {
     } else if (isMilitaryCallsign(selected.flight)) {
       next.airline = "Military";
     } else {
-      next.airline = providedAirline.length() &&
+      String overrideAirline;
+      if (lookupOverrideAirline(code, overrideAirline)) next.airline = overrideAirline;
+      else next.airline = providedAirline.length() &&
                              providedAirlineComparison != "UNKNOWN"
                          ? providedAirline
                          : translatedAirline;
@@ -4305,6 +4309,28 @@ void appendRouteRequestHtml(String &html, const char *label,
           String(d.after.minimumInternal) + "</p>";
 }
 
+String lookupStatusJson() {
+  return String("{\"storage_ready\":") + (lookupStorageReady() ? "true" : "false") +
+      ",\"version\":\"" + jsonEscape(lookupDataVersion()) +
+      "\",\"airports\":" + String(lookupAirportCount()) +
+      ",\"airlines\":" + String(lookupAirlineCount()) +
+      ",\"capacity_bytes\":" + String(lookupStorageCapacity()) +
+      ",\"file_bytes\":" + String(lookupStorageSize()) +
+      ",\"psram_bytes\":" + String(lookupPsramBytes()) +
+      ",\"allocation_failures\":" + String(lookupAllocationFailures()) +
+      ",\"last_error\":\"" + jsonEscape(lookupLastError()) + "\"}";
+}
+
+void appendLookupStatusHtml(String &html) {
+  html += "<section class='statusCard wide'><h3>Lookup " +
+      String(uiText("Ergänzungen", "extensions")) + "</h3><p>" +
+      htmlEscape(lookupDataVersion()) + " · " + String(lookupAirportCount()) +
+      " Airports · " + String(lookupAirlineCount()) + " Airlines · " +
+      String(lookupPsramBytes()) + " PSRAM bytes</p><p>" +
+      htmlEscape(lookupLastError()) + "</p><a href='/lookups'>" +
+      uiText("Lookup-Datei verwalten", "Manage lookup file") + "</a></section>";
+}
+
 void appendRouteDiagnosticsHtml(String &html) {
   const auto &diagnostics = routeClient.diagnostics();
   html += "<details id='routeDiagnosis' class='statusCard wide'><summary>" +
@@ -4567,6 +4593,7 @@ String webPage(bool configurationPage = false, bool includeRouteCache = true) {
   html += String(highLuxThreshold, 0);
   html += F("'></label></div></fieldset>");
 #endif
+    html += "<fieldset><legend>Lookup</legend><a href='/lookups'>" + String(uiText("Lookup-Ergänzungen verwalten", "Manage lookup extensions")) + "</a></fieldset>";
     html += F("<fieldset><legend>Konfiguration sichern</legend><p class='muted'>Die Sicherungsdatei enthält auch WLAN-, MQTT- und OTA-Passwörter. Bewahre sie geschützt auf.</p><div class='buttonRow'><a class='button' href='/configuration.json' download>Konfiguration herunterladen</a><input id='configRestoreFile' type='file' accept='application/json,.json'><button type='button' onclick='restoreConfiguration()'>Sicherung wiederherstellen</button></div><p id='configRestoreResult' class='muted'></p></fieldset><button type='submit'>Einstellungen speichern</button></form><script>async function restoreConfiguration(){const f=document.getElementById('configRestoreFile').files[0],o=document.getElementById('configRestoreResult');if(!f){o.textContent='Bitte zuerst eine JSON-Datei auswählen.';return}if(!confirm('Gesamte Konfiguration ersetzen und Controller neu starten?'))return;o.textContent='Wiederherstellung läuft…';try{const r=await fetch('/configuration/restore',{method:'POST',headers:{'Content-Type':'application/json'},body:await f.text()});o.textContent=await r.text();if(r.ok)setTimeout(()=>location.href='/status',5000)}catch(e){o.textContent='Wiederherstellung fehlgeschlagen.'}}</script>");
   } else {
     html += F("<fieldset><legend>Status <small class='muted' id='statusRefresh'>wird automatisch aktualisiert</small></legend><div id='statusData'><div class='healthbar'>");
@@ -4851,6 +4878,7 @@ String webPage(bool configurationPage = false, bool includeRouteCache = true) {
   html += ageText(lastAdsbSuccess);
   html += F("</b></div></section>");
   appendRouteDiagnosticsHtml(html);
+  appendLookupStatusHtml(html);
   html += F("<section class='statusCard'><h3>Konfiguration</h3><div class='status'><span>Standort / Blickrichtung</span><b>");
   html += String(siteLatitude, 6) + " / " + String(siteLongitude, 6) +
           " / " + String(viewHeading, 0) + "°";
@@ -6058,6 +6086,8 @@ void handleStatusApi() {
           ",\"adsb\":" + String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Adsb)]) +
           ",\"route\":" + String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Route)]) +
           ",\"flash\":" + String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Flash)]) + "}}";
+  json.remove(json.length() - 1);
+  json += ",\"lookup_overrides\":" + lookupStatusJson() + "}";
   // Append without building a second full JSON document or large stack copy.
   json.remove(json.length() - 1);
   json += ",\"radar_trails_storage_bytes\":" + String(radarTrailStorage ? sizeof(RadarTrailStorage) : 0) +
@@ -6435,6 +6465,152 @@ bool otaAuthenticated() {
 }
 
 
+namespace {
+char* lookupUploadData = nullptr;
+size_t lookupUploadBytes = 0;
+bool lookupUploadComplete = false;
+bool lookupUploadStarted = false;
+String lookupUploadError;
+void discardLookupUpload() {
+  releaseLookupUpload(lookupUploadData); lookupUploadData = nullptr;
+  lookupUploadBytes = 0; lookupUploadComplete = false; lookupUploadStarted = false;
+}
+bool lookupWriteAuthorized() {
+  return otaPassword.length() >= 8 &&
+      webServer.header("X-FlightWall-Lookup") == "1" &&
+      webServer.authenticate("admin", otaPassword.c_str());
+}
+struct LookupFlashGuard {
+  LookupFlashGuard() {
+    settingsWritePreparing = true; delay(120);
+    settingsWriteInProgress = true;
+  }
+  ~LookupFlashGuard() { settingsWriteInProgress = false; settingsWritePreparing = false; }
+};
+}
+
+void handleLookupPage() {
+  if (!otaAuthenticated()) return;
+  String html = "<!doctype html><html lang='" + String(uiEnglish ? "en" : "de") +
+      "'><meta name='viewport' content='width=device-width'><title>Lookup</title>"
+      "<style>body{font:16px system-ui;max-width:720px;margin:30px auto;padding:16px}button,input{margin:8px 0;padding:9px}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style><body><h1>Lookup " +
+      String(uiText("Ergänzungen", "extensions")) + "</h1><p>" +
+      uiText("Eine Datei ersetzt alle bisherigen Ergänzungen. Eingebaute Tabellen bleiben erhalten. Kein Neustart nötig.",
+             "One file replaces all previous extensions. Built-in tables remain available. No restart required.") + "</p><p>" +
+      uiText("Version", "Version") + ": " + htmlEscape(lookupDataVersion()) +
+      " · Airports: " + String(lookupAirportCount()) + " · Airlines: " +
+      String(lookupAirlineCount()) + "</p><p>" + htmlEscape(lookupLastError()) + "</p>";
+  if (!lookupStorageReady()) {
+    html += "<button id='initialize' type='button'>" + String(uiText("Lookup-Speicher einrichten", "Initialize lookup storage")) + "</button><p>" +
+        uiText("Nur bei der ersten Verwendung: löscht den Dateispeicher der Lookup-Partition. Geräteeinstellungen bleiben erhalten.",
+               "First use only: erases the lookup filesystem partition. Device settings are preserved.") + "</p>";
+  }
+  html += "<p><a href='/lookups-example.json'>" + String(uiText("Beispieldatei", "Example file")) +
+      "</a> · <a href='/lookups.json'>" + uiText("Aktuelle Ergänzungen herunterladen", "Download current extensions") +
+      "</a></p><form id='lookupForm'><input id='lookupFile' type='file' accept='.json,application/json' required><br><button>" +
+      uiText("Prüfen und übernehmen", "Validate and apply") + "</button></form><p>" +
+      uiText("Maximal 64 KiB, jeweils 256 Airports und Airlines. Flughäfen benötigen Namen und Koordinaten. Namen: Airports 28, Airlines 64 Zeichen.",
+             "Maximum 64 KiB, 256 airports and 256 airlines. Airports require names and coordinates. Names: airports 28, airlines 64 characters.") +
+      "</p><pre id='lookupResult'></pre><p><a href='/config'>" + uiText("Zurück", "Back") + "</a></p>";
+  html += R"HTML(<script>
+const result=document.getElementById('lookupResult');
+document.getElementById('lookupForm').addEventListener('submit',async e=>{
+ e.preventDefault();const f=document.getElementById('lookupFile').files[0];
+ if(!f||f.size<1||f.size>65536){result.textContent='File size must be 1–65536 bytes';return}
+ const data=new FormData();data.append('lookup',f);result.textContent='…';
+ try{const r=await fetch('/lookups/upload',{method:'POST',headers:{'X-FlightWall-Lookup':'1'},body:data});result.textContent=await r.text();if(r.ok)setTimeout(()=>location.reload(),1800)}catch(e){result.textContent='Upload failed; check status before retrying'}
+});
+const initialize=document.getElementById('initialize');if(initialize)initialize.onclick=async()=>{
+ if(!confirm('Lookup-Dateispeicher einrichten und formatieren? / Initialize and format lookup file storage?'))return;
+ try{const r=await fetch('/lookups/initialize',{method:'POST',headers:{'X-FlightWall-Lookup':'1'}});result.textContent=await r.text();if(r.ok)location.reload()}catch(e){result.textContent='Initialization failed'}
+};
+</script></body></html>)HTML";
+  webServer.sendHeader("Cache-Control", "no-store");
+  webServer.send(200, "text/html; charset=utf-8", html);
+}
+
+void handleLookupUpload() {
+  if (!lookupWriteAuthorized()) return;
+  HTTPUpload &upload = webServer.upload();
+  if (upload.status == UPLOAD_FILE_START) {
+    if (lookupUploadStarted) {
+      lookupUploadError = "Only one lookup file per request"; return;
+    }
+    lookupUploadStarted = true;
+    lookupUploadError = ""; lookupUploadBytes = 0;
+    if (upload.name != "lookup") { lookupUploadError = "Expected lookup file"; return; }
+    lookupUploadData = static_cast<char*>(allocateLookupUpload());
+    if (!lookupUploadData) lookupUploadError = "Insufficient PSRAM";
+  } else if (upload.status == UPLOAD_FILE_WRITE) {
+    if (!lookupUploadData || !lookupUploadError.isEmpty()) return;
+    if (upload.currentSize > lookupUploadLimit - lookupUploadBytes) {
+      lookupUploadError = "Lookup file exceeds 65536 bytes"; return;
+    }
+    memcpy(lookupUploadData + lookupUploadBytes, upload.buf, upload.currentSize);
+    lookupUploadBytes += upload.currentSize;
+  } else if (upload.status == UPLOAD_FILE_END) {
+    lookupUploadComplete = true;
+  } else if (upload.status == UPLOAD_FILE_ABORTED) {
+    discardLookupUpload(); lookupUploadError = "Upload aborted";
+  }
+}
+void finishLookupUpload() {
+  if (!otaAuthenticated()) { discardLookupUpload(); return; }
+  if (!lookupWriteAuthorized()) {
+    discardLookupUpload(); webServer.send(403, "text/plain", "Lookup request header required"); return;
+  }
+  bool installed = false;
+  if (lookupUploadData && lookupUploadComplete && lookupUploadBytes && lookupUploadError.isEmpty()) {
+    LookupFlashGuard guard;
+    NetworkPhaseScope phase(NetworkPhase::Flash);
+    installed = installLookupOverrides(lookupUploadData, lookupUploadBytes);
+    if (!installed) lookupUploadError = lookupLastError();
+  } else if (lookupUploadError.isEmpty()) lookupUploadError = "Incomplete lookup upload";
+  discardLookupUpload();
+  if (installed) {
+    forgetResolvedUnknownCodes();
+    routedFlight = ""; // Refresh current names through the existing route cache.
+  }
+  webServer.send(installed ? 200 : 400, "text/plain; charset=utf-8", installed
+      ? uiText("Lookup-Ergänzungen übernommen. Kein Neustart erforderlich.", "Lookup extensions applied. No restart required.")
+      : lookupUploadError);
+  lookupUploadError = "";
+}
+void handleLookupInitialize() {
+  if (!otaAuthenticated()) return;
+  if (!lookupWriteAuthorized()) { webServer.send(403, "text/plain", "Lookup request header required"); return; }
+  LookupFlashGuard guard;
+  NetworkPhaseScope phase(NetworkPhase::Flash);
+  const bool ok = initializeLookupStorage();
+  webServer.send(ok ? 200 : 503, "text/plain; charset=utf-8", ok
+      ? "Lookup storage ready" : lookupLastError());
+}
+void handleLookupDownload() {
+  if (!otaAuthenticated()) return;
+  const size_t size = lookupStorageSize();
+  if (!size) {
+    webServer.send(200, "application/json", "{\"format\":\"flightwall-lookups-v1\",\"version\":\"empty\",\"airports\":[],\"airlines\":[]}"); return;
+  }
+  char* data = static_cast<char*>(allocateLookupUpload());
+  if (!data || !lookupStorageRead(data, size)) {
+    releaseLookupUpload(data); webServer.send(503, "text/plain", "Cannot read lookup file"); return;
+  }
+  webServer.sendHeader("Content-Disposition", "attachment; filename=flightwall-lookups.json");
+  webServer.setContentLength(size);
+  webServer.send(200, "application/json; charset=utf-8", "");
+  webServer.sendContent(data, size);
+  releaseLookupUpload(data);
+}
+void handleLookupExample() {
+  webServer.sendHeader("Content-Disposition", "attachment; filename=flightwall-lookups-example.json");
+  webServer.send(200, "application/json; charset=utf-8", R"JSON({
+  "format": "flightwall-lookups-v1",
+  "version": "example-1",
+  "airports": [{"code":"DUS","name":"Düsseldorf","latitude":51.2895,"longitude":6.76678,"elevation_ft":147}],
+  "airlines": [{"code":"DLH","name":"Lufthansa"}]
+})JSON");
+}
+
 void handleOtaPage() {
   if (!otaAuthenticated()) return;
   String html = R"HTML(<!doctype html><html lang="de"><meta name="viewport" content="width=device-width">
@@ -6681,6 +6857,13 @@ void serviceMqtt() {
 void startWebServer() {
   if (webServerStarted) return;
   if (!webServerConfigured) {
+    const char* lookupHeaders[] = {"X-FlightWall-Lookup"};
+    webServer.collectHeaders(lookupHeaders, 1);
+    webServer.on("/lookups", HTTP_GET, handleLookupPage);
+    webServer.on("/lookups/upload", HTTP_POST, finishLookupUpload, handleLookupUpload);
+    webServer.on("/lookups/initialize", HTTP_POST, handleLookupInitialize);
+    webServer.on("/lookups.json", HTTP_GET, handleLookupDownload);
+    webServer.on("/lookups-example.json", HTTP_GET, handleLookupExample);
     webServer.on("/", HTTP_GET, []() {
       pulseHttpActivity();
       webServer.sendHeader("Location",
@@ -6968,6 +7151,7 @@ void setup() {
       static_cast<unsigned>(radarTrailStorage ? sizeof(RadarTrailStorage) : 0),
       ESP.getFreePsram());
   displayTaskHandle = xTaskGetCurrentTaskHandle();
+  initializeLookupOverrides();
   flightMutex = xSemaphoreCreateMutex();
   preferencesMutex = xSemaphoreCreateMutex();
   weatherMutex = xSemaphoreCreateMutex();

@@ -421,6 +421,7 @@ RouteResult RouteClient::readMemoryCache(const String& callsign,
       return {};
     }
     RouteResult result = entry.route;
+    fillNames(result);
     String reason;
     if (result.found() && !routePlausible(result, context, reason)) {
       rejectRoute(result, reason);

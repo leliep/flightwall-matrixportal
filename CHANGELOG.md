@@ -1,5 +1,23 @@
 # Changelog
 
+## 3.6.1-dual-target.42 – 2026-11-11
+
+- Separate Lookup-Ergänzungsdatei für Airportnamen/Koordinaten und Airlines:
+  manueller authentifizierter Upload, Download, Beispiel und Verwaltungsseite
+- Gemeinsames geprüftes JSON-Format: 64 KiB, je 256 eindeutige Codes, gültige
+  UTF-8-Namen, Koordinaten und optionale Höhen; Ergänzungen vor Grundbestand
+- Upload und aktive JSON-Daten ausschließlich in PSRAM; begrenzte Reservierung,
+  Fehler-Rückfall und Tests ohne internen Speicher-Fallback
+- Vorhandene Partitionen unverändert: Matrix FFat, Headless LittleFS; explizite
+  Ersteinrichtung statt automatischer Formatierung, sonst nur kurzzeitig gemountet
+- Zwei Dateien, Rücklesen/CRC und NVS-Dateizeiger: Übernahme erst nach erfolgreicher
+  Prüfung und Dateisystemabschluss, ohne Neustart und ohne Konfigurationsänderung
+- Status/API zeigen Version, Anzahl und Speicher-/Fehlerdaten; bereits aufgelöste
+  unbekannte Codes werden entfernt, Routencache-Namen beim nächsten Zugriff erneuert
+- Generator für Uploadpakete und Fehler-/Grenzwerttests für beide Varianten
+- Beide Controller vorab geprüft: BNJ (ASL Group) und JFL (Jetfly Airline) ergänzt;
+  generierte Tabellen erneuert/validiert. Kein OTA
+
 ## 3.6.1-dual-target.41 – 2026-11-11
 
 - Routen-Verbindungsdiagnose erhält eine feste HTML-ID: Der vorhandene

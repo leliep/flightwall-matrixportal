@@ -1,4 +1,7 @@
 #include "UnknownCodes.hpp"
+#include "AirportNames.hpp"
+#include "AirlineNames.hpp"
+#include "AirportCoordinates.hpp"
 
 namespace {
 String airports[unknownCodeLimit];
@@ -44,3 +47,19 @@ const String& unknownAirportAt(size_t index) { return airports[index]; }
 const String& unknownAirlineAt(size_t index) { return airlines[index]; }
 size_t droppedUnknownAirports() { return airportDrops; }
 size_t droppedUnknownAirlines() { return airlineDrops; }
+
+void forgetResolvedUnknownCodes() {
+  size_t kept = 0;
+  for (size_t index = 0; index < airportCount; ++index) {
+    AirportCoordinates coordinates;
+    if (airportDisplayName(airports[index]).isEmpty() ||
+        !airportCoordinates(airports[index], coordinates)) airports[kept++] = airports[index];
+  }
+  for (size_t index = kept; index < airportCount; ++index) airports[index] = "";
+  airportCount = kept;
+  kept = 0;
+  for (size_t index = 0; index < airlineCount; ++index)
+    if (airlineDisplayName(airlines[index]).isEmpty()) airlines[kept++] = airlines[index];
+  for (size_t index = kept; index < airlineCount; ++index) airlines[index] = "";
+  airlineCount = kept;
+}

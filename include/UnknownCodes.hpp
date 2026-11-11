@@ -12,3 +12,5 @@ const String& unknownAirportAt(size_t index);
 const String& unknownAirlineAt(size_t index);
 size_t droppedUnknownAirports();
 size_t droppedUnknownAirlines();
+
+void forgetResolvedUnknownCodes();

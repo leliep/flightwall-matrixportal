@@ -57,7 +57,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.41` |
+| Firmware | `3.6.1-dual-target.42` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -907,6 +907,92 @@ und Airlines auf der Statusseite geprüft und neue Codes in die Quelldaten
 übernommen werden, da diese Beobachtungen nur im RAM liegen.
 
 ## Übersetzungstabellen pflegen
+
+### Lookup-Ergänzungen ohne Firmwareupdate
+
+Unter `/config` → **Lookup-Ergänzungen verwalten** beziehungsweise `/lookups`
+werden zusätzliche Airportnamen, Koordinaten und Airlines unabhängig von der
+Firmware hochgeladen. Anmeldung: Benutzer `admin` mit dem bestehenden
+OTA-Passwort; ohne eingerichtetes OTA-Passwort ist der Upload gesperrt.
+Jeder Controller erhält die Datei separat. Es gibt keinen automatischen Download.
+
+1. Bei der ersten Verwendung gegebenenfalls **Lookup-Speicher einrichten**
+   wählen. Diese ausdrücklich bestätigte Aktion formatiert nur die vorhandene
+   Datenpartition für die Lookup-Dateien; NVS-Konfiguration, OTA-Slots und
+   Matrix-UF2 bleiben erhalten. Bei einem späteren Mountfehler nicht ungeprüft
+   formatieren: Auch ein beschädigtes oder fremdes Dateisystem kann die Ursache sein.
+2. Beispieldatei herunterladen, ergänzen und als JSON auswählen. Vorhandene
+   Ergänzungen vorher herunterladen und in der neuen Datei beibehalten.
+3. **Prüfen und übernehmen** ersetzt den gesamten Ergänzungsbestand. Es findet
+   kein Neustart statt. Neue Namen werden beim nächsten Flugdatendurchlauf auch
+   aus dem bestehenden Routencache aufgelöst; alte Journale werden nicht umgeschrieben.
+
+Format (vollständiges Beispiel: `data/lookup_extensions.example.json`):
+
+```json
+{
+  "format": "flightwall-lookups-v1",
+  "version": "example-1",
+  "airports": [
+    {"code": "DUS", "name": "Düsseldorf", "latitude": 51.2895,
+     "longitude": 6.76678, "elevation_ft": 147}
+  ],
+  "airlines": [{"code": "DLH", "name": "Lufthansa"}]
+}
+```
+
+Alle vier Hauptfelder sind erforderlich. Flughafen-Codes haben 3–4,
+Airline-Codes 2–4 Großbuchstaben/Ziffern; Codes müssen innerhalb ihrer Tabelle
+eindeutig sein. Jeder Flughafen benötigt beide Koordinaten und `elevation_ft`
+als ganze Zahl zwischen −1500 und 30000 oder `null`. Namen müssen gültiges UTF-8
+ohne Steuerzeichen sein, maximal 28 Zeichen für Airports bzw. 64 für Airlines;
+die Datenversion enthält 1–64 Zeichen. Grenzen: 64 KiB und je 256 Einträge.
+Ergänzungen haben bei Lookups Vorrang vor dem eingebauten Grundbestand.
+Eine Datei mit leeren Arrays entfernt alle Ergänzungen und stellt den Grundbestand her.
+
+Eine Datei aus den gepflegten Quellen erzeugen:
+
+```bash
+python3 tools/generate_lookup_extensions.py --version local-1 \
+  --airports DUS --airlines DLH BNJ JFL --output work/lookup-extensions.json
+```
+
+Die vorhandenen Partitionstabellen bleiben unverändert:
+
+| Variante | Datenpartition | Dateisystem | Größe |
+|---|---|---|---|
+| MatrixPortal | `ffat`, Offset `0x450000` | FAT/FFat | 3.6875 MiB |
+| Headless N16R8 | `spiffs`, Offset `0xc90000` | LittleFS | 3.375 MiB |
+
+Die Tabelle beschreibt die Partitionen; nutzbarer Dateisystemplatz ist wegen
+Verwaltungsdaten kleiner. Zwei abwechselnde Dateien mit Rückleseprüfung und
+CRC sowie ein separat gespeicherter aktiver Dateizeiger schützen die vorherige
+Version bei fehlgeschlagenen Updates. Der Zeiger wird erst nach Schließen und
+Aushängen des Dateisystems in einem eigenen NVS-Namespace geändert.
+Firmware-OTA überschreibt diese Dateien nicht. `uploadfs`, Neuformatierung oder
+vollständiges Flash-Löschen können sie entfernen; deshalb separat herunterladen.
+Die Konfigurationssicherung enthält die Ergänzungsdatei nicht.
+
+Uploadpuffer und JSON-Daten liegen ausschließlich im PSRAM, zusammen auf 1 MiB
+begrenzt. Dateisystemtreiber benötigen während des Zugriffs zusätzlich interne
+Puffer; das Dateisystem bleibt im normalen Betrieb ausgehängt. Fehlerhafte oder
+zu große Dateien, fehlender PSRAM sowie Schreib-/Prüffehler aktivieren keinen
+neuen Bestand. Beim Start mit unlesbarer Datei bleibt der Grundbestand verfügbar.
+
+Statusseite und `/api/status` zeigen unter `lookup_overrides` Datenversion,
+Airport-/Airlineanzahl, Dateigröße, Partitionskapazität, reservierte PSRAM-Bytes,
+Reservierungsfehler und den letzten Fehler. Aufgelöste Codes werden nach einem
+Upload aus den unbekannten Listen entfernt; Überlaufzähler bleiben erhalten.
+
+Lokale Tests mit realem Parser, beiden generierten Lookup-Varianten und
+simulierten PSRAM-, Datei- und NVS-Fehlern:
+
+```bash
+python3 tools/test_lookup_overrides.py
+python3 tools/test_lookup_upload.py
+```
+
+### Eingebauten Grundbestand pflegen
 
 Die editierbaren Quellen liegen hier:
 

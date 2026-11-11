@@ -1,0 +1,19 @@
+{
+  "format": "flightwall-lookups-v1",
+  "version": "example-1",
+  "airports": [
+    {
+      "code": "DUS",
+      "name": "Düsseldorf",
+      "latitude": 51.289501,
+      "longitude": 6.76678,
+      "elevation_ft": 147
+    }
+  ],
+  "airlines": [
+    {
+      "code": "DLH",
+      "name": "Lufthansa"
+    }
+  ]
+}
