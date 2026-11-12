@@ -452,6 +452,7 @@ const AirportName names[] = {
   {"TGM", "Târgu Mureș"},
   {"TIA", "Tirana"},
   {"TIV", "Tivat"},
+  {"TKU", "Turku"},
   {"TLL", "Tallinn"},
   {"TLN", "Toulon-Hyères"},
   {"TLS", "Toulouse"},

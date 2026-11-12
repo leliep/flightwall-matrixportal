@@ -21,6 +21,8 @@
   und FXT (FlexFlight) laut FAA aus beiden Code-Listen ergänzt
 - Vor erneutem Teststart zusätzlich ANG (Air Niugini) laut FAA aus der
   Code-Prüfung übernommen
+- Vor GPIO-Pegeltest zusätzlich TKU (Turku) samt OurAirports-Koordinaten
+  aus den erneut geprüften Code-Listen ergänzt
 - Tests mit beiden echten Controllern rein lesend sowie Fehler-/Konflikttests
   mit simulierten Geräten; kein Upload und kein OTA
 
