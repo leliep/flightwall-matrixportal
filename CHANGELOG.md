@@ -15,6 +15,8 @@
   OurAirports-Koordinaten und ELANGENI GMBH laut FAA in Quelltabellen ergänzt
 - Vor OTA zusätzlich EDLD samt OurAirports-Koordinaten und ATA laut aktueller
   FAA-Tabelle ergänzt; gemeinsame Lookup-Datei entsprechend vervollständigt
+- Vor USB-Erstinstallation zusätzlich MTL (RAF-AVIA) und VAL (Voyageur Airways)
+  aus den erneut geprüften Code-Listen laut FAA ergänzt
 - Tests mit beiden echten Controllern rein lesend sowie Fehler-/Konflikttests
   mit simulierten Geräten; kein Upload und kein OTA
 
