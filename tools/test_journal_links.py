@@ -12,13 +12,13 @@ code='''#include <Arduino.h>
 #include <cassert>
 '''+function('String htmlEscape(String value)')+function('String journalFlightHtml(const String &flight, const String &hex)')+r'''
 int main() {
- assert(journalFlightHtml("DLH072","abc123")==String("<a href=\"https://www.flightaware.com/live/flight/DLH072\" target=\"_blank\" rel=\"noopener noreferrer\">DLH072</a>"));
+ assert(journalFlightHtml("DLH072","abc123")==String("<a class=\"flightAwareLink\" href=\"https://www.flightaware.com/live/flight/DLH072\" target=\"_blank\" rel=\"noopener noreferrer\">DLH072</a>"));
  assert(journalFlightHtml("D-ABCD","").indexOf('%')==-1);
  assert(journalFlightHtml("", "abc123")==String("abc123"));
  assert(journalFlightHtml("  ", "<unknown>")==String("&lt;unknown&gt;"));
  String injected=journalFlightHtml("A/\"?&#<", "");
- assert(injected==String("<a href=\"https://www.flightaware.com/live/flight/A%2F%22%3F%26%23%3C\" target=\"_blank\" rel=\"noopener noreferrer\">A/&quot;?&amp;#&lt;</a>"));
- assert(journalFlightHtml("A/B","")==String("<a href=\"https://www.flightaware.com/live/flight/A%2FB\" target=\"_blank\" rel=\"noopener noreferrer\">A/B</a>"));
+ assert(injected==String("<a class=\"flightAwareLink\" href=\"https://www.flightaware.com/live/flight/A%2F%22%3F%26%23%3C\" target=\"_blank\" rel=\"noopener noreferrer\">A/&quot;?&amp;#&lt;</a>"));
+ assert(journalFlightHtml("A/B","")==String("<a class=\"flightAwareLink\" href=\"https://www.flightaware.com/live/flight/A%2FB\" target=\"_blank\" rel=\"noopener noreferrer\">A/B</a>"));
 }
 '''
 with tempfile.TemporaryDirectory(prefix='flightwall-journal-links-') as folder:

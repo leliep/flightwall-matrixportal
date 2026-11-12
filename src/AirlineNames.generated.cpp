@@ -128,6 +128,7 @@ const AirlineName names[] = {
   {"EJM", "Executive Jet Management"},
   {"EJU", "easyJet Europe"},
   {"EK", "Emirates"},
+  {"ELG", "ELANGENI GMBH"},
   {"ELI", "Elio Jet"},
   {"ELY", "EL AL Israel Airlines"},
   {"EMC", "247 Aviation"},

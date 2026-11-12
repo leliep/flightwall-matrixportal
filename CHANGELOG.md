@@ -1,5 +1,21 @@
 # Changelog
 
+## 3.6.1-dual-target.43 – 2026-11-12
+
+- Lokales Recherchewerkzeug liest unbekannte Codes und vorhandene Ergänzungen
+  beider Controller, erhält bestehende Werte und recherchiert fehlende Angaben
+  über lokale Tabellen, OurAirports und die FAA-Designatortabelle
+- Gemeinsames Uploadpaket nur bei vollständig geprüften, konfliktfreien Daten;
+  JSON-/Markdown-Bericht dokumentiert Quellen, Prüfsummen, Anpassungen und Konflikte
+- Verdeckte Passworteingabe, ausschließlich GET, keine Weiterleitung von
+  Controller-Zugangsdaten; kein automatischer Upload oder Neustart
+- FlightAware-Links in Tagesjournal und Special-Chronik erhalten gut lesbares
+  Türkis auch für besuchte Links, Unterstreichung und sichtbaren Tastaturfokus
+- Vorab XIY und ELG auf beiden Controllern geprüft; Xi'an Xianyang samt
+  OurAirports-Koordinaten und ELANGENI GMBH laut FAA in Quelltabellen ergänzt
+- Tests mit beiden echten Controllern rein lesend sowie Fehler-/Konflikttests
+  mit simulierten Geräten; kein Upload und kein OTA
+
 ## 3.6.1-dual-target.42 – 2026-11-11
 
 - Separate Lookup-Ergänzungsdatei für Airportnamen/Koordinaten und Airlines:

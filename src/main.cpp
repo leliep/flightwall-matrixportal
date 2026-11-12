@@ -48,7 +48,7 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.42";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.43";
 constexpr char BUILD_TIMESTAMP[] = "2026-11-10 airport names forward and return scroll";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
@@ -3695,7 +3695,7 @@ String journalFlightHtml(const String &flight, const String &hex) {
       encoded += escaped;
     }
   }
-  return String("<a href=\"https://www.flightaware.com/live/flight/") +
+  return String("<a class=\"flightAwareLink\" href=\"https://www.flightaware.com/live/flight/") +
          encoded + "\" target=\"_blank\" rel=\"noopener noreferrer\">" +
          htmlEscape(flight) + "</a>";
 }
@@ -4378,6 +4378,7 @@ String webPage(bool configurationPage = false, bool includeRouteCache = true) {
   html += DEVICE_NAME;
   html += F("</title><style>");
   html += F("body{font:16px system-ui;background:#10131a;color:#eef2ff;margin:auto;max-width:920px;padding:20px}");
+  html += F(".flightAwareLink,.flightAwareLink:visited{color:#7ee7f0;text-decoration:underline;text-underline-offset:2px}.flightAwareLink:hover,.flightAwareLink:focus-visible{color:#fff}.flightAwareLink:focus-visible{outline:2px solid #7ee7f0;outline-offset:3px}");
   html += F("h1{font-size:1.5rem}fieldset{border:1px solid #445;border-radius:10px;margin:14px 0;padding:14px;min-width:0}");
   html += F("label{display:block;margin:12px 0}input[type=number],input[type=text],input[type=password],input[type=url],input[type=time],select,textarea{width:100%;box-sizing:border-box;padding:9px;min-height:42px}input[type=checkbox]{width:auto;min-height:auto}.fieldGrid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:10px 14px;align-items:end;margin:10px 0}.fieldGrid>label{grid-column:span 6;margin:0;min-width:0}.fieldGrid>.third{grid-column:span 4}.fieldGrid>.quarter{grid-column:span 3}.fieldGrid>.twoThird{grid-column:span 8}.fieldGrid>.threeQuarter{grid-column:span 9}.fieldGrid>.fieldWide{grid-column:1/-1}.fieldGrid .check{align-self:center;padding:9px 0}.buttonRow{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}.pageSettings{display:grid;grid-template-columns:minmax(0,1fr) minmax(120px,180px);gap:8px 14px;align-items:end;margin:10px 0}.pageSettings label{margin:0}.orderGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px 14px}.orderGrid label{margin:0}");
   html += F("button{background:#00bcd4;color:#001018;border:0;border-radius:8px;padding:12px 18px;font-weight:bold}.danger{background:#ff8597;color:#24050b}.smallButton{padding:7px 10px;font-size:.82rem}.inlineForm{display:inline;margin:0 4px 0 0}.networkSummary{background:#172533;border:1px solid #31546b;border-radius:10px;padding:11px 13px;margin:0 0 13px;overflow-wrap:anywhere}.networkSummary a{color:#7ee7f0;font-weight:700}.tableScroll{overflow-x:auto}.cacheTable{width:100%;border-collapse:collapse}.cacheTable th,.cacheTable td{text-align:left;padding:8px 6px;border-bottom:1px solid #343d50;vertical-align:top}.cacheTable th{color:#aab;font-size:.8rem}.cacheActions{white-space:nowrap}");

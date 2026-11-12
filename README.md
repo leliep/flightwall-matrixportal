@@ -57,7 +57,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.42` |
+| Firmware | `3.6.1-dual-target.43` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -956,6 +956,66 @@ Eine Datei aus den gepflegten Quellen erzeugen:
 python3 tools/generate_lookup_extensions.py --version local-1 \
   --airports DUS --airlines DLH BNJ JFL --output work/lookup-extensions.json
 ```
+
+### Unbekannte Codes recherchieren und Bestände zusammenführen
+
+`tools/research_lookup_extensions.py` fragt standardmäßig beide Controller
+lesend ab, lädt ihre vorhandenen Ergänzungen und erstellt einen gemeinsamen
+Bestand. Namen/Koordinaten kommen zuerst aus den lokalen Quelltabellen;
+fehlende Airports werden über OurAirports, fehlende ICAO-Airlines über die
+aktuelle FAA-Designatortabelle recherchiert. Die Software setzt Python 3.9+
+voraus und benötigt keine zusätzlichen Python-Pakete.
+
+```bash
+python3 tools/research_lookup_extensions.py \
+  --version local-2 \
+  --output work/lookup-extensions.json \
+  --report work/lookup-review.json
+```
+
+Für andere Geräteadressen `--controller http://ADRESSE` je Gerät wiederholen.
+Das jeweilige OTA-Passwort wird verdeckt abgefragt. Es gibt keine Passwortoption
+in der Kommandozeile; Zugangsdaten werden weder gespeichert noch im Bericht
+veröffentlicht. Eine Eingabe ohne geschütztes Terminal wird abgewiesen.
+Für die Geräte sind ausschließlich GET-Abfragen implementiert; Zugangsdaten
+werden bei HTTP-Weiterleitungen nicht weitergereicht. Es gibt keinen Upload,
+keine Änderung von Einstellungen und keinen Neustart.
+
+Die Ausgabe umfasst die gemeinsame Lookup-Datei sowie einen JSON-Prüfbericht
+und eine lesbare Markdown-Fassung gleichen Namens. Der Bericht enthält
+Controller-/Datenversionen, erhaltene Einträge, neue Daten, Quellen mit
+Abrufzeitpunkt und SHA-256, relevante Quellzeilen, Konflikte und offene Punkte.
+Nur generische Flughafen-Endungen werden bei Bedarf aus zu langen Namen
+entfernt; jede solche Anpassung erscheint im Bericht. Es wird kein
+identifizierender Name blind abgeschnitten oder geraten. Die FAA-Quelle
+liefert ICAO-Codes; fehlende zweibuchstabige Airline-Codes bleiben offen.
+
+Vorhandene Ergänzungen haben Vorrang vor Recherchedaten. Identische Einträge
+beider Geräte werden zusammengeführt. Unterschiedliche Angaben zum selben
+Code erscheinen mit beiden Versionen im Konfliktbericht, ohne automatische
+Auswahl. Ebenso blockieren nicht erreichbare Controller, unvollständige
+Code-Listen nach Überlauf, mehrdeutige Quellen, fehlende Angaben und ungültige
+oder zu große Daten die Freigabe einer Upload-Datei.
+
+**Nur bei Status `ready` und Rückgabecode 0 wird die Upload-Datei geschrieben.**
+Bei Status `blocked` (Rückgabecode 2) bleibt eine bereits vorhandene Datei am
+Ausgabepfad unverändert; sie gehört dann nicht zum neuen Lauf. Der aktuelle
+JSON-Bericht weist `output_written: false` aus. Bei Freigabe enthält er auch
+die Prüfsumme der neu erzeugten Datei. Konflikte müssen vor dem manuellen
+Upload geklärt werden. Anschließend dieselbe geprüfte Datei auf beiden
+Controllern hochladen; das Recherchewerkzeug führt diesen Schritt nicht aus.
+
+Mit `--airports-csv DATEI` und `--airlines-html DATEI` lassen sich lokale
+Quellsnapshots verwenden; der Bericht kennzeichnet diese und dokumentiert
+ihre Prüfsummen. Die Daten können veraltet sein und müssen dann geprüft werden.
+
+Tests mit zwei simulierten Controllern, Bestands-/Konfliktfällen und Quellen:
+
+```bash
+python3 tools/test_research_lookup_extensions.py
+```
+
+### Speicher der Lookup-Ergänzungen
 
 Die vorhandenen Partitionstabellen bleiben unverändert:
 

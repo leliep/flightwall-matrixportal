@@ -489,6 +489,7 @@ const AirportName names[] = {
   {"WNZ", "Wenzhou"},
   {"WRO", "Breslau"},
   {"XFW", "Hamburg-Finkenwerder"},
+  {"XIY", "Xi'an Xianyang"},
   {"XMN", "Xiamen"},
   {"XRY", "Jerez de la Frontera"},
   {"YEI", "Bursa-Yenişehir"},
