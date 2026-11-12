@@ -154,6 +154,7 @@ const AirlineName names[] = {
   {"FR", "Ryanair"},
   {"FRF", "Fleet Air International"},
   {"FRO", "Frost Air"},
+  {"FXT", "FLEXFLIGHT APS"},
   {"FYG", "Flying Group"},
   {"FYL", "Flying Group Luxembourg"},
   {"GAC", "GlobeAir"},

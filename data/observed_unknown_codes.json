@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-11-12T15:06:07+01:00",
+  "updated_at": "2026-11-12T19:58:27+01:00",
   "status": "integrated",
   "airports": [
     "ACH",
@@ -81,7 +81,8 @@
     "NHT",
     "LPI",
     "XIY",
-    "EDLD"
+    "EDLD",
+    "EDFZ"
   ],
   "airlines": [
     "AAO",
@@ -179,7 +180,8 @@
     "ELG",
     "ATA",
     "MTL",
-    "VAL"
+    "VAL",
+    "FXT"
   ],
   "observations": [
     {
@@ -1063,6 +1065,30 @@
       "unknown_airlines": [
         "MTL",
         "VAL"
+      ],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "matrixportal_s3",
+      "firmware_version": "3.6.1-dual-target.43",
+      "unknown_airports": [
+        "EDFZ"
+      ],
+      "unknown_airlines": [
+        "VAL"
+      ],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "esp32s3_n16r8_headless",
+      "firmware_version": "3.6.1-dual-target.43",
+      "unknown_airports": [],
+      "unknown_airlines": [
+        "MTL",
+        "VAL",
+        "FXT"
       ],
       "dropped_unknown_airports": 0,
       "dropped_unknown_airlines": 0

@@ -147,6 +147,7 @@ const AirportName names[] = {
   {"ECN", "Ercan"},
   {"EDAZ", "Schönhagen"},
   {"EDFA", "Anspach/Taunus"},
+  {"EDFZ", "Mainz-Finthen"},
   {"EDI", "Edinburgh"},
   {"EDKL", "Leverkusen"},
   {"EDLA", "Arnsberg-Menden"},

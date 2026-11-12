@@ -17,6 +17,8 @@
   FAA-Tabelle ergänzt; gemeinsame Lookup-Datei entsprechend vervollständigt
 - Vor USB-Erstinstallation zusätzlich MTL (RAF-AVIA) und VAL (Voyageur Airways)
   aus den erneut geprüften Code-Listen laut FAA ergänzt
+- Vor erneutem LED-Test EDFZ (Mainz-Finthen) samt OurAirports-Koordinaten
+  und FXT (FlexFlight) laut FAA aus beiden Code-Listen ergänzt
 - Tests mit beiden echten Controllern rein lesend sowie Fehler-/Konflikttests
   mit simulierten Geräten; kein Upload und kein OTA
 
