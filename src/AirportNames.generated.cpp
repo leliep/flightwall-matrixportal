@@ -151,6 +151,7 @@ const AirportName names[] = {
   {"EDKL", "Leverkusen"},
   {"EDLA", "Arnsberg-Menden"},
   {"EDLC", "Kamp-Lintfort"},
+  {"EDLD", "Dinslaken-Schwarze Heide"},
   {"EDLF", "Grefrath-Niershorst"},
   {"EDLH", "Hamm-Lippewiesen"},
   {"EDLS", "Stadtlohn-Vreden"},

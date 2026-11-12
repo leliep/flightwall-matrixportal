@@ -13,6 +13,8 @@
   Türkis auch für besuchte Links, Unterstreichung und sichtbaren Tastaturfokus
 - Vorab XIY und ELG auf beiden Controllern geprüft; Xi'an Xianyang samt
   OurAirports-Koordinaten und ELANGENI GMBH laut FAA in Quelltabellen ergänzt
+- Vor OTA zusätzlich EDLD samt OurAirports-Koordinaten und ATA laut aktueller
+  FAA-Tabelle ergänzt; gemeinsame Lookup-Datei entsprechend vervollständigt
 - Tests mit beiden echten Controllern rein lesend sowie Fehler-/Konflikttests
   mit simulierten Geräten; kein Upload und kein OTA
 
