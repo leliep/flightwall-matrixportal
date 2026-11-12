@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-11-12T19:58:27+01:00",
+  "updated_at": "2026-11-12T21:39:58+01:00",
   "status": "integrated",
   "airports": [
     "ACH",
@@ -181,7 +181,8 @@
     "ATA",
     "MTL",
     "VAL",
-    "FXT"
+    "FXT",
+    "ANG"
   ],
   "observations": [
     {
@@ -1089,6 +1090,19 @@
         "MTL",
         "VAL",
         "FXT"
+      ],
+      "dropped_unknown_airports": 0,
+      "dropped_unknown_airlines": 0
+    },
+    {
+      "controller": "matrixportal_s3",
+      "firmware_version": "3.6.1-dual-target.43",
+      "unknown_airports": [
+        "EDFZ"
+      ],
+      "unknown_airlines": [
+        "VAL",
+        "ANG"
       ],
       "dropped_unknown_airports": 0,
       "dropped_unknown_airlines": 0

@@ -35,6 +35,7 @@ const AirlineName names[] = {
   {"AMQ", "AMC Aviation"},
   {"ANA", "All Nippon Airways"},
   {"ANE", "Air Nostrum"},
+  {"ANG", "AIR NIUGINI"},
   {"AOJ", "Avcon Jet"},
   {"AOM", "Air Ocean Maroc"},
   {"APA", "Air Park Aviation"},

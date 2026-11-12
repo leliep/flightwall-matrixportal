@@ -19,6 +19,8 @@
   aus den erneut geprüften Code-Listen laut FAA ergänzt
 - Vor erneutem LED-Test EDFZ (Mainz-Finthen) samt OurAirports-Koordinaten
   und FXT (FlexFlight) laut FAA aus beiden Code-Listen ergänzt
+- Vor erneutem Teststart zusätzlich ANG (Air Niugini) laut FAA aus der
+  Code-Prüfung übernommen
 - Tests mit beiden echten Controllern rein lesend sowie Fehler-/Konflikttests
   mit simulierten Geräten; kein Upload und kein OTA
 
