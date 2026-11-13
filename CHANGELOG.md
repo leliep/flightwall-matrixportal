@@ -23,6 +23,8 @@
   Code-Prüfung übernommen
 - Vor GPIO-Pegeltest zusätzlich TKU (Turku) samt OurAirports-Koordinaten
   aus den erneut geprüften Code-Listen ergänzt
+- Vor Wiederherstellung am 2026-11-13 INV samt OurAirports-Koordinaten sowie
+  ARM, DGJ, IFA, JCO und LEA laut FAA aus beiden Statuslisten ergänzt
 - Tests mit beiden echten Controllern rein lesend sowie Fehler-/Konflikttests
   mit simulierten Geräten; kein Upload und kein OTA
 

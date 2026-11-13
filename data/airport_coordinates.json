@@ -1124,6 +1124,11 @@
     "longitude": 11.344,
     "elevation_ft": 1907
   },
+  "INV": {
+    "latitude": 57.5425,
+    "longitude": -4.0475,
+    "elevation_ft": 31
+  },
   "ISB": {
     "latitude": 33.549,
     "longitude": 72.82566,

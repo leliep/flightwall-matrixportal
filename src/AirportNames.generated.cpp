@@ -230,6 +230,7 @@ const AirportName names[] = {
   {"ICN", "Seoul-Incheon"},
   {"INI", "Nis"},
   {"INN", "Innsbruck"},
+  {"INV", "Inverness"},
   {"ISB", "Islamabad"},
   {"ISL", "Istanbul-Atatürk"},
   {"IST", "Istanbul"},
