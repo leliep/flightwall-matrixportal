@@ -33,6 +33,7 @@
 #include "RadarTrailStorage.hpp"
 #include "RouteClient.hpp"
 #include "StatusLed.hpp"
+#include "SiteName.hpp"
 #include "NetworkRecovery.hpp"
 #include "UnknownCodes.hpp"
 #include "LookupOverrides.hpp"
@@ -49,8 +50,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.45";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-14 recover stalled Wi-Fi transport";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.46";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-14 optional site description";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -463,6 +464,7 @@ bool automaticAdsbFailover = true;
 uint32_t adsbFailoverSince = 0;
 uint32_t lastPreferredAdsbProbe = 0;
 String routeUrl = DEFAULT_ROUTE_URL;
+String siteName;
 double siteLatitude = DEFAULT_SITE_LATITUDE;
 double siteLongitude = DEFAULT_SITE_LONGITUDE;
 float viewHeading = DEFAULT_VIEW_HEADING;
@@ -3799,6 +3801,7 @@ String configurationJson() {
   settings["preferred_adsb_source"] = activeAdsbSource;
   settings["automatic_adsb_failover"] = automaticAdsbFailover;
   settings["route_url"] = routeUrl;
+  settings["site_name"] = siteName;
   settings["site_latitude"] = siteLatitude;
   settings["site_longitude"] = siteLongitude;
   settings["view_heading"] = viewHeading;
@@ -3842,6 +3845,14 @@ void handleConfigurationDownload() {
 }
 
 
+bool validSiteNameSetting(JsonVariantConst value) {
+  if (value.isUnbound()) return true; // Older backups do not contain this field.
+  if (!value.is<const char*>()) return false;
+  const JsonString text = value.as<JsonString>();
+  return validSiteName(text.c_str(), text.size());
+}
+
+
 void handleConfigurationRestore() {
   JsonDocument document;
   const DeserializationError error =
@@ -3854,6 +3865,12 @@ void handleConfigurationRestore() {
     return;
   }
   JsonObjectConst s = document["settings"].as<JsonObjectConst>();
+  if (!validSiteNameSetting(s["site_name"])) {
+    webServer.send(400, "text/plain; charset=utf-8",
+                   uiText("Standortbezeichnung ungültig (maximal 48 Zeichen).",
+                          "Invalid site description (maximum 48 characters)."));
+    return;
+  }
   settingsWritePreparing = true;
   if (xSemaphoreTake(preferencesMutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
     settingsWritePreparing = false;
@@ -3890,6 +3907,7 @@ void handleConfigurationRestore() {
   putString("adsbUrl", "adsb_url_1"); putString("adsbUrl2", "adsb_url_2");
   if (!s["preferred_adsb_source"].isNull()) preferences.putUChar("adsbActive", constrain(s["preferred_adsb_source"].as<int>(), 0, 2));
   putBool("adsbFailover", "automatic_adsb_failover"); putString("routeUrl", "route_url");
+  putString("siteName", "site_name");
   if (!s["site_latitude"].isNull()) preferences.putDouble("siteLat", constrain(s["site_latitude"].as<double>(), -90.0, 90.0));
   if (!s["site_longitude"].isNull()) preferences.putDouble("siteLon", constrain(s["site_longitude"].as<double>(), -180.0, 180.0));
   if (!s["view_heading"].isNull()) preferences.putFloat("heading", constrain(s["view_heading"].as<float>(), 0.0f, 359.0f));
@@ -4063,6 +4081,7 @@ void translateWebPageToEnglish(String &html) {
     {"Wetterdaten anzeigen, wenn kein Flugzeug in der Nähe ist", "Show weather data when no aircraft is nearby"},
     {"Anzeigeradius", "Display radius"},
     {"Standorthöhe über NHN", "Site elevation above sea level"},
+    {"Standortbezeichnung (optional)", "Site description (optional)"},
     {"Unter diesem Blickwinkel \"weit\"", "Use \"far\" below this elevation angle"},
     {"Nachtruhe aktiv", "Night mode enabled"},
     {"Display dunkel ab", "Display off from"},
@@ -4494,7 +4513,7 @@ String webPage(bool configurationPage = false, bool includeRouteCache = true) {
   html += htmlEscape(adsbUrl1);
   html += F("'></label><label class='fieldWide'>ADS-B-Adresse Quelle 2<input type='url' name='adsbUrl2' maxlength='180' value='");
   html += htmlEscape(adsbUrl2);
-  html += F("' placeholder='http://zweiter-empfaenger/data/aircraft.json'></label></div><p class='muted'>Bei aktivem Failover wird nach einem Fehler sofort eine andere konfigurierte Quelle verwendet; die bevorzugte Quelle wird jede Minute erneut geprüft. Quelle 2 darf unkonfiguriert bleiben. Der Radius von adsb.fi wird automatisch aus dem Anzeigeradius berechnet. Daten: <a href='https://adsb.fi/' target='_blank' rel='noopener'>adsb.fi</a>.</p><div class='fieldGrid'><label class='third'>Breitengrad<input type='number' name='siteLat' min='-90' max='90' step='0.000001' value='");
+  html += F("' placeholder='http://zweiter-empfaenger/data/aircraft.json'></label></div><p class='muted'>Bei aktivem Failover wird nach einem Fehler sofort eine andere konfigurierte Quelle verwendet; die bevorzugte Quelle wird jede Minute erneut geprüft. Quelle 2 darf unkonfiguriert bleiben. Der Radius von adsb.fi wird automatisch aus dem Anzeigeradius berechnet. Daten: <a href='https://adsb.fi/' target='_blank' rel='noopener'>adsb.fi</a>.</p><div class='fieldGrid'><label class='fieldWide muted'>Standortbezeichnung (optional)<input type='text' name='siteName' maxlength='48' value=\"%FW_SITE_NAME%\"></label><label class='third'>Breitengrad<input type='number' name='siteLat' min='-90' max='90' step='0.000001' value='");
   html += String(siteLatitude, 6);
   html += F("'></label><label class='third'>Längengrad<input type='number' name='siteLon' min='-180' max='180' step='0.000001' value='");
   html += String(siteLongitude, 6);
@@ -4890,7 +4909,10 @@ String webPage(bool configurationPage = false, bool includeRouteCache = true) {
   html += F("<section class='statusCard'><h3>Konfiguration</h3><div class='status'><span>Standort / Blickrichtung</span><b>");
   html += String(siteLatitude, 6) + " / " + String(siteLongitude, 6) +
           " / " + String(viewHeading, 0) + "°";
-  html += F("</b><span>Anzeigeradius</span><b>");
+  html += F("</b>");
+  if (siteName.length())
+    html += F("<span class='statusNote muted' style='font-size:.85rem;font-weight:400'>%FW_SITE_NAME%</span>");
+  html += F("<span>Anzeigeradius</span><b>");
   html += String(displayRadiusKm, 1) + " km";
   html += F("</b><span>Höhenfilter</span><b>");
   html += altitudeFilterEnabled ? "bis " + String(maximumAltitudeFt) + " ft" : "aus";
@@ -5183,6 +5205,8 @@ wifiScanResults.addEventListener('change',()=>{
 #endif
   html += F("</body></html>");
   translateWebPageToEnglish(html);
+  // Insert user text after translating labels; never translate the site name.
+  html.replace("%FW_SITE_NAME%", htmlEscape(siteName));
   return html;
 }
 
@@ -5342,6 +5366,7 @@ void applyWebSettings() {
     requestedRouteUrl.trim();
     if (requestedRouteUrl.startsWith("http://") ||
         requestedRouteUrl.startsWith("https://")) routeUrl = requestedRouteUrl;
+    if (webServer.hasArg("siteName")) siteName = webServer.arg("siteName");
     siteLatitude = constrain(webServer.arg("siteLat").toDouble(), -90.0, 90.0);
     siteLongitude = constrain(webServer.arg("siteLon").toDouble(), -180.0, 180.0);
     viewHeading = constrain(webServer.arg("viewHeading").toFloat(), 0.0f, 359.0f);
@@ -5434,6 +5459,7 @@ void applyWebSettings() {
     preferences.putUChar("adsbActive", activeAdsbSource);
     preferences.putBool("adsbFailover", automaticAdsbFailover);
     preferences.putString("routeUrl", routeUrl);
+    preferences.putString("siteName", siteName);
     preferences.putDouble("siteLat", siteLatitude);
     preferences.putDouble("siteLon", siteLongitude);
     preferences.putFloat("heading", viewHeading);
@@ -5467,6 +5493,15 @@ void applyWebSettings() {
 
 
 void handleWebSave() {
+  if (webServer.hasArg("siteName")) {
+    const String requested = webServer.arg("siteName");
+    if (!validSiteName(requested.c_str(), requested.length())) {
+      webServer.send(400, "text/plain; charset=utf-8",
+                     uiText("Standortbezeichnung ungültig (maximal 48 Zeichen).",
+                            "Invalid site description (maximum 48 characters)."));
+      return;
+    }
+  }
   applyWebSettings();
   if (wifiSettingsError.length()) {
     webServer.send(400, "text/html; charset=utf-8",
@@ -5725,6 +5760,7 @@ void handleDisplayApi() {
          ",\"age_seconds\":" +
          (updated ? String((millis() - updated) / 1000) : "null") +
          ",\"error\":\"" + jsonEscape(error) + "\"" +
+         ",\"site_name\":\"" + jsonEscape(siteName) + "\"" +
          ",\"custom_text\":\"" + jsonEscape(customPageText) + "\"" +
          ",\"custom_scroll_speed\":\"" + customScrollSpeedName() + "\"" +
          ",\"radar_sweep_interval_seconds\":" +
@@ -5953,6 +5989,7 @@ void handleStatusApi() {
           String(automaticAdsbFailover ? "true" : "false") +
       ",\"adsb_failover_active\":" +
           String(currentAdsbSource != activeAdsbSource ? "true" : "false") +
+      ",\"site_name\":\"" + jsonEscape(siteName) + "\"" +
       ",\"site_latitude\":" + String(siteLatitude, 6) +
       ",\"site_longitude\":" + String(siteLongitude, 6) +
       ",\"view_heading\":" + String(viewHeading, 0) +
@@ -7317,6 +7354,8 @@ void setup() {
   automaticAdsbFailover = preferences.getBool("adsbFailover", true);
   currentAdsbSource = activeAdsbSource;
   routeUrl = preferences.getString("routeUrl", DEFAULT_ROUTE_URL);
+  siteName = preferences.getString("siteName", "");
+  if (!validSiteName(siteName.c_str(), siteName.length())) siteName = "";
   siteLatitude = preferences.getDouble("siteLat", DEFAULT_SITE_LATITUDE);
   siteLongitude = preferences.getDouble("siteLon", DEFAULT_SITE_LONGITUDE);
   viewHeading = preferences.getFloat("heading", DEFAULT_VIEW_HEADING);

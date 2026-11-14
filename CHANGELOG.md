@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.6.1-dual-target.46 – 2026-11-14
+
+- Optionale Standortbezeichnung mit maximal 48 Unicode-Zeichen bei den
+  Koordinaten; dezente Anzeige auf /config, /status und /display für beide Varianten
+- UTF-8-/Längenprüfung, sichere HTML-/JSON-Ausgabe und persistente Speicherung;
+  Konfigurationssicherungen enthalten site_name, alte Sicherungen bleiben kompatibel
+- Leeres Feld blendet die Bezeichnung aus; physische Matrixanzeige unverändert
+- Vorab Code-Listen aller drei Controller geprüft; RAN (Rano Air) und
+  FLC (FAA Flight Inspection Services, gekürzter Behördenname) laut FAA ergänzt;
+  Airline-Tabelle generiert und validiert
+
 ## 3.6.1-dual-target.45 – 2026-11-14
 
 - WLAN wird bei anhaltenden Transportfehlern trotz verbundenem Status gezielt

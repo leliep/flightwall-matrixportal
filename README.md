@@ -667,7 +667,7 @@ schließen oder ungespeicherte Formulareingaben zu überschreiben.
 | Bereich | Wesentliche Einstellungen |
 |---|---|
 | WLAN und Sprache | SSID, Passwort, Netzwerkscan, Deutsch/Englisch |
-| Standort und Auswahl | Koordinaten, Höhe über NHN, Blickrichtung, Radius, Blickwinkel für `weit` |
+| Standort und Auswahl | Optionale Standortbezeichnung, Koordinaten, Höhe über NHN, Blickrichtung, Radius, Blickwinkel für `weit` |
 | ADS-B | zwei lokale URLs, externe adsb.fi-Quelle, bevorzugte Quelle und Failover |
 | Filter | Kleinflugzeuge ausblenden, Maximalhöhe in ft |
 | Routen | adsb.im, ADSBDB-Fallback, Verbindungstest und Cacheverwaltung |
@@ -676,6 +676,17 @@ schließen oder ungespeicherte Formulareingaben zu überschreiben.
 | Helligkeit | BH1750-Automatik, manuelle Stufe und Lux-Schwellen |
 | Betrieb | Nachtruhe, RGB-LED-Helligkeit, Tests und Neustart |
 | Sicherung | vollständige JSON-Sicherung und Wiederherstellung |
+
+Bei den Standortkoordinaten lässt sich eine optionale **Standortbezeichnung**
+mit bis zu 48 Zeichen hinterlegen, etwa „Büro München“ oder „Dachstation 2“.
+Sie erscheint dezent bei den Standortdaten auf `/status`, als Eingabefeld auf
+`/config` und unter dem Kopfbereich von `/display`, auch ohne aktuelles Flugzeug.
+Ein leeres Feld blendet die Beschriftung aus. Umlaute, Leerzeichen und Satzzeichen
+sind möglich; Steuerzeichen und ungültiges UTF-8 werden abgewiesen.
+Die physische Matrixanzeige bleibt davon unberührt. Der Text wird gespeichert,
+bei OTA erhalten und als `site_name` mit der Konfiguration gesichert.
+Ältere Sicherungen ohne dieses Feld behalten eine vorhandene Bezeichnung bei;
+eine ausdrücklich leere Bezeichnung löscht sie.
 
 Matrixbezogene Felder werden im Headless-Build ausgeblendet. Einstellungen
 werden im NVS gespeichert und bleiben bei normalen USB- und OTA-Updates
