@@ -255,6 +255,7 @@ const AirlineName names[] = {
   {"MFX", "My Freighter"},
   {"MGH", "Mavi Gok Airlines"},
   {"MJF", "MJet"},
+  {"MLM", "COMLUX (MALTA) LTD"},
   {"MMD", "Air Alsie"},
   {"MMF", "NATO Support and Procurement Agency"},
   {"MMZ", "EuroAtlantic Airways"},

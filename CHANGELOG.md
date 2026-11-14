@@ -2,6 +2,9 @@
 
 ## 3.6.1-dual-target.44 – 2026-11-14
 
+- Vor OTA ATQ, ROZ, EDFB und EDFE samt OurAirports-Koordinaten sowie
+  MLM (COMLUX (MALTA) LTD) laut FAA ergänzt; Tabellen regeneriert und validiert
+
 - Serielle formatierte Meldungen enden einheitlich mit CRLF statt nur LF;
   dadurch beginnt jede neue Zeile auch in einfachen Terminals am linken Rand
 - Gemeinsame Korrektur für Matrix und Headless; bestehende println-Ausgaben
