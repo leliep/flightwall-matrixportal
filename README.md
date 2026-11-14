@@ -406,6 +406,14 @@ erreichen. Eine unplausible Route wird weder angezeigt noch gespeichert.
 Kehrt dasselbe Callsign nach mindestens 30 Minuten zurück oder wird es von
 einem anderen Flugzeug verwendet, wird sein vorhandener Cacheeintrag vor der
 Abfrage entfernt.
+Bleibt dasselbe Flugzeug ausgewählt, werden Routen mit Status `unavailable`
+oder `rejected` nach frühestens 60 Sekunden erneut abgefragt, sobald wieder
+aktuelle ADS-B-Daten vorliegen. Dabei werden die aktuellen Positions-, Höhen-
+und Bewegungsdaten verwendet. Weiterhin unplausible Cacheeinträge werden wie
+bisher übersprungen; die Route wird erneut beim Dienst angefragt. Die
+Plausibilitätsprüfung bleibt aktiv, eine wiederholt falsche Dienstzuordnung
+wird deshalb weiterhin abgewiesen.
+
 Gültigkeitszeiten:
 
 | Ergebnis | Gültigkeit |

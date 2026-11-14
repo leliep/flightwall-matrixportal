@@ -50,8 +50,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.46";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-14 optional site description";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.47";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-14 retry rejected routes";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -3437,8 +3437,9 @@ bool fetchLocalFlight() {
     const bool newRouteSession =
         routeObservationRequiresRefresh(selected, millis());
     if (newRouteSession) routeClient.removeCacheEntry(selected.flight);
-    const bool retryRoute = currentRoute.status == "unavailable" &&
-                            millis() - lastRouteAttempt >= 60000;
+    const bool retryRoute =
+        (currentRoute.status == "unavailable" || currentRoute.status == "rejected") &&
+        uint32_t(millis() - lastRouteAttempt) >= 60000U;
     if (selected.flight != routedFlight || retryRoute || newRouteSession) {
       routedFlight = selected.flight;
       lastRouteAttempt = millis();

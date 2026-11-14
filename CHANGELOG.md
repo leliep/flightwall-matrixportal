@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.6.1-dual-target.47 – 2026-11-14
+
+- Bei unverändert ausgewähltem Flug werden neben unavailable auch rejected
+  Routen nach frühestens 60 Sekunden erneut mit aktuellen ADS-B-Daten geprüft
+  und bei weiter abgelehntem Cacheeintrag erneut beim Dienst abgefragt
+- Bestehende Plausibilitätsprüfung, Cache-Gültigkeiten, Konfiguration und Lookups
+  unverändert; gemeinsame Korrektur für Matrix und Headless
+- Code-Listen aller drei Controller vorab leer
+
 ## 3.6.1-dual-target.46 – 2026-11-14
 
 - Optionale Standortbezeichnung mit maximal 48 Unicode-Zeichen bei den
