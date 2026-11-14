@@ -48,8 +48,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.43";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-10 airport names forward and return scroll";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.44";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-14 serial CRLF line endings";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -2462,7 +2462,7 @@ bool findLightSensor() {
       lightSensorAvailable = true;
       lightSensorFailures = 0;
       filteredLux = NAN;
-      Serial.printf("BH1750 found at 0x%02X\n", address);
+      Serial.printf("BH1750 found at 0x%02X\r\n", address);
       return true;
     }
   }
@@ -2489,7 +2489,7 @@ bool beginEnvironmentSensorAt(TwoWire &bus, uint8_t address, bool onStemma) {
   environmentSensorOnStemma = onStemma;
   environmentSensorAddress = address;
   environmentSensorFailures = 0;
-  Serial.printf("BME280 found at 0x%02X on %s bus\n", address,
+  Serial.printf("BME280 found at 0x%02X on %s bus\r\n", address,
 #if FLIGHTWALL_HAS_MATRIX
                 onStemma ? "STEMMA QT" : "BH1750");
 #else
@@ -3403,7 +3403,7 @@ bool fetchLocalFlight() {
   if (!result.ok) {
     lastAdsbError = result.error.length() ? result.error : "ADS-B FEHLER";
     setNetworkError(result.error.length() ? result.error : "ADS-B FEHLER");
-    Serial.printf("ADS-B error: %s\n", result.error.c_str());
+    Serial.printf("ADS-B error: %s\r\n", result.error.c_str());
     return false;
   }
   FlightData next;
@@ -3627,7 +3627,7 @@ bool fetchLocalFlight() {
   }
   lastAdsbSuccess = millis();
   lastAdsbError = "";
-  Serial.printf("ADS-B: %u aircraft, %u candidates, selection %s\n",
+  Serial.printf("ADS-B: %u aircraft, %u candidates, selection %s\r\n",
                 static_cast<unsigned>(lastReceivedAircraft),
                 static_cast<unsigned>(lastCandidateAircraft),
                 next.available ? next.flight.c_str() : "none");
@@ -6659,7 +6659,7 @@ void handleOtaUpload() {
     otaPreparing = false;
     otaInProgress = true;
     vTaskDelay(pdMS_TO_TICKS(100));
-    Serial.printf("Web OTA start: %s\n", upload.filename.c_str());
+    Serial.printf("Web OTA start: %s\r\n", upload.filename.c_str());
     otaUploadValid = Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH);
     if (!otaUploadValid) otaErrorMessage = "OTA-Partition konnte nicht geöffnet werden.";
   } else if (upload.status == UPLOAD_FILE_WRITE) {
@@ -6680,7 +6680,7 @@ void handleOtaUpload() {
   } else if (upload.status == UPLOAD_FILE_END) {
     if (otaUploadValid && otaBytesWritten > 0 &&
         !Update.hasError() && Update.end(true)) {
-      Serial.printf("Web OTA complete: %u bytes\n", upload.totalSize);
+      Serial.printf("Web OTA complete: %u bytes\r\n", upload.totalSize);
     } else if (!otaErrorMessage.length()) {
       otaUploadValid = false;
       otaErrorMessage = "Firmwareprüfung oder Abschluss des Updates fehlgeschlagen.";
@@ -6734,12 +6734,12 @@ void startArduinoOta() {
     otaInProgress = false;
     statusLedErrorUntil = millis() + 10000;
     setStatusLed(LedStatus::Error);
-    Serial.printf("PlatformIO OTA error: %u\n", error);
+    Serial.printf("PlatformIO OTA error: %u\r\n", error);
     setNetworkError("OTA FEHLER");
   });
   ArduinoOTA.begin();
   otaStarted = true;
-  Serial.printf("PlatformIO OTA enabled for %s.local\n", DEVICE_HOSTNAME);
+  Serial.printf("PlatformIO OTA enabled for %s.local\r\n", DEVICE_HOSTNAME);
 }
 
 
@@ -6847,10 +6847,10 @@ void serviceMqtt() {
     mqttLastError = "";
     ++mqttReconnectCount;
     subscribeMqttTopics();
-    Serial.printf("MQTT connected to %s:%u\n", mqttHost.c_str(), mqttPort);
+    Serial.printf("MQTT connected to %s:%u\r\n", mqttHost.c_str(), mqttPort);
   } else {
     mqttLastError = "MQTT FEHLER " + String(mqttClient.state());
-    Serial.printf("MQTT connection failed: %d\n", mqttClient.state());
+    Serial.printf("MQTT connection failed: %d\r\n", mqttClient.state());
   }
 }
 
@@ -6966,7 +6966,7 @@ void startWebServer() {
   ++webServerStartCount;
   if (WiFi.status() == WL_CONNECTED) {
     startArduinoOta();
-    Serial.printf("Web interface: http://%s.local\n", DEVICE_HOSTNAME);
+    Serial.printf("Web interface: http://%s.local\r\n", DEVICE_HOSTNAME);
   }
 }
 
@@ -6990,7 +6990,7 @@ void startSetupAccessPoint() {
   setupDnsServer.start(53, "*", WiFi.softAPIP());
   startWebServer();
   setNetworkError("WLAN EINRICHTUNG");
-  Serial.printf("Wi-Fi setup network: %s / http://%s\n",
+  Serial.printf("Wi-Fi setup network: %s / http://%s\r\n",
                 wifiSetupAccessPointSsid.c_str(),
                 WiFi.softAPIP().toString().c_str());
 }
@@ -7147,7 +7147,7 @@ void setup() {
   radarTrailStorage = allocateRadarTrailStorage([](size_t bytes) -> void * {
     return heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
   });
-  Serial.printf("Radar history: %s (%u bytes), PSRAM free: %u bytes\n",
+  Serial.printf("Radar history: %s (%u bytes), PSRAM free: %u bytes\r\n",
       radarTrailStorage ? "external PSRAM" : "unavailable",
       static_cast<unsigned>(radarTrailStorage ? sizeof(RadarTrailStorage) : 0),
       ESP.getFreePsram());
@@ -7164,7 +7164,7 @@ void setup() {
 #if FLIGHTWALL_HAS_MATRIX
   const ProtomatterStatus status = matrix.begin();
   if (status != PROTOMATTER_OK) {
-    Serial.printf("Protomatter error: %d\n", static_cast<int>(status));
+    Serial.printf("Protomatter error: %d\r\n", static_cast<int>(status));
     while (true) delay(1000);
   }
   pinMode(BUTTON_UP_PIN, INPUT_PULLUP);
@@ -7175,7 +7175,7 @@ void setup() {
       digitalPinToInterrupt(BUTTON_DOWN_PIN), onButtonDownPressed, FALLING);
 #else
   Serial.println("Headless ESP32-S3 mode: HUB75 output disabled");
-  Serial.printf("Flash: %u bytes, PSRAM: %u bytes\n",
+  Serial.printf("Flash: %u bytes, PSRAM: %u bytes\r\n",
                 ESP.getFlashChipSize(), ESP.getPsramSize());
 #endif
 

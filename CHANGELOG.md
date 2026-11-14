@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.6.1-dual-target.44 – 2026-11-14
+
+- Serielle formatierte Meldungen enden einheitlich mit CRLF statt nur LF;
+  dadurch beginnt jede neue Zeile auch in einfachen Terminals am linken Rand
+- Gemeinsame Korrektur für Matrix und Headless; bestehende println-Ausgaben
+  verwenden bereits CRLF
+
 ## 3.6.1-dual-target.43 – 2026-11-12
 
 - Lokales Recherchewerkzeug liest unbekannte Codes und vorhandene Ergänzungen
