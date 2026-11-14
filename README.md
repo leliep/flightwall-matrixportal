@@ -1113,6 +1113,28 @@ Die Statusseite zeigt unter anderem:
 - Matrix-Farbtiefe, Bildwiederholrate sowie letzte/maximale `show()`-Dauer
 - maximale Laufzeiten einzelner Netzwerkphasen und Taskdiagnose
 
+### Automatische WLAN-Wiederherstellung
+
+Ab `.45` wird das WLAN auch dann neu verbunden, wenn es weiterhin als verbunden
+erscheint, aber mindestens fünf vollständige ADS-B-Abrufzyklen über mindestens
+90 Sekunden ausschließlich mit Transportfehlern enden. Alle im jeweiligen Zyklus
+versuchten Quellen müssen betroffen sein. Jede ADS-B-HTTP-Antwort, auch ein Fehlerstatus,
+oder eine funktionierende MQTT-Verbindung unterbricht diese Fehlerfolge.
+JSON-, Konfigurations- und explizite HTTPClient-Speicherfehler zählen nicht dazu.
+Ein alleiniger Ausfall aller verwendeten Dienste kann dieselben Transportfehler
+verursachen; deshalb gilt zwischen Wiederherstellungen eine Sperrzeit von fünf Minuten.
+
+Dabei wird nur die WLAN-Verbindung erneuert, ohne Controller-Neustart und ohne
+Änderung gespeicherter Einstellungen oder Lookup-Ergänzungen. Webserver, MQTT
+und OTA werden über den bestehenden Wiederverbindungspfad wieder gestartet.
+Während OTA, ausstehendem Neustart oder vorbereiteter Routencache-Schreibphase
+wird keine solche Wiederherstellung ausgelöst. Schlägt die Anmeldung fehl,
+bleiben das Einrichtungsnetz und die regulären WLAN-Wiederholungen verfügbar.
+
+`/api/status` enthält `wifi_transport_failure_cycles`, `wifi_transport_recoveries`
+und `last_wifi_transport_recovery_age_seconds`. Die serielle Ausgabe meldet den
+Auslöser und anschließend den regulären Verbindungsaufbau. Zähler gelten seit Start.
+
 ### Routen-Verbindungsdiagnose
 
 Seit Diagnoseversion `3.6.1-dual-target.34-diag` erfasst die Firmware echte HTTP-Abfragen

@@ -33,6 +33,7 @@
 #include "RadarTrailStorage.hpp"
 #include "RouteClient.hpp"
 #include "StatusLed.hpp"
+#include "NetworkRecovery.hpp"
 #include "UnknownCodes.hpp"
 #include "LookupOverrides.hpp"
 #include "LookupStorage.hpp"
@@ -48,8 +49,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.44";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-14 serial CRLF line endings";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.45";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-14 recover stalled Wi-Fi transport";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -63,6 +64,7 @@ constexpr uint8_t PAGE_COUNT = 8;
 constexpr uint8_t BUTTON_UP_PIN = 6;
 constexpr uint8_t BUTTON_DOWN_PIN = 7;
 constexpr uint32_t WIFI_RETRY_MS = 60000;
+NetworkRecovery networkRecovery;
 constexpr char WIFI_SETUP_AP_PREFIX[] = "FlightWall-Setup";
 constexpr char WIFI_SETUP_AP_PASSWORD[] = "flightwall";
 constexpr uint32_t POLL_INTERVAL_MS = 5000;
@@ -3353,10 +3355,14 @@ bool fetchLocalFlight() {
     attemptedSource = activeAdsbSource;
     lastPreferredAdsbProbe = fetchStarted;
   }
+  bool allTransportFailed = true;
   auto fetchSource = [&](uint8_t source) {
     adsbClient.setUrl(adsbUrlForSource(source));
     NetworkPhaseScope phase(NetworkPhase::Adsb);
-    return adsbClient.fetch(config);
+    AdsbResult fetched = adsbClient.fetch(config);
+    allTransportFailed = allTransportFailed && fetched.transportFailed;
+    if (fetched.httpResponded) networkRecovery.progress();
+    return fetched;
   };
   result = fetchSource(attemptedSource);
   uint8_t successfulSource = attemptedSource;
@@ -3380,6 +3386,7 @@ bool fetchLocalFlight() {
       result.error = combinedError;
     }
   }
+  if (allTransportFailed) networkRecovery.transportFailure(millis());
   if (result.ok) {
     if (successfulSource != activeAdsbSource) {
       if (!adsbFailoverSince) adsbFailoverSince = millis();
@@ -5915,6 +5922,12 @@ void handleStatusApi() {
           "\"" +
       ",\"rssi\":" + String(WiFi.RSSI()) +
       ",\"wifi_reconnects\":" + String(wifiReconnectCount) +
+      ",\"wifi_transport_failure_cycles\":" + String(networkRecovery.failures()) +
+      ",\"wifi_transport_recoveries\":" + String(networkRecovery.recoveries()) +
+      ",\"last_wifi_transport_recovery_age_seconds\":" +
+          (networkRecovery.recoveries()
+               ? String((millis() - networkRecovery.lastRecovery()) / 1000)
+               : "null") +
       ",\"webserver_starts\":" + String(webServerStartCount) +
       ",\"last_wifi_disconnect_age_seconds\":" +
           (lastWifiDisconnect
@@ -6827,6 +6840,7 @@ void serviceMqtt() {
     return;
   }
   if (mqttClient.connected()) {
+    networkRecovery.progress();
     mqttConnected = true;
     mqttClient.loop();
     return;
@@ -6843,6 +6857,7 @@ void serviceMqtt() {
       ? mqttClient.connect(clientId.c_str(), mqttUser.c_str(), mqttPassword.c_str())
       : mqttClient.connect(clientId.c_str());
   if (connected) {
+    networkRecovery.progress();
     mqttConnected = true;
     mqttLastError = "";
     ++mqttReconnectCount;
@@ -7021,6 +7036,32 @@ void stopNetworkServices() {
 }
 
 
+bool recoverStalledWiFi() {
+  // A station can remain WL_CONNECTED while every transport connection fails.
+  // Runtime reconnect only: keep credentials, caches and lookup files.
+  const uint32_t now = millis();
+  const bool busy = otaPreparing || otaInProgress || otaRebootAt ||
+      manualRebootAt || routeCacheWritePreparing;
+  if (!networkRecovery.due(now, WiFi.status() == WL_CONNECTED, busy)) return false;
+  Serial.printf("Wi-Fi recovery: %u failed ADS-B cycles over at least 90 seconds; reconnecting\r\n",
+                static_cast<unsigned>(networkRecovery.failures()));
+  networkRecovery.recovering(now);
+  stopNetworkServices();
+  wifiWasConnected = false;
+  lastWifiDisconnect = now;
+  setNetworkError("WLAN WIEDERVERBINDUNG");
+  WiFi.disconnect(false, false);
+  vTaskDelay(pdMS_TO_TICKS(100));
+  lastWiFiAttempt = millis();
+  {
+    NetworkPhaseScope phase(NetworkPhase::Wifi);
+    if (!connectWiFi(10000)) startSetupAccessPoint();
+  }
+  // Re-enter the normal connection transition to restart network services.
+  return true;
+}
+
+
 void flushDeferredRouteCacheIfIdle() {
   if (!routeClient.hasPendingWrites() || routeCacheWritePreparing ||
       routeCacheWriteInProgress || settingsWritePreparing ||
@@ -7079,6 +7120,7 @@ void networkTask(void *) {
     const uint32_t now = millis();
     serviceDailyAircraftStatistics();
     const bool wifiConnected = WiFi.status() == WL_CONNECTED;
+    if (!wifiConnected) networkRecovery.progress();
     if (!wifiConnected && wifiWasConnected) {
       wifiWasConnected = false;
       lastWifiDisconnect = now;
@@ -7087,6 +7129,7 @@ void networkTask(void *) {
       startSetupAccessPoint();
     } else if (wifiConnected && !wifiWasConnected) {
       wifiWasConnected = true;
+      networkRecovery.progress();
       ++wifiReconnectCount;
       if (wifiSetupAccessPointActive) {
         stopSetupAccessPoint();
@@ -7114,6 +7157,7 @@ void networkTask(void *) {
         serviceMqtt();
       }
     }
+    if (recoverStalledWiFi()) continue;
     if (otaRebootAt && static_cast<int32_t>(now - otaRebootAt) >= 0) ESP.restart();
     if (manualRebootAt && static_cast<int32_t>(now - manualRebootAt) >= 0) ESP.restart();
     if (!wifiConnected && now - lastWiFiAttempt >= WIFI_RETRY_MS) {

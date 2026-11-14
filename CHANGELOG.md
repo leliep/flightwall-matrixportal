@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.6.1-dual-target.45 – 2026-11-14
+
+- WLAN wird bei anhaltenden Transportfehlern trotz verbundenem Status gezielt
+  neu verbunden: mindestens fünf vollständig fehlgeschlagene ADS-B-Zyklen
+  über mindestens 90 Sekunden, höchstens einmal je fünf Minuten
+- Jede ADS-B-HTTP-Antwort oder funktionierende MQTT-Verbindung unterbricht die
+  Fehlerfolge; HTTP-Status-/JSON-/Speicherfehler lösen allein keine Erholung aus
+- Wiederherstellung nur außerhalb OTA und ausstehender Neustarts/Cache-Schreibphase;
+  Netzwerkdienste werden regulär neu gestartet, Konfiguration und Lookups bleiben erhalten
+- Status-API und serielle Diagnose zeigen Fehlerzyklen und Wiederherstellungen
+- Code-Listen beider ursprünglichen Controller vorab leer; .196 nicht erreichbar
+
 ## 3.6.1-dual-target.44 – 2026-11-14
 
 - Vor OTA ATQ, ROZ, EDFB und EDFE samt OurAirports-Koordinaten sowie

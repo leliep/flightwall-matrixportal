@@ -8,6 +8,8 @@
 
 struct AdsbResult {
   bool ok = false;
+  bool transportFailed = false;
+  bool httpResponded = false;
   uint32_t feedTimestamp = 0;
   size_t receivedAircraft = 0;
   std::vector<uint64_t> observedAircraftIdentities;

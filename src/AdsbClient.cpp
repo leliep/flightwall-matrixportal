@@ -1,4 +1,5 @@
 #include "AdsbClient.hpp"
+#include "NetworkRecovery.hpp"
 
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
@@ -39,6 +40,8 @@ AdsbResult AdsbClient::fetch(const ProcessingConfig& config) {
                  "FlightWall-MatrixPortal/3 (+https://github.com/leliep/flightwall-matrixportal)");
 
   const int status = http.GET();
+  result.transportFailed = NetworkRecovery::isTransportFailure(status);
+  result.httpResponded = status > 0;
   if (status != HTTP_CODE_OK) {
     result.error = "ADS-B HTTP " + String(status);
     http.end();
