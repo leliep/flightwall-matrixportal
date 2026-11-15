@@ -25,7 +25,7 @@
 #if FLIGHTWALL_HAS_MATRIX
 #include <Adafruit_Protomatter.h>
 #endif
-#include <PubSubClient.h>
+#include "MqttSession.hpp"
 #include "AdsbClient.hpp"
 #include "AircraftProcessor.hpp"
 #include "AirlineNames.hpp"
@@ -52,8 +52,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.50";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-15 independent web task and serialized background tests";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.51";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-15 independent MQTT service and background diagnostics";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -266,14 +266,13 @@ String lastRouteError;
 Preferences preferences;
 WebServer webServer(80);
 DNSServer setupDnsServer;
-WiFiClient mqttTransport;
-PubSubClient mqttClient(mqttTransport);
 SemaphoreHandle_t flightMutex;
 SemaphoreHandle_t preferencesMutex;
 SemaphoreHandle_t weatherMutex;
 TaskHandle_t networkTaskHandle = nullptr;
 TaskHandle_t displayTaskHandle = nullptr;
 TaskHandle_t webTaskHandle = nullptr;
+TaskHandle_t mqttTaskHandle = nullptr;
 SemaphoreHandle_t applicationMutex = nullptr;
 // Both tasks serialize application/cache/lookup/journal state. The worker
 // releases this lock only around IO on its private HTTP/TLS/JSON objects.
@@ -290,7 +289,7 @@ void noteWebMutation() { ++applicationRevision; pollRequested = true; }
 void pulseWebActivity() {
   pulseHttpActivity();
   if (webServer.method() == HTTP_POST && webServer.uri() != "/test-route" &&
-      webServer.uri() != "/test-adsb" && webServer.uri() != "/api/wifi-scan")
+      webServer.uri() != "/test-adsb" && webServer.uri() != "/test-mqtt" && webServer.uri() != "/api/wifi-scan")
     noteWebMutation();
 }
 void releaseApplicationForIo() {
@@ -306,7 +305,7 @@ void acquireApplicationAfterIo() {
 }
 bool applicationOperationCancelled() { return operationRevision != applicationRevision; }
 
-enum class ManualJobKind : uint8_t { None, Adsb, Route };
+enum class ManualJobKind : uint8_t { None, Adsb, Route, Mqtt };
 struct ManualNetworkJob {
   uint32_t id = 0;
   ManualJobKind kind = ManualJobKind::None;
@@ -485,6 +484,19 @@ uint32_t lastMqttAttempt = 0;
 uint32_t lastMqttMessage = 0;
 uint32_t mqttReconnectCount = 0;
 String mqttLastError = "NOCH NICHT VERBUNDEN";
+uint32_t mqttConfigRevision = 0;
+bool mqttIoActive = false;
+MqttReport mqttRuntimeReport;
+MqttSettings requestedMqttTest;
+MqttSettings storedMqttSettings();
+uint32_t mqttTestRevision = 0;
+class MqttIoScope {
+ public:
+  MqttIoScope() { configASSERT(!mqttIoActive);configASSERT(xSemaphoreGetMutexHolder(applicationMutex)==xTaskGetCurrentTaskHandle());mqttIoActive=true; xSemaphoreGive(applicationMutex); }
+  ~MqttIoScope() { xSemaphoreTake(applicationMutex,portMAX_DELAY); mqttIoActive=false; }
+  MqttIoScope(const MqttIoScope&) = delete;
+  MqttIoScope &operator=(const MqttIoScope&) = delete;
+};
 float windDirectionDegrees = NAN;
 float windSpeedKph = NAN;
 float windGustKph = NAN;
@@ -4256,7 +4268,7 @@ void translateWebPageToEnglish(Text &html) {
     {"Bildübergabe", "Frame handoff"}, {"Blickgeometrie", "Viewing geometry"},
     {"Lokale Zeit", "Local time"}, {"Nachtruhe", "Night mode"},
     {"Task- und Resetdiagnose", "Task and reset diagnostics"}, {"Netz Core", "Network core"},
-    {"Web-Stackreserve", "Web stack reserve"}, {"Stackreserve", "Stack reserve"}, {"Letzter Reset", "Last reset"},
+    {"MQTT-Verbindung testen", "Test MQTT connection"}, {"MQTT-Stackreserve", "MQTT stack reserve"}, {"Web-Stackreserve", "Web stack reserve"}, {"Stackreserve", "Stack reserve"}, {"Letzter Reset", "Last reset"},
     {"ESP wirklich neu starten?", "Really restart the ESP?"}, {"ESP neu starten", "Restart ESP"},
     {"Web-Display öffnen", "Open web display"}, {"Firmware drahtlos aktualisieren", "Update firmware wirelessly"},
     {"Firmware-Update", "Firmware update"},
@@ -4335,6 +4347,32 @@ void appendDailyJournalStatus(PsramBuffer &html) {
   html += F("<div class='buttonRow'><form class='inlineForm' method='get' action='/journal.json'><button type='submit'>JSON herunterladen</button></form><form class='inlineForm' method='get' action='/journal.csv'><button type='submit'>CSV herunterladen</button></form></div></section>");
 }
 
+
+void appendMqttReportJson(PsramBuffer &json, const MqttReport &report) {
+  json += "{\"dns_ok\":";json += report.dnsOk?"true":"false";
+  json += ",\"tcp_ok\":";json += report.tcpOk?"true":"false";
+  json += ",\"resolved_ip\":\"";json += jsonEscape(report.ip);json += "\"";
+  json += ",\"client_id\":\"";json += jsonEscape(report.clientId);json += "\"";
+  json += ",\"code\":";json += String(report.code);
+  json += ",\"reason\":\"";json += jsonEscape(mqttStateText(report.code));json += "\"";
+  json += ",\"dns_ms\":";json += String(report.dnsMs);
+  json += ",\"tcp_ms\":";json += String(report.tcpMs);
+  json += ",\"connack_ms\":";json += String(report.connackMs);
+  json += ",\"pong_count\":";json += String(report.pongs);
+  json += ",\"topics\":[";
+  for(unsigned i=0;i<4;++i){
+    if(i)json+=',';
+    json+="{\"index\":";json+=String(i);
+    json+=",\"suback\":";json+=String(report.subscription[i]);
+    json+=",\"received\":";json+=String(report.received[i]);
+    json+=",\"valid\":";json+=String(report.valid[i]);
+    json+=",\"invalid\":";json+=String(report.invalid[i]);
+    json+=",\"last_valid\":";json+=report.lastValid[i]?"true":"false";
+    json+=",\"valid_age_seconds\":";json+=report.valid[i]?String((millis()-report.updated[i])/1000):"null";
+    json+='}';
+  }
+  json+="]}";
+}
 
 void appendRouteMemoryJson(PsramBuffer &json, const RouteMemorySnapshot &memory) {
   json += PsramBuffer("{\"free_internal_bytes\":") + String(memory.freeInternal) +
@@ -4649,7 +4687,7 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
   html += htmlEscape(windGustTopic);
   html += F("'></label><label>Regen heute (cm)<input type='text' name='rainTopic' maxlength='128' value='");
   html += htmlEscape(rainTopic);
-  html += F("'></label></div><p class='muted'>Regen wird für die Anzeige von cm in mm umgerechnet. Ein leeres Passwortfeld behält das gespeicherte Passwort bei.</p></fieldset>");
+  html += F("'></label></div><p class='muted'>Regen wird für die Anzeige von cm in mm umgerechnet. Ein leeres Passwortfeld behält das gespeicherte Passwort bei. Der Test speichert keine Einstellungen und funktioniert auch bei deaktivierter Wetteranzeige.</p><button type='submit' formaction='/test-mqtt'>MQTT-Verbindung testen</button></fieldset>");
   html += F("<fieldset><legend>Radar</legend><label class='check'><input type='checkbox' name='radarTrails' value='1'");
   html += checked(radarTrailsEnabled);
   html += F("> Radarspuren (60 Sekunden)</label>");
@@ -5094,10 +5132,18 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
   html += !mqttWeatherEnabled ? "aus" : (mqttConnected ? "verbunden" : "getrennt");
   html += F("</b><span>MQTT-Server</span><b>");
   html += htmlEscape(mqttHost) + ":" + String(mqttPort);
+  html += F("</b><span>MQTT Client-ID</span><b>");
+  html += htmlEscape(mqttRuntimeReport.clientId);
   html += F("</b><span>Letzte MQTT-Nachricht</span><b>");
   html += ageText(lastMqttMessage);
   html += F("</b><span>MQTT-Fehler</span><b>");
   html += mqttLastError.length() ? htmlEscape(mqttLastError) : "keiner";
+  html += F("</b><span>MQTT DNS / TCP / CONNACK</span><b>");
+  html += String(mqttRuntimeReport.dnsMs)+" / "+String(mqttRuntimeReport.tcpMs)+" / "+String(mqttRuntimeReport.connackMs)+" ms";
+  for(unsigned i=0;i<4;++i){
+    html += "</b><span>MQTT Topic ";html+=String(i+1);html+=uiText(" / SUBACK / OK / ungültig</span><b>"," / SUBACK / valid / invalid</span><b>");
+    html+=String(mqttRuntimeReport.subscription[i]);html+=" / ";html+=String(mqttRuntimeReport.valid[i]);html+=" / ";html+=String(mqttRuntimeReport.invalid[i]);
+  }
   html += F("</b><span>Wind / Richtung</span><b>");
   html += numberOrDash(statusWindSpeed) + " km/h / " +
           (statusWindDirection.length() ? htmlEscape(statusWindDirection) : "-");
@@ -5144,9 +5190,9 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
        (quietHoursAreActive() ? " / aktiv" : " / inaktiv")) : "aus";
   html += F("</b></div></section><details id='taskDiagnosis' class='statusCard wide'><summary>Task- und Resetdiagnose</summary><div class='status'><span>Tasks</span><b>");
 #if FLIGHTWALL_HAS_MATRIX
-    html += F("Netz Core 0 / Web Core 0 / Display Core 1");
+    html += F("Netz Core 0 / Web Core 0 / MQTT Core 0 / Display Core 1");
 #else
-    html += F("Netz Core 0 / Web Core 0 / Server Core 1");
+    html += F("Netz Core 0 / Web Core 0 / MQTT Core 0 / Server Core 1");
 #endif
   html += F("</b><span>Stackreserve</span><b>");
   html += networkTaskHandle ? String(uxTaskGetStackHighWaterMark(networkTaskHandle) * sizeof(StackType_t)) : "-";
@@ -5154,6 +5200,8 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
   html += displayTaskHandle ? String(uxTaskGetStackHighWaterMark(displayTaskHandle) * sizeof(StackType_t)) : "-";
   html += F(" Bytes</b><span>Web-Stackreserve</span><b>");
   html += webTaskHandle ? String(uxTaskGetStackHighWaterMark(webTaskHandle) * sizeof(StackType_t)) : "-";
+  html += F(" Bytes</b><span>MQTT-Stackreserve</span><b>");
+  html += mqttTaskHandle ? String(uxTaskGetStackHighWaterMark(mqttTaskHandle) * sizeof(StackType_t)) : "-";
   html += F(" Bytes</b><span>Letzter Reset</span><b>");
   html += resetReasonText();
   html += F("</b><span>Netzphase beim Watchdog-Reset</span><b>");
@@ -5578,7 +5626,7 @@ void applyWebSettings() {
   }
   settingsWriteInProgress = false;
   routedFlight = "";
-  if (mqttClient.connected()) mqttClient.disconnect();
+  ++mqttConfigRevision;
   mqttConnected = false;
   lastMqttAttempt = 0;
   resetPageTransition();
@@ -5677,7 +5725,7 @@ bool prepareManualNetworkJob(ManualJobKind kind) {
                    uiText("Ein Verbindungstest läuft bereits.", "A connection test is already running."));
     return false;
   }
-  noteWebMutation();
+  if (kind != ManualJobKind::Mqtt) noteWebMutation();
   uint32_t id = manualNetworkJob.id + 1;
   manualNetworkJob = {};
   manualNetworkJob.id = id ? id : 1;
@@ -5863,6 +5911,33 @@ void appendRouteTestResponseHtml(PsramBuffer &html,
   html += "</section>";
 }
 
+bool otaAuthenticated();
+
+void handleMqttTest() {
+  if (!otaAuthenticated()) return;
+  MqttSettings settings=storedMqttSettings();
+  if(webServer.hasArg("mqttHost"))settings.host=webServer.arg("mqttHost");
+  settings.host.trim();
+  if(webServer.hasArg("mqttPort")){
+    int port=webServer.arg("mqttPort").toInt();
+    if(port<1 || port>65535){webServer.send(400,"text/plain","Invalid MQTT port");return;}settings.port=port;
+  }
+  if(webServer.hasArg("mqttUser"))settings.user=webServer.arg("mqttUser");
+  settings.user.trim();
+  if(webServer.hasArg("mqttPassword") && webServer.arg("mqttPassword").length())settings.password=webServer.arg("mqttPassword");
+  const char *names[]={"windDirectionTopic","windSpeedTopic","windGustTopic","rainTopic"};
+  bool valid=validFlightWallHost(settings.host) && settings.host.length()<=96 && settings.user.length()<=64 && settings.password.length()<=96;
+  for(unsigned i=0;i<4;++i){
+    if(webServer.hasArg(names[i]))settings.topics[i]=webServer.arg(names[i]);
+    if(settings.topics[i].length()>128)valid=false;
+    for(size_t n=0;n<settings.topics[i].length();++n)if(static_cast<uint8_t>(settings.topics[i][n])<32)valid=false;
+  }
+  if(!valid){webServer.send(400,"text/plain; charset=utf-8",uiText("Ungültige MQTT-Testwerte.","Invalid MQTT test settings."));return;}
+  if(!prepareManualNetworkJob(ManualJobKind::Mqtt))return;
+  requestedMqttTest=std::move(settings);mqttTestRevision=applicationRevision;
+  redirectToManualNetworkJob();
+}
+
 void handleRouteTest() {
   if (!prepareManualNetworkJob(ManualJobKind::Route)) return;
   String callsign = webServer.arg("routeTestCallsign");
@@ -5955,6 +6030,7 @@ void runRouteTestJob() {
 }
 
 void runManualNetworkJob() {
+  if(manualNetworkJob.kind==ManualJobKind::Mqtt)return;
   manualNetworkJob.queued = false;
   manualNetworkJob.running = true;
   operationRevision = applicationRevision;
@@ -6560,7 +6636,15 @@ void handleStatusApi() {
   json += networkTaskHandle ? String(uxTaskGetStackHighWaterMark(networkTaskHandle) * sizeof(StackType_t)) : "null";
   json += ",\"manual_test_pending\":";
   json += manualNetworkJob.queued || manualNetworkJob.running ? "true" : "false";
+  json += ",\"mqtt_io_active\":";
+  json += mqttIoActive ? "true" : "false";
+  json += ",\"mqtt_stack_free_bytes\":";
+  json += mqttTaskHandle ? String(uxTaskGetStackHighWaterMark(mqttTaskHandle) * sizeof(StackType_t)) : "null";
   json += "}}";
+  json.remove(json.length()-1);
+  json += ",\"mqtt_diagnostics\":";
+  appendMqttReportJson(json,mqttRuntimeReport);
+  json += '}';
   // Append without building a second full JSON document or large stack copy.
   json.remove(json.length() - 1);
   json += PsramBuffer(",\"radar_trails_storage_bytes\":") + String(radarTrailStorage ? sizeof(RadarTrailStorage) : 0) +
@@ -7250,86 +7334,145 @@ bool parseMqttCompassDirection(String value, float &degrees) {
 }
 
 
-void handleMqttMessage(char *topic, byte *payload, unsigned int length) {
-  if (length > 48 || weatherMutex == nullptr) return;
-  String value;
-  value.reserve(length);
-  for (unsigned int index = 0; index < length; ++index)
-    value += static_cast<char>(payload[index]);
-  value.trim();
-  const uint32_t now = millis();
-  if (xSemaphoreTake(weatherMutex, pdMS_TO_TICKS(50)) != pdTRUE) return;
-  if (windDirectionTopic == topic) {
-    float degrees;
-    if (parseMqttNumber(value, degrees) ||
-        parseMqttCompassDirection(value, degrees)) {
-      while (degrees < 0.0f) degrees += 360.0f;
-      while (degrees >= 360.0f) degrees -= 360.0f;
-      windDirectionDegrees = degrees;
-      windDirectionUpdated = now;
-    }
-  } else {
-    float number;
-    if (parseMqttNumber(value, number)) {
-      if (windSpeedTopic == topic && number >= 0.0f) {
-        windSpeedKph = number;
-        windSpeedUpdated = now;
-      } else if (windGustTopic == topic && number >= 0.0f) {
-        windGustKph = number;
-        windGustUpdated = now;
-      } else if (rainTopic == topic && number >= 0.0f) {
-        // The source publishes centimetres; the display uses millimetres.
-        rain24Mm = number * 10.0f;
-        rainUpdated = now;
-      }
-    }
+bool parseMqttWeatherValue(uint8_t index, const char *text, float &number) {
+  String value(text);value.trim();
+  if (index==0) {
+    if (!parseMqttNumber(value,number) && !parseMqttCompassDirection(value,number)) return false;
+    number=fmodf(number,360.0f);if(number<0)number+=360.0f;return true;
   }
-  lastMqttMessage = now;
+  if (!parseMqttNumber(value,number) || number<0) return false;
+  if(index==3)number*=10.0f;
+  return isfinite(number);
+}
+
+MqttSettings storedMqttSettings() {
+  MqttSettings settings;settings.host=mqttHost;settings.port=mqttPort;
+  settings.user=mqttUser;settings.password=mqttPassword;
+  settings.topics[0]=windDirectionTopic;settings.topics[1]=windSpeedTopic;
+  settings.topics[2]=windGustTopic;settings.topics[3]=rainTopic;return settings;
+}
+
+MqttSession *createMqttSession() {
+  void *memory=heap_caps_malloc(sizeof(MqttSession),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+  return memory?new(memory)MqttSession(parseMqttWeatherValue):nullptr;
+}
+
+void publishMqttWeather(const MqttReport &report) {
+  if (xSemaphoreTake(weatherMutex,pdMS_TO_TICKS(50))!=pdTRUE)return;
+  float *values[]={&windDirectionDegrees,&windSpeedKph,&windGustKph,&rain24Mm};
+  uint32_t *updated[]={&windDirectionUpdated,&windSpeedUpdated,&windGustUpdated,&rainUpdated};
+  for(unsigned i=0;i<4;++i)if(report.valid[i]){
+    *values[i]=report.values[i];*updated[i]=report.updated[i];
+    if(!lastMqttMessage || static_cast<int32_t>(report.updated[i]-lastMqttMessage)>0)lastMqttMessage=report.updated[i];
+  }
   xSemaphoreGive(weatherMutex);
 }
 
-
-void subscribeMqttTopics() {
-  if (windDirectionTopic.length()) mqttClient.subscribe(windDirectionTopic.c_str());
-  if (windSpeedTopic.length()) mqttClient.subscribe(windSpeedTopic.c_str());
-  if (windGustTopic.length()) mqttClient.subscribe(windGustTopic.c_str());
-  if (rainTopic.length()) mqttClient.subscribe(rainTopic.c_str());
+void renderMqttTestResult(const MqttSession *session, bool cancelled) {
+  PsramBuffer page;
+  page+="<!doctype html><html><meta name='viewport' content='width=device-width'><body style='font:17px system-ui;max-width:800px;margin:30px auto;padding:12px'><h1>MQTT-Test</h1>";
+  if(!session || cancelled){
+    page+=uiText("<p>Test abgebrochen: Einstellungen geändert, WLAN getrennt oder nicht genug PSRAM.</p>","<p>Test cancelled: settings changed, Wi-Fi disconnected or insufficient PSRAM.</p>");
+    manualNetworkJob.status=502;
+  }else{
+    const auto &r=session->report;
+    page+="<p>";appendRouteTestHtmlText(page,session->settings.host.c_str());page+=':';page+=String(session->settings.port);page+="</p><p>DNS: ";
+    page+=r.dnsOk?"OK":uiText("Fehler","failed");page+=" / ";page+=String(r.dnsMs);page+=" ms · TCP: ";page+=r.tcpOk?"OK":uiText("Fehler","failed");page+=" / ";page+=String(r.tcpMs);
+    page+=" ms · MQTT: ";appendRouteTestHtmlText(page,mqttStateText(r.code));page+=" / ";page+=String(r.connackMs);page+=" ms</p>";
+    page+="<p>MQTT 3.1.1 / TCP · Client-ID: ";appendRouteTestHtmlText(page,r.clientId);page+="</p>";
+    page+=uiText("<p>Getestete Werte werden nicht gespeichert. Passwort und Benutzer werden nicht ausgegeben. Keine Testnachrichten veröffentlicht.</p>","<p>Tested settings are not saved. Credentials are not displayed. No test messages are published.</p>");
+    page+=uiText("<table><tr><th>Topic</th><th>SUBACK</th><th>Empfangen / gültig / ungültig</th></tr>","<table><tr><th>Topic</th><th>SUBACK</th><th>Received / valid / invalid</th></tr>");
+    unsigned configured=0;
+    for(unsigned i=0;i<4;++i)if(session->settings.topics[i].length()){
+      ++configured;page+="<tr><td>";appendRouteTestHtmlText(page,session->settings.topics[i].c_str());page+="</td><td>";
+      if(r.subscription[i]>=0 && r.subscription[i]<=2)page+="OK";
+      else if(r.subscription[i]>=3)page+=uiText("abgelehnt","denied");
+      else if(r.subscription[i]==-3)page+=uiText("Senden fehlgeschlagen","write failed");
+      else page+=uiText("nicht bestätigt","not confirmed");
+      page+="</td><td>";page+=String(r.received[i]);page+=" / ";page+=String(r.valid[i]);page+=" / ";page+=String(r.invalid[i]);page+="</td></tr>";
+    }
+    page+="</table>";
+    bool badData=false;for(unsigned i=0;i<4;++i)if(r.received[i] && !r.lastValid[i])badData=true;
+    bool ok=r.connected && session->subscriptionsReady();manualNetworkJob.status=ok && !badData?200:502;
+    if(badData)page+=uiText("<p>MQTT-Nachrichten empfangen, aber mindestens ein letzter Wetterwert ist ungültig.</p>","<p>MQTT messages received, but at least one latest weather value is invalid.</p>");
+    if(ok && !session->allDataValid())page+=uiText("<p>Verbindung/Abonnements OK; Datenempfang noch nicht für alle Topics bestätigt. Ohne Retained-Wert kann ein späterer Messwert erforderlich sein.</p>","<p>Connection/subscriptions OK; valid data has not arrived on every topic yet. Without retained values, the next update may arrive later.</p>");
+    if(!configured)page+=uiText("<p>Keine Wetter-Topics konfiguriert; nur Verbindung geprüft.</p>","<p>No weather topics configured; connection tested only.</p>");
+  }
+  page+="<p><a href='/config'>";page+=uiText("Zurück","Back");page+="</a></p></body></html>";
+  manualNetworkJob.page=std::move(page);manualNetworkJob.running=false;manualNetworkJob.done=true;
 }
 
+bool mqttNetworkReady() {
+  return WiFi.status()==WL_CONNECTED && !otaPreparing && !otaInProgress && !otaRebootAt && !manualRebootAt;
+}
 
-void serviceMqtt() {
-  if (!mqttWeatherEnabled || !mqttHost.length() || WiFi.status() != WL_CONNECTED) {
-    if (mqttClient.connected()) mqttClient.disconnect();
-    mqttConnected = false;
-    return;
-  }
-  if (mqttClient.connected()) {
-    networkRecovery.progress();
-    mqttConnected = true;
-    mqttClient.loop();
-    return;
-  }
-  mqttConnected = false;
-  const uint32_t now = millis();
-  if (lastMqttAttempt && now - lastMqttAttempt < MQTT_RETRY_MS) return;
-  lastMqttAttempt = now;
-  mqttClient.setServer(mqttHost.c_str(), mqttPort);
-  mqttClient.setCallback(handleMqttMessage);
-  mqttClient.setSocketTimeout(2);
-  const String clientId = "flightwall-" + String((uint32_t)(ESP.getEfuseMac() & 0xFFFFFF), HEX);
-  const bool connected = mqttUser.length()
-      ? mqttClient.connect(clientId.c_str(), mqttUser.c_str(), mqttPassword.c_str())
-      : mqttClient.connect(clientId.c_str());
-  if (connected) {
-    networkRecovery.progress();
-    mqttConnected = true;
-    mqttLastError = "";
-    ++mqttReconnectCount;
-    subscribeMqttTopics();
-    Serial.printf("MQTT connected to %s:%u\r\n", mqttHost.c_str(), mqttPort);
-  } else {
-    mqttLastError = "MQTT FEHLER " + String(mqttClient.state());
-    Serial.printf("MQTT connection failed: %d\r\n", mqttClient.state());
+void mqttTask(void *) {
+  MqttSession *runtime=nullptr,*probe=nullptr;
+  uint32_t loaded=UINT32_MAX,testStarted=0;
+  bool testing=false;
+  uint8_t mac[6];const uint64_t efuseMac=ESP.getEfuseMac();for(unsigned i=0;i<6;++i)mac[i]=(efuseMac>>(8*i))&255;char id[32],testId[32];mqttClientId(id,sizeof(id),mac,false);mqttClientId(testId,sizeof(testId),mac,true);
+  for(;;){
+    {
+      ApplicationStateLock state;
+      const uint32_t started=millis();
+      const bool usable=mqttNetworkReady();
+      if(!runtime && mqttWeatherEnabled)runtime=createMqttSession();
+      if(runtime && loaded!=mqttConfigRevision){
+        {MqttIoScope io;runtime->close();}
+        runtime->settings=storedMqttSettings();loaded=mqttConfigRevision;lastMqttAttempt=0;
+      }
+      if(!usable || !mqttWeatherEnabled){
+        if(runtime && runtime->report.connected){MqttIoScope io;runtime->close();}
+        mqttConnected=false;mqttLastError=!mqttWeatherEnabled?"MQTT deaktiviert":"WLAN/Update nicht bereit";
+      }else if(runtime){
+        const uint32_t revision=mqttConfigRevision;
+        if(!runtime->report.connected){
+          if(!lastMqttAttempt || millis()-lastMqttAttempt>=MQTT_RETRY_MS){
+            lastMqttAttempt=millis();bool connected;
+            {MqttIoScope io;connected=runtime->connect(id);}
+            if(connected && revision==mqttConfigRevision)++mqttReconnectCount;
+            Serial.printf("MQTT: %s (%d), DNS %lu ms / TCP %lu ms / CONNACK %lu ms\r\n",mqttStateText(runtime->report.code),runtime->report.code,(unsigned long)runtime->report.dnsMs,(unsigned long)runtime->report.tcpMs,(unsigned long)runtime->report.connackMs);
+          }
+        }else{MqttIoScope io;runtime->step();}
+        if(revision==mqttConfigRevision && mqttWeatherEnabled && mqttNetworkReady()){
+          mqttRuntimeReport=runtime->report;mqttConnected=runtime->report.connected;
+          mqttLastError=mqttConnected?"":mqttStateText(runtime->report.code);
+          if(mqttConnected){
+            if(runtime->subscriptionsDenied())mqttLastError="MQTT-Abonnementsfehler";
+            else if(!runtime->subscriptionsReady() && millis()-runtime->report.connectedAtMs>=8000)mqttLastError="MQTT-SUBACK fehlt";
+            for(unsigned i=0;i<4;++i)if(runtime->report.received[i] && !runtime->report.lastValid[i])mqttLastError="MQTT-Wetterwert ungültig";
+          }
+          if(mqttConnected){networkRecovery.progress();publishMqttWeather(runtime->report);}
+        }
+      }else mqttLastError="MQTT: kein PSRAM";
+      if(manualNetworkJob.queued && manualNetworkJob.kind==ManualJobKind::Mqtt){
+        manualNetworkJob.queued=false;manualNetworkJob.running=true;
+        if(!probe)probe=createMqttSession();
+        if(!mqttNetworkReady() || !probe || mqttTestRevision!=applicationRevision){renderMqttTestResult(probe,true);}
+        else{
+          probe->settings=std::move(requestedMqttTest);bool connected;
+          {MqttIoScope io;connected=probe->connect(testId);}
+          testStarted=millis();testing=connected;
+          if(!connected || mqttTestRevision!=applicationRevision){
+            {MqttIoScope io;probe->close();}
+            renderMqttTestResult(probe,mqttTestRevision!=applicationRevision);testing=false;
+          }
+        }
+      }
+      if(testing){
+        {MqttIoScope io;probe->step();}
+        bool cancelled=mqttTestRevision!=applicationRevision || !mqttNetworkReady();
+        if(cancelled || !probe->report.connected || probe->subscriptionsDenied() ||
+           (probe->subscriptionsReady() && probe->allDataValid()) || millis()-testStarted>=8000){
+          const bool wasConnected=probe->report.connected;
+          {MqttIoScope io;probe->close();}
+          probe->report.connected=wasConnected;
+          renderMqttTestResult(probe,cancelled || mqttTestRevision!=applicationRevision);testing=false;
+        }
+      }
+      uint32_t elapsed=millis()-started;auto &maximum=networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Mqtt)];if(elapsed>maximum)maximum=elapsed;
+    }
+    vTaskDelay(pdMS_TO_TICKS(50));
   }
 }
 
@@ -7402,6 +7545,7 @@ void startWebServer() {
     webServer.on("/test-route", HTTP_POST, []() {
       pulseWebActivity(); handleRouteTest();
     });
+    webServer.on("/test-mqtt",HTTP_POST,[](){pulseWebActivity();handleMqttTest();});
     webServer.on("/request-result", HTTP_GET, []() {
       pulseWebActivity(); handleManualNetworkJobResult();
     });
@@ -7488,7 +7632,7 @@ void stopSetupAccessPoint() {
 
 
 void stopNetworkServices() {
-  if (mqttClient.connected()) mqttClient.disconnect();
+  ++mqttConfigRevision;
   mqttConnected = false;
   if (otaStarted) {
     ArduinoOTA.end();
@@ -7634,10 +7778,6 @@ void networkTask(void *) {
           ArduinoOTA.handle();
         }
         vTaskDelay(pdMS_TO_TICKS(1));
-        {
-          NetworkPhaseScope phase(NetworkPhase::Mqtt);
-          serviceMqtt();
-        }
       }
       if (recoverStalledWiFi()) continue;
       if (!wifiConnected && now - lastWiFiAttempt >= WIFI_RETRY_MS) {
@@ -7646,7 +7786,7 @@ void networkTask(void *) {
         connectWiFi(10000);
       }
       if (wifiConnected && !otaPreparing && !otaInProgress && !otaRebootAt && !manualRebootAt) {
-        if (manualNetworkJob.queued) runManualNetworkJob();
+        if (manualNetworkJob.queued && manualNetworkJob.kind!=ManualJobKind::Mqtt) runManualNetworkJob();
         else if (pollRequested || now - lastPoll >= POLL_INTERVAL_MS) {
           pollRequested = false;
           lastPoll = now;
@@ -7881,6 +8021,9 @@ void setup() {
 #if FLIGHTWALL_HAS_MATRIX
   drawStatus("FLIGHTWALL", uiText("VERBINDET...", "CONNECTING..."));
 #endif
+  if (xTaskCreatePinnedToCore(mqttTask,"mqtt",8192,nullptr,tskIDLE_PRIORITY,&mqttTaskHandle,0)!=pdPASS) {
+    Serial.println("Cannot create MQTT task");while(true)delay(1000);
+  }
   if (xTaskCreatePinnedToCore(webTask, "web", 12288, nullptr, tskIDLE_PRIORITY,
                               &webTaskHandle, 0) != pdPASS) {
     Serial.println("Cannot create web task");

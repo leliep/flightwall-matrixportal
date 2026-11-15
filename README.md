@@ -57,7 +57,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.50` |
+| Firmware | `3.6.1-dual-target.51` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -1131,6 +1131,56 @@ Die Statusseite zeigt unter anderem:
 - BME280-, Schimmel-, MQTT- und BH1750-Werte
 - Matrix-Farbtiefe, Bildwiederholrate sowie letzte/maximale `show()`-Dauer
 - maximale Laufzeiten einzelner Netzwerkphasen und Taskdiagnose
+
+### MQTT-Verbindung und Hintergrundtest
+
+Ab `.51` bedient ein eigener MQTT-Task die Verbindung unabhängig von ADS-B und
+Routendiensten. MQTT-I/O hält die gemeinsame Anwendungsdatensperre nicht fest.
+Die Client-ID enthält alle sechs MAC-Bytes; der Test nutzt eine separate ID,
+damit er die laufende Verbindung nicht verdrängt. Der Client verwendet MQTT
+3.1.1 über unverschlüsseltes TCP wie bisher, eine TCP-Verbindungsfrist von
+4 Sekunden, eine MQTT-Antwortfrist von 5 Sekunden und 45 Sekunden Keepalive.
+Die Verarbeitung wird regelmäßig bedient statt auf den nächsten ADS-B-Zyklus
+zu warten. Netzwerkfehler und Konfigurationswechsel werden getrennt behandelt.
+
+Unter `/config` startet **MQTT-Verbindung testen** einen Hintergrundauftrag.
+Die eingetragenen MQTT-Werte werden nur für den Test verwendet und nicht
+persistiert; ein leeres Passwortfeld verwendet das gespeicherte Passwort.
+Andere Formfelder werden dabei nicht übernommen. Der Test funktioniert auch
+bei deaktivierter MQTT-Wetteranzeige und aktiviert diese nicht dauerhaft.
+Er prüft DNS, TCP, MQTT-Anmeldung, die Bestätigung jedes konfigurierten
+Abonnements (SUBACK) und bis zu acht Sekunden eingehende Wetterwerte. Er
+veröffentlicht keine Testwerte und verwendet keine persistente Broker-Sitzung.
+
+Das Ergebnis trennt Verbindungsfehler, fehlende/abgelehnte Abonnements und
+fehlende/ungültige Daten. Sind Verbindung und Abonnements in Ordnung, aber
+noch nicht alle Werte eingetroffen, ist das ein Hinweis und kein Beweis eines
+Brokerfehlers: Ohne Retained-Werte kann die nächste Messung später kommen.
+Ein empfangener, aber ungültiger letzter Wert wird gesondert als Datenfehler
+gekennzeichnet. Passwort und Benutzername werden nicht ausgegeben.
+
+Wetter-Topics sind konkrete Topicnamen mit höchstens 128 Bytes im Test;
+Wildcard-Abonnements werden bei der Zuordnung zu den vier Wetterwerten nicht
+unterstützt. Werte müssen Zahlen ohne Einheit sein; Windrichtung akzeptiert
+auch die dokumentierten Kompasskürzel. Windrichtung wird normiert, negative
+Wind-/Regenwerte sowie nicht endliche Zahlen werden verworfen. Regen wird
+weiterhin von cm in mm umgerechnet. Ungültige Nachrichten setzen den
+Frischezeitpunkt nicht mehr zurück.
+
+`/api/status` ergänzt `mqtt_diagnostics` mit DNS-/TCP-/CONNACK-Laufzeiten,
+MQTT-Code und Fehlergrund, aufgelöster IPv4-Adresse, Client-ID, PONG-Zähler und
+je Topic SUBACK, Empfangs-/Gültigkeitszählern und Alter des letzten gültigen
+Werts. `background_network` zeigt zusätzlich MQTT-I/O und die MQTT-Stackreserve.
+Statusseite und serielle Diagnose enthalten die wichtigsten Angaben ebenfalls.
+SUBACK: -1 nicht konfiguriert, -2 noch nicht bestätigt, -3 Senden fehlgeschlagen,
+0–2 bestätigt, 128 vom Broker abgelehnt. Die zusätzliche Task benötigt 8 KiB
+internen Stack; Session-/Diagnoseobjekte liegen im PSRAM. Nach Installation
+sind MQTT-Funktion sowie verbleibende Stack-/TLS-Reserven am Gerät zu prüfen.
+
+`python3 tools/test_mqtt_session.py` prüft die tatsächliche PubSubClient-2.8-
+Implementierung mit kontrollierten Sockets: Anmeldung, Wiederanmeldung,
+verzögerte Antworten, Fehlerphasen, SUBACK, Keepalive, Wettervalidierung,
+parallelen Webzugriff, sichere Testergebnisse und unveränderte Einstellungen.
 
 ### Temporäre Puffer und TLS-Reserve
 

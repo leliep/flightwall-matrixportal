@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
 
-// Network-task-owned state. No allocation, persistence or device reset.
+// Application-state-lock-owned state. No allocation, persistence or device reset.
 class NetworkRecovery {
  public:
   static constexpr uint32_t failureWindowMs = 90000;

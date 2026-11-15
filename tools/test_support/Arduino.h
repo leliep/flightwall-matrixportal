@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cctype>
 #include <type_traits>
+#include <cstdlib>
 class String {
  public:
   String(const char *text = "") : value_(text ? text : "") {}
@@ -14,6 +15,7 @@ class String {
   char operator[](size_t index) const { return value_[index]; }
   unsigned int length() const { return value_.size(); }
   bool isEmpty() const { return value_.empty(); }
+  long toInt() const { return std::strtol(value_.c_str(),nullptr,10); }
   bool startsWith(const char *prefix) const { return value_.rfind(prefix, 0) == 0; }
   bool endsWith(const char *suffix) const {
     const size_t size=std::char_traits<char>::length(suffix);

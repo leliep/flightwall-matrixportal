@@ -1,5 +1,22 @@
 # Changelog
 
+## 3.6.1-dual-target.51 – 2026-11-15
+
+- MQTT unabhängig von ADS-B/Routen in eigenem Task; Netz-/Webdatensperre bei
+  MQTT-I/O freigegeben, Konfigurationswechsel über versionierte Übergabe
+- Eindeutige Client-ID aus allen sechs MAC-Bytes statt des Herstellerpräfixes;
+  separate Test-ID, 5 s MQTT-Antwortfrist, 45 s Keepalive und kooperatives Warten
+- Hintergrundtest mit nicht gespeicherten Formwerten: DNS/TCP/CONNACK, echte
+  SUBACK-Auswertung und gültige/ungültige Wetterdaten je Topic; auch bei
+  deaktiviertem MQTT, ohne Test-Publish und ohne Zugangsdaten in Ergebnissen
+- Status/API/Seriell: verständliche MQTT-Fehler, Phasenlaufzeiten, Client-ID,
+  Topic-Bestätigungen, Datenzähler und MQTT-Stackreserve; Frische nur bei gültigen Werten
+- MQTT-Test-/Clientzustand im PSRAM; zusätzlicher MQTT-Task mit 8 KiB internem Stack
+- Vorab Codes aller drei Controller leer, Konfigurationen und Lookups gesichert;
+  Broker-Anmeldung und vier Wetter-Abonnements vom Mac erfolgreich geprüft
+- Ursache des bisherigen -4 auf .105 nicht eindeutig bewiesen; Integration
+  am ESP32 muss nach einem späteren OTA überprüft werden
+
 ## 3.6.1-dual-target.50 – 2026-11-15
 
 - Vor OTA PVD (PAD Aviation Service GmbH, FAA-Verzeichnis) ergänzt
