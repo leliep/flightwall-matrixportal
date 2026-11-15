@@ -10,7 +10,7 @@ struct TemporaryPsramStats {
   size_t peakBytes = 0;
   uint32_t allocationFailures = 0;
 };
-const TemporaryPsramStats &temporaryPsramStats();
+TemporaryPsramStats temporaryPsramStats();
 void *allocateTemporaryPsram(size_t bytes);
 void *resizeTemporaryPsram(void *pointer, size_t bytes);
 void freeTemporaryPsram(void *pointer);

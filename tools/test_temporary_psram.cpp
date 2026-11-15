@@ -6,9 +6,11 @@
 #include <string>
 #include <type_traits>
 #include <iostream>
+#include <thread>
+#include <atomic>
 
 bool failAllocation=false;
-unsigned calls=0;
+std::atomic<unsigned> calls{0};
 void *heap_caps_realloc(void *pointer,size_t bytes,uint32_t caps) {
   assert(caps==(MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT));++calls;
   if(failAllocation)return nullptr;
@@ -99,5 +101,17 @@ int main(){
  assert(all.primary.cleanupCaptured && all.lastFailure.cleanupCaptured);
  assert(all.lastFailure.afterCleanup.freeInternal==70000);
  assert(temporaryPsramStats().allocatedBytes==0 && calls>0);
+ {
+  std::thread workers[3];
+  for(auto &worker:workers)worker=std::thread([]{
+   for(unsigned i=0;i<300;++i){
+    JsonDocument doc(&temporaryJsonAllocator());doc["sequence"]=i;
+    PsramBuffer b;b.reserve(8192);serializeJson(doc,b);assert(!b.failed());
+    auto snapshot=temporaryPsramStats();assert(snapshot.allocatedBytes>=8193);
+   }
+  });
+  for(auto &worker:workers)worker.join();
+  assert(temporaryPsramStats().allocatedBytes==0);
+ }
  std::cout<<"PSRAM-only buffer/JSON, OOM, moves, bounded growth, aliases and post-TLS early-return cleanup passed\n";
 }

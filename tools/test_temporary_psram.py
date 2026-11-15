@@ -9,7 +9,7 @@ with tempfile.TemporaryDirectory(prefix='flightwall-temporary-psram-') as folder
  (Path(folder)/'ResponseUnderTest.hpp').write_text(response)
  for variant in (0,1):
   binary=Path(folder)/str(variant)
-  subprocess.run(['c++','-std=c++11','-Wall','-Wextra','-pedantic','-fsanitize=address,undefined',
+  subprocess.run(['c++','-std=c++11','-pthread','-Wall','-Wextra','-pedantic','-fsanitize=address,undefined',
    f'-DFLIGHTWALL_HAS_MATRIX={variant}','-DARDUINOJSON_ENABLE_ARDUINO_STRING=0',
    '-DARDUINOJSON_ENABLE_ARDUINO_STREAM=0','-DARDUINOJSON_ENABLE_ARDUINO_PRINT=0',
    '-I'+folder,'-I'+str(root/'tools/test_support'),'-I'+str(root/'include'),

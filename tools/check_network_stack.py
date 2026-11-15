@@ -15,10 +15,10 @@ results=[]
 for env in ('adafruit_matrixportal_esp32s3','esp32s3_n16r8_headless'):
  disassembly=subprocess.check_output([objdump,'-d',str(root/'.pio/build'/env/'firmware.elf')],text=True)
  frames={}
- for symbol,label in [('_Z15handleStatusApiv','status_api'),('_Z15handleRouteTestv','route_test'),('_Z16handleDisplayApiv','display_api')]:
+ for symbol,label in [('_Z15handleStatusApiv','status_api'),('_Z15handleRouteTestv','route_test_submit'),('_Z15runRouteTestJobv','route_test_worker'),('_Z16handleDisplayApiv','display_api')]:
   match=re.search('<'+symbol+r'>:\s*\n[^\n]*entry\s+a1,\s*(\S+)',disassembly)
   assert match, f'Missing frame for {symbol} in {env}'
   size=int(match.group(1),0);frames[label]=size
   assert size<=4096, f'{env} {label}: {size} bytes exceeds 4096-byte frame budget'
- results.append({'variant':env,'handler_stack_frames_bytes':frames,'network_task_stack_bytes':12288})
+ results.append({'variant':env,'handler_stack_frames_bytes':frames,'network_task_stack_bytes':12288,'web_task_stack_bytes':12288})
 print(json.dumps(results,indent=2))

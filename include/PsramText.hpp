@@ -17,8 +17,8 @@ void recordPsramTextAllocationFailure();
 void *allocatePsramTextBytes(size_t bytes);
 void releasePsramTextBytes(void *memory, size_t bytes);
 
-// Immutable, reference-counted text. Persistent records are network-task-owned;
-// their buffers never use the internal heap. Record copies are cheap, allowing
+// Immutable, reference-counted text. Persistent records and their readers are
+// serialized by the application-state lock; buffers never use the internal heap. Record copies are cheap, allowing
 // updates to be committed atomically if all new text allocations succeeded.
 class PsramText {
  public:

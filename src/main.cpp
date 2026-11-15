@@ -36,6 +36,7 @@
 #include "StatusLed.hpp"
 #include "SiteName.hpp"
 #include "NetworkRecovery.hpp"
+#include "NetworkIo.hpp"
 #include "UnknownCodes.hpp"
 #include "LookupOverrides.hpp"
 #include "LookupStorage.hpp"
@@ -51,8 +52,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.49";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-15 bounded status stack and rejected route responses";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.50";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-15 independent web task and serialized background tests";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -272,6 +273,50 @@ SemaphoreHandle_t preferencesMutex;
 SemaphoreHandle_t weatherMutex;
 TaskHandle_t networkTaskHandle = nullptr;
 TaskHandle_t displayTaskHandle = nullptr;
+TaskHandle_t webTaskHandle = nullptr;
+SemaphoreHandle_t applicationMutex = nullptr;
+// Both tasks serialize application/cache/lookup/journal state. The worker
+// releases this lock only around IO on its private HTTP/TLS/JSON objects.
+class ApplicationStateLock {
+ public:
+  ApplicationStateLock() { xSemaphoreTake(applicationMutex, portMAX_DELAY); }
+  ~ApplicationStateLock() { xSemaphoreGive(applicationMutex); }
+};
+uint32_t applicationRevision = 0;
+uint32_t operationRevision = 0;
+bool pollRequested = false;
+bool outboundIoActive = false;
+void noteWebMutation() { ++applicationRevision; pollRequested = true; }
+void pulseWebActivity() {
+  pulseHttpActivity();
+  if (webServer.method() == HTTP_POST && webServer.uri() != "/test-route" &&
+      webServer.uri() != "/test-adsb" && webServer.uri() != "/api/wifi-scan")
+    noteWebMutation();
+}
+void releaseApplicationForIo() {
+  configASSERT(!outboundIoActive);
+  configASSERT(xSemaphoreGetMutexHolder(applicationMutex) == xTaskGetCurrentTaskHandle());
+  outboundIoActive = true;
+  xSemaphoreGive(applicationMutex);
+}
+void acquireApplicationAfterIo() {
+  xSemaphoreTake(applicationMutex, portMAX_DELAY);
+  configASSERT(outboundIoActive);
+  outboundIoActive = false;
+}
+bool applicationOperationCancelled() { return operationRevision != applicationRevision; }
+
+enum class ManualJobKind : uint8_t { None, Adsb, Route };
+struct ManualNetworkJob {
+  uint32_t id = 0;
+  ManualJobKind kind = ManualJobKind::None;
+  bool queued = false, running = false, done = false;
+  String callsign, url;
+  double latitude = 0, longitude = 0;
+  bool fallback = true;
+  PsramBuffer page;
+  int status = 200;
+} manualNetworkJob;
 
 enum class NetworkPhase : uint8_t {
   Unknown,
@@ -2785,13 +2830,15 @@ void syncNetworkState() {
 
 bool connectWiFi(uint32_t timeoutMs) {
   if (WiFi.status() == WL_CONNECTED) return true;
+  operationRevision = applicationRevision;
   WiFi.mode(wifiSetupAccessPointActive ? WIFI_AP_STA : WIFI_STA);
   WiFi.setSleep(false);
   WiFi.begin(wifiSsid.c_str(), wifiPassword.c_str());
 
   const uint32_t started = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - started < timeoutMs) {
-    delay(250);
+    { NetworkIoScope io; delay(250); }
+    if (networkOperationCancelled()) return false;
   }
   if (WiFi.status() != WL_CONNECTED) {
     setNetworkError("WLAN FEHLER");
@@ -3330,6 +3377,7 @@ void appendEmergencyTestAircraft(AdsbResult &result) {
 
 
 bool fetchLocalFlight() {
+  operationRevision = applicationRevision;
   lastAdsbAttempt = millis();
   if (WiFi.status() != WL_CONNECTED) {
     lastAdsbError = "WLAN GETRENNT";
@@ -3363,11 +3411,13 @@ bool fetchLocalFlight() {
     adsbClient.setUrl(adsbUrlForSource(source));
     NetworkPhaseScope phase(NetworkPhase::Adsb);
     AdsbResult fetched = adsbClient.fetch(config);
+    if (networkOperationCancelled()) return fetched;
     allTransportFailed = allTransportFailed && fetched.transportFailed;
     if (fetched.httpResponded) networkRecovery.progress();
     return fetched;
   };
   result = fetchSource(attemptedSource);
+  if (networkOperationCancelled()) return false;
   uint8_t successfulSource = attemptedSource;
   if (!result.ok && automaticAdsbFailover) {
     const uint8_t alternatives[] = {activeAdsbSource, 0, 1, 2};
@@ -3379,6 +3429,7 @@ bool fetchLocalFlight() {
           !adsbSourceConfigured(alternative)) continue;
       attempted[alternative] = true;
       AdsbResult fallback = fetchSource(alternative);
+      if (networkOperationCancelled()) return false;
       if (fallback.ok) {
         result = std::move(fallback);
         successfulSource = alternative;
@@ -3442,10 +3493,9 @@ bool fetchLocalFlight() {
         (currentRoute.status == "unavailable" || currentRoute.status == "rejected") &&
         uint32_t(millis() - lastRouteAttempt) >= 60000U;
     if (selected.flight != routedFlight || retryRoute || newRouteSession) {
-      routedFlight = selected.flight;
-      lastRouteAttempt = millis();
-      if (selected.flight.startsWith("TEST")) currentRoute = {};
-      else {
+      const uint32_t attemptStarted = millis();
+      RouteResult pendingRoute;
+      if (!selected.flight.startsWith("TEST")) {
         NetworkPhaseScope phase(NetworkPhase::Route);
         RouteContext routeContext;
         routeContext.hasPosition = true;
@@ -3459,9 +3509,15 @@ bool fetchLocalFlight() {
         routeContext.trackDegrees = selected.track;
         routeContext.hasVerticalRate = selected.hasVerticalRate;
         routeContext.verticalRateFpm = selected.verticalRateFpm;
-        currentRoute = routeClient.lookup(selected.flight, routeContext,
+        pendingRoute = routeClient.lookup(selected.flight, routeContext,
                                           result.feedTimestamp);
+        if (networkOperationCancelled()) return false;
       }
+      // Publish only after reacquiring state and checking the request revision.
+      // In particular, do not overwrite a cache/config action made during IO.
+      routedFlight = selected.flight;
+      lastRouteAttempt = attemptStarted;
+      currentRoute = std::move(pendingRoute);
       lastRouteError = routeClient.lastError();
     }
 
@@ -4200,7 +4256,7 @@ void translateWebPageToEnglish(Text &html) {
     {"Bildübergabe", "Frame handoff"}, {"Blickgeometrie", "Viewing geometry"},
     {"Lokale Zeit", "Local time"}, {"Nachtruhe", "Night mode"},
     {"Task- und Resetdiagnose", "Task and reset diagnostics"}, {"Netz Core", "Network core"},
-    {"Stackreserve", "Stack reserve"}, {"Letzter Reset", "Last reset"},
+    {"Web-Stackreserve", "Web stack reserve"}, {"Stackreserve", "Stack reserve"}, {"Letzter Reset", "Last reset"},
     {"ESP wirklich neu starten?", "Really restart the ESP?"}, {"ESP neu starten", "Restart ESP"},
     {"Web-Display öffnen", "Open web display"}, {"Firmware drahtlos aktualisieren", "Update firmware wirelessly"},
     {"Firmware-Update", "Firmware update"},
@@ -5088,14 +5144,16 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
        (quietHoursAreActive() ? " / aktiv" : " / inaktiv")) : "aus";
   html += F("</b></div></section><details id='taskDiagnosis' class='statusCard wide'><summary>Task- und Resetdiagnose</summary><div class='status'><span>Tasks</span><b>");
 #if FLIGHTWALL_HAS_MATRIX
-  html += F("Netz Core 0 / Display Core 1");
+    html += F("Netz Core 0 / Web Core 0 / Display Core 1");
 #else
-  html += F("Netz Core 0 / Server Core 1");
+    html += F("Netz Core 0 / Web Core 0 / Server Core 1");
 #endif
   html += F("</b><span>Stackreserve</span><b>");
   html += networkTaskHandle ? String(uxTaskGetStackHighWaterMark(networkTaskHandle) * sizeof(StackType_t)) : "-";
   html += " / ";
   html += displayTaskHandle ? String(uxTaskGetStackHighWaterMark(displayTaskHandle) * sizeof(StackType_t)) : "-";
+  html += F(" Bytes</b><span>Web-Stackreserve</span><b>");
+  html += webTaskHandle ? String(uxTaskGetStackHighWaterMark(webTaskHandle) * sizeof(StackType_t)) : "-";
   html += F(" Bytes</b><span>Letzter Reset</span><b>");
   html += resetReasonText();
   html += F("</b><span>Netzphase beim Watchdog-Reset</span><b>");
@@ -5519,6 +5577,7 @@ void applyWebSettings() {
     xSemaphoreGive(preferencesMutex);
   }
   settingsWriteInProgress = false;
+  routedFlight = "";
   if (mqttClient.connected()) mqttClient.disconnect();
   mqttConnected = false;
   lastMqttAttempt = 0;
@@ -5611,6 +5670,43 @@ void redirectToRouteCache() {
                  uiText("Routencache aktualisiert", "Route cache updated"));
 }
 
+bool prepareManualNetworkJob(ManualJobKind kind) {
+  if (manualNetworkJob.queued || manualNetworkJob.running) {
+    webServer.sendHeader("Retry-After", "1");
+    webServer.send(409, "text/plain; charset=utf-8",
+                   uiText("Ein Verbindungstest läuft bereits.", "A connection test is already running."));
+    return false;
+  }
+  noteWebMutation();
+  uint32_t id = manualNetworkJob.id + 1;
+  manualNetworkJob = {};
+  manualNetworkJob.id = id ? id : 1;
+  manualNetworkJob.kind = kind;
+  manualNetworkJob.queued = true;
+  return true;
+}
+
+void redirectToManualNetworkJob() {
+  webServer.sendHeader("Location", "/request-result?id=" + String(manualNetworkJob.id));
+  webServer.send(303, "text/plain; charset=utf-8", uiText("Test gestartet", "Test started"));
+}
+
+void handleManualNetworkJobResult() {
+  const uint32_t id = strtoul(webServer.arg("id").c_str(), nullptr, 10);
+  webServer.sendHeader("Cache-Control", "no-store");
+  if (!id || id != manualNetworkJob.id) {
+    webServer.send(410, "text/plain; charset=utf-8", uiText("Testergebnis nicht mehr verfügbar.", "Test result expired."));
+  } else if (manualNetworkJob.done) {
+    sendPsramResponse("text/html; charset=utf-8", manualNetworkJob.page, 0, SIZE_MAX, manualNetworkJob.status);
+  } else {
+    webServer.send(202, "text/html; charset=utf-8",
+        String("<!doctype html><html><meta name='viewport' content='width=device-width'><body style='font:18px system-ui;margin:30px'><p>") +
+        uiText("Verbindungstest läuft. Andere Seiten bleiben bedienbar.", "Connection test running. Other pages remain available.") +
+        "</p><p><a href='/status'>Status</a> · <a href='/config'>" + uiText("Konfiguration", "Configuration") +
+        "</a></p><script>setTimeout(()=>location.reload(),1000)</script></body></html>");
+  }
+}
+
 
 void handleRouteCacheDelete() {
   const String callsign = requestedRouteCacheCallsign();
@@ -5649,7 +5745,7 @@ void handleRouteCacheRefresh() {
   routedFlight = "";
   currentRoute = {};
   lastRouteAttempt = 0;
-  fetchLocalFlight();
+  pollRequested = true;
   redirectToRouteCache();
 }
 
@@ -5663,16 +5759,21 @@ void handleRouteCacheClear() {
 
 
 void handleAdsbTest() {
+  if (!prepareManualNetworkJob(ManualJobKind::Adsb)) return;
   applyWebSettings();
-  const bool success = fetchLocalFlight();
-  const String message = success ? uiText("Verbindung erfolgreich.", "Connection successful.") :
-      String(uiText("Verbindung fehlgeschlagen: ", "Connection failed: ")) + networkLastError;
-  webServer.send(success ? 200 : 502, "text/html; charset=utf-8",
-      String("<!doctype html><html lang='") + (uiEnglish ? "en" : "de") +
-      "'><meta name='viewport' content='width=device-width'>"
-      "<body style='font:18px system-ui;max-width:600px;margin:40px auto'><h1>ADS-B-Test</h1><p>" +
-      htmlEscape(message) + "</p><p><a href='/config'>" + uiText("Zurück", "Back") +
-      "</a></p></body></html>");
+  if (manualRebootAt) {
+    // Wi-Fi/OTA credential edits require a restart. Do not leave an orphaned
+    // test polling an ID that disappears during that already scheduled reset.
+    manualNetworkJob.queued = false;
+    manualNetworkJob.done = true;
+    manualNetworkJob.page = "<!doctype html><html><meta name='viewport' content='width=device-width'><meta http-equiv='refresh' content='6;url=/config'><body><p>";
+    manualNetworkJob.page += uiText("Einstellungen gespeichert. Nach dem Neustart den Verbindungstest erneut starten.",
+                                   "Settings saved. Run the connection test again after restart.");
+    manualNetworkJob.page += "</p><a href='/config'>";
+    manualNetworkJob.page += uiText("Konfiguration", "Configuration");
+    manualNetworkJob.page += "</a></body></html>";
+  }
+  redirectToManualNetworkJob();
 }
 
 
@@ -5684,7 +5785,7 @@ void handleEmergencyTest() {
   emergencyTestUntil = millis() + EMERGENCY_TEST_DURATION_MS;
   selectedEmergencyHex = "";
   emergencySelectionStarted = 0;
-  fetchLocalFlight();
+  pollRequested = true;
   webServer.sendHeader("Location", "/status");
   webServer.send(303, "text/plain; charset=utf-8", uiText("Notfalltest gestartet", "Emergency test started"));
 }
@@ -5696,7 +5797,7 @@ void handleStopEmergencyTest() {
   emergencyTestUntil = 0;
   selectedEmergencyHex = "";
   emergencySelectionStarted = 0;
-  fetchLocalFlight();
+  pollRequested = true;
   webServer.sendHeader("Location", "/status");
   webServer.send(303, "text/plain; charset=utf-8", uiText("Notfalltest beendet", "Emergency test stopped"));
 }
@@ -5763,6 +5864,7 @@ void appendRouteTestResponseHtml(PsramBuffer &html,
 }
 
 void handleRouteTest() {
+  if (!prepareManualNetworkJob(ManualJobKind::Route)) return;
   String callsign = webServer.arg("routeTestCallsign");
   callsign.trim();
   callsign.toUpperCase();
@@ -5776,17 +5878,29 @@ void handleRouteTest() {
   testUrl.trim();
   if (!testUrl.startsWith("http://") && !testUrl.startsWith("https://"))
     testUrl = routeUrl;
-  routeClient.configure(true, testUrl, adsbDbFallbackEnabled);
+  manualNetworkJob.callsign = callsign;
+  manualNetworkJob.url = testUrl;
+  manualNetworkJob.latitude = siteLatitude;
+  manualNetworkJob.longitude = siteLongitude;
+  manualNetworkJob.fallback = adsbDbFallbackEnabled;
+  redirectToManualNetworkJob();
+}
+
+void runRouteTestJob() {
+  const String callsign = manualNetworkJob.callsign;
+  const String testUrl = manualNetworkJob.url;
+  routeClient.configure(true, testUrl, manualNetworkJob.fallback);
   RouteResult result;
   {
     NetworkPhaseScope phase(NetworkPhase::Route);
     RouteContext routeContext;
     routeContext.hasPosition = true;
-    routeContext.latitude = siteLatitude;
-    routeContext.longitude = siteLongitude;
+    routeContext.latitude = manualNetworkJob.latitude;
+    routeContext.longitude = manualNetworkJob.longitude;
     result = routeClient.test(callsign, routeContext);
   }
   routeClient.configure(routesEnabled, routeUrl, adsbDbFallbackEnabled);
+  if (networkOperationCancelled()) result.error = uiText("Abfrage durch eine neuere Bedienaktion abgebrochen.", "Query superseded by a newer action.");
   lastRouteError = result.error;
   const bool reachable = result.error.isEmpty();
   String detail;
@@ -5826,18 +5940,39 @@ void handleRouteTest() {
   page += detail;
   page += "</p><p>";
   page += uiText("Prüfposition: Controllerstandort ", "Validation position: controller location ");
-  page += String(siteLatitude, 6);
+  page += String(manualNetworkJob.latitude, 6);
   page += " / ";
-  page += String(siteLongitude, 6);
+  page += String(manualNetworkJob.longitude, 6);
   page += "</p>";
   appendRouteTestResponseHtml(page, routeClient.testResponse(false), uiText("Hauptdienst", "Primary service"));
   appendRouteTestResponseHtml(page, routeClient.testResponse(true), "ADSBDB");
   page += "<p><a href='/config'>";
   page += uiText("Zurück", "Back");
   page += "</a></p></body></html>";
-  webServer.sendHeader("Cache-Control", "no-store");
-  sendPsramResponse("text/html; charset=utf-8", page, 0, SIZE_MAX, reachable ? 200 : 502);
+  manualNetworkJob.page = std::move(page);
+  manualNetworkJob.status = reachable ? 200 : 502;
   routeClient.clearTestResponses();
+}
+
+void runManualNetworkJob() {
+  manualNetworkJob.queued = false;
+  manualNetworkJob.running = true;
+  operationRevision = applicationRevision;
+  if (manualNetworkJob.kind == ManualJobKind::Route) {
+    runRouteTestJob();
+  } else {
+    const bool success = fetchLocalFlight();
+    manualNetworkJob.page = "<!doctype html><html><meta name='viewport' content='width=device-width'><body><h1>ADS-B-Test</h1><p>";
+    manualNetworkJob.page += success ? uiText("Verbindung erfolgreich.", "Connection successful.")
+                                    : uiText("Verbindung fehlgeschlagen oder durch neuere Einstellungen abgebrochen.", "Connection failed or superseded by newer settings.");
+    if (!success) manualNetworkJob.page += htmlEscape(networkLastError);
+    manualNetworkJob.page += "</p><a href='/config'>";
+    manualNetworkJob.page += uiText("Zurück", "Back");
+    manualNetworkJob.page += "</a></body></html>";
+    manualNetworkJob.status = success ? 200 : 502;
+  }
+  manualNetworkJob.running = false;
+  manualNetworkJob.done = true;
 }
 
 
@@ -6416,6 +6551,16 @@ void handleStatusApi() {
   json += "}}";
   json.remove(json.length() - 1);
   json += PsramBuffer(",\"lookup_overrides\":") + lookupStatusJson() + "}";
+  json.remove(json.length() - 1);
+  json += ",\"background_network\":{\"io_active\":";
+  json += outboundIoActive ? "true" : "false";
+  json += ",\"web_stack_free_bytes\":";
+  json += webTaskHandle ? String(uxTaskGetStackHighWaterMark(webTaskHandle) * sizeof(StackType_t)) : "null";
+  json += ",\"network_stack_free_bytes\":";
+  json += networkTaskHandle ? String(uxTaskGetStackHighWaterMark(networkTaskHandle) * sizeof(StackType_t)) : "null";
+  json += ",\"manual_test_pending\":";
+  json += manualNetworkJob.queued || manualNetworkJob.running ? "true" : "false";
+  json += "}}";
   // Append without building a second full JSON document or large stack copy.
   json.remove(json.length() - 1);
   json += PsramBuffer(",\"radar_trails_storage_bytes\":") + String(radarTrailStorage ? sizeof(RadarTrailStorage) : 0) +
@@ -6864,6 +7009,7 @@ void handleLookupUpload() {
   if (!lookupWriteAuthorized()) return;
   HTTPUpload &upload = webServer.upload();
   if (upload.status == UPLOAD_FILE_START) {
+    noteWebMutation();
     if (lookupUploadStarted) {
       lookupUploadError = "Only one lookup file per request"; return;
     }
@@ -6975,6 +7121,7 @@ void handleOtaUpload() {
       !webServer.authenticate("admin", otaPassword.c_str())) return;
   HTTPUpload &upload = webServer.upload();
   if (upload.status == UPLOAD_FILE_START) {
+    noteWebMutation();
     otaUploadValid = false;
     otaBytesWritten = 0;
     otaErrorMessage = "";
@@ -7198,90 +7345,93 @@ void startWebServer() {
     webServer.on("/lookups.json", HTTP_GET, handleLookupDownload);
     webServer.on("/lookups-example.json", HTTP_GET, handleLookupExample);
     webServer.on("/", HTTP_GET, []() {
-      pulseHttpActivity();
+      pulseWebActivity();
       webServer.sendHeader("Location",
                            wifiSetupAccessPointActive ? "/config" : "/status",
                            true);
       webServer.send(302, "text/plain; charset=utf-8", "FlightWall");
     });
     webServer.on("/status", HTTP_GET, []() {
-      pulseHttpActivity();
+      pulseWebActivity();
       webServer.sendHeader("Cache-Control", "no-store");
       sendPsramResponse("text/html; charset=utf-8", webPage(false));
     });
     webServer.on("/config", HTTP_GET, []() {
-      pulseHttpActivity();
+      pulseWebActivity();
       webServer.sendHeader("Cache-Control", "no-store");
       sendPsramResponse("text/html; charset=utf-8", webPage(true, false));
     });
     webServer.on("/display", HTTP_GET, []() {
-      pulseHttpActivity();
+      pulseWebActivity();
       handleWebDisplay();
     });
     webServer.on("/api/display", HTTP_GET, handleDisplayApi);
     webServer.on("/api/status", HTTP_GET, handleStatusApi);
     webServer.on("/api/status-fragment", HTTP_GET, handleStatusFragment);
     webServer.on("/api/wifi-scan", HTTP_POST, []() {
-      pulseHttpActivity(); handleWifiScanStart();
+      pulseWebActivity(); handleWifiScanStart();
     });
     webServer.on("/api/wifi-scan", HTTP_GET, handleWifiScanResult);
     webServer.on("/unknown-codes.json", HTTP_GET, []() {
-      pulseHttpActivity(); handleUnknownCodesDownload();
+      pulseWebActivity(); handleUnknownCodesDownload();
     });
     webServer.on("/configuration.json", HTTP_GET, []() {
-      pulseHttpActivity(); handleConfigurationDownload();
+      pulseWebActivity(); handleConfigurationDownload();
     });
     webServer.on("/configuration/restore", HTTP_POST, []() {
-      pulseHttpActivity(); handleConfigurationRestore();
+      pulseWebActivity(); handleConfigurationRestore();
     });
     webServer.on("/journal.json", HTTP_GET, []() {
-      pulseHttpActivity(); handleJournalJsonDownload();
+      pulseWebActivity(); handleJournalJsonDownload();
     });
     webServer.on("/journal.csv", HTTP_GET, []() {
-      pulseHttpActivity(); handleJournalCsvDownload();
+      pulseWebActivity(); handleJournalCsvDownload();
     });
     webServer.on("/specials.json", HTTP_GET, []() {
-      pulseHttpActivity(); handleSpecialsJsonDownload();
+      pulseWebActivity(); handleSpecialsJsonDownload();
     });
     webServer.on("/specials.csv", HTTP_GET, []() {
-      pulseHttpActivity(); handleSpecialsCsvDownload();
+      pulseWebActivity(); handleSpecialsCsvDownload();
     });
     webServer.on("/save", HTTP_POST, []() {
-      pulseHttpActivity(); handleWebSave();
+      pulseWebActivity(); handleWebSave();
     });
     webServer.on("/test-adsb", HTTP_POST, []() {
-      pulseHttpActivity(); handleAdsbTest();
+      pulseWebActivity(); handleAdsbTest();
     });
     webServer.on("/test-route", HTTP_POST, []() {
-      pulseHttpActivity(); handleRouteTest();
+      pulseWebActivity(); handleRouteTest();
+    });
+    webServer.on("/request-result", HTTP_GET, []() {
+      pulseWebActivity(); handleManualNetworkJobResult();
     });
     webServer.on("/route-cache/delete", HTTP_POST, []() {
-      pulseHttpActivity(); handleRouteCacheDelete();
+      pulseWebActivity(); handleRouteCacheDelete();
     });
     webServer.on("/route-cache/refresh", HTTP_POST, []() {
-      pulseHttpActivity(); handleRouteCacheRefresh();
+      pulseWebActivity(); handleRouteCacheRefresh();
     });
     webServer.on("/route-cache/clear", HTTP_POST, []() {
-      pulseHttpActivity(); handleRouteCacheClear();
+      pulseWebActivity(); handleRouteCacheClear();
     });
     webServer.on("/test-emergency", HTTP_POST, []() {
-      pulseHttpActivity(); handleEmergencyTest();
+      pulseWebActivity(); handleEmergencyTest();
     });
     webServer.on("/stop-emergency-test", HTTP_POST, []() {
-      pulseHttpActivity(); handleStopEmergencyTest();
+      pulseWebActivity(); handleStopEmergencyTest();
     });
 #if FLIGHTWALL_HAS_MATRIX
-    webServer.on("/display-test", HTTP_POST, handleDisplayTest);
+    webServer.on("/display-test", HTTP_POST, []() { pulseWebActivity(); handleDisplayTest(); });
 #endif
     webServer.on("/restart", HTTP_POST, []() {
-      pulseHttpActivity(); handleRestart();
+      pulseWebActivity(); handleRestart();
     });
     webServer.on("/update", HTTP_GET, []() {
-      pulseHttpActivity(); handleOtaPage();
+      pulseWebActivity(); handleOtaPage();
     });
     webServer.on("/update", HTTP_POST, finishOtaUpload, handleOtaUpload);
     webServer.onNotFound([]() {
-      pulseHttpActivity();
+      pulseWebActivity();
       if (wifiSetupAccessPointActive) {
         webServer.sendHeader("Location", "http://192.168.4.1/", true);
         webServer.send(302, "text/plain; charset=utf-8", "FlightWall Setup");
@@ -7418,83 +7568,100 @@ void flushDeferredButtonSettings() {
 }
 
 
-void networkTask(void *) {
-  lastWiFiAttempt = millis();
-  bool initiallyConnected = false;
-  {
-    NetworkPhaseScope phase(NetworkPhase::Wifi);
-    initiallyConnected = connectWiFi(20000);
-  }
-  if (initiallyConnected) {
-    wifiWasConnected = true;
-    startWebServer();
-    fetchLocalFlight();
-    lastPoll = millis();
-  } else {
-    startSetupAccessPoint();
-  }
+void webTask(void *) {
   for (;;) {
-    const uint32_t now = millis();
-    serviceDailyAircraftStatistics();
-    const bool wifiConnected = WiFi.status() == WL_CONNECTED;
-    if (!wifiConnected) networkRecovery.progress();
-    if (!wifiConnected && wifiWasConnected) {
-      wifiWasConnected = false;
-      lastWifiDisconnect = now;
-      stopNetworkServices();
-      setNetworkError("WLAN GETRENNT");
-      startSetupAccessPoint();
-    } else if (wifiConnected && !wifiWasConnected) {
-      wifiWasConnected = true;
-      networkRecovery.progress();
-      ++wifiReconnectCount;
-      if (wifiSetupAccessPointActive) {
-        stopSetupAccessPoint();
-        stopNetworkServices();
-      }
-      startWebServer();
-      Serial.println("Network services restarted after Wi-Fi reconnect");
-    }
-    if (wifiConnected || wifiSetupAccessPointActive) {
-      {
+    {
+      ApplicationStateLock state;
+      if (webServerStarted) {
         NetworkPhaseScope phase(NetworkPhase::Web);
         webServer.handleClient();
       }
-      vTaskDelay(pdMS_TO_TICKS(1));
       if (wifiSetupAccessPointActive) setupDnsServer.processNextRequest();
-    }
-    if (wifiConnected) {
-      if (otaStarted) {
-        NetworkPhaseScope phase(NetworkPhase::Ota);
-        ArduinoOTA.handle();
-      }
-      vTaskDelay(pdMS_TO_TICKS(1));
-      {
-        NetworkPhaseScope phase(NetworkPhase::Mqtt);
-        serviceMqtt();
-      }
-    }
-    if (recoverStalledWiFi()) continue;
-    if (otaRebootAt && static_cast<int32_t>(now - otaRebootAt) >= 0) ESP.restart();
-    if (manualRebootAt && static_cast<int32_t>(now - manualRebootAt) >= 0) ESP.restart();
-    if (!wifiConnected && now - lastWiFiAttempt >= WIFI_RETRY_MS) {
-      lastWiFiAttempt = now;
-      NetworkPhaseScope phase(NetworkPhase::Wifi);
-      connectWiFi(10000);
-    }
-    if (wifiConnected && now - lastPoll >= POLL_INTERVAL_MS) {
-      lastPoll = now;
-      fetchLocalFlight();
-    }
-    {
-      NetworkPhaseScope phase(NetworkPhase::Flash);
-      flushDeferredButtonSettings();
-      flushDeferredRouteCacheIfIdle();
+      // A pending UI/OTA restart must not wait for a remote request timeout.
+      const uint32_t now = millis();
+      if (otaRebootAt && static_cast<int32_t>(now - otaRebootAt) >= 0) ESP.restart();
+      if (manualRebootAt && static_cast<int32_t>(now - manualRebootAt) >= 0) ESP.restart();
     }
     vTaskDelay(pdMS_TO_TICKS(5));
   }
 }
 
+void networkTask(void *) {
+  {
+    ApplicationStateLock state;
+    lastWiFiAttempt = millis();
+    bool initiallyConnected = false;
+    {
+      NetworkPhaseScope phase(NetworkPhase::Wifi);
+      initiallyConnected = connectWiFi(20000);
+    }
+    if (initiallyConnected) {
+      wifiWasConnected = true;
+      startWebServer();
+      fetchLocalFlight();
+      lastPoll = millis();
+    } else {
+      startSetupAccessPoint();
+    }
+  }
+  for (;;) {
+    {
+      ApplicationStateLock state;
+      const uint32_t now = millis();
+      serviceDailyAircraftStatistics();
+      const bool wifiConnected = WiFi.status() == WL_CONNECTED;
+      if (!wifiConnected) networkRecovery.progress();
+      if (!wifiConnected && wifiWasConnected) {
+        wifiWasConnected = false;
+        lastWifiDisconnect = now;
+        stopNetworkServices();
+        setNetworkError("WLAN GETRENNT");
+        startSetupAccessPoint();
+      } else if (wifiConnected && !wifiWasConnected) {
+        wifiWasConnected = true;
+        networkRecovery.progress();
+        ++wifiReconnectCount;
+        if (wifiSetupAccessPointActive) {
+          stopSetupAccessPoint();
+          stopNetworkServices();
+        }
+        startWebServer();
+        Serial.println("Network services restarted after Wi-Fi reconnect");
+      }
+      if (wifiConnected) {
+        if (otaStarted) {
+          NetworkPhaseScope phase(NetworkPhase::Ota);
+          ArduinoOTA.handle();
+        }
+        vTaskDelay(pdMS_TO_TICKS(1));
+        {
+          NetworkPhaseScope phase(NetworkPhase::Mqtt);
+          serviceMqtt();
+        }
+      }
+      if (recoverStalledWiFi()) continue;
+      if (!wifiConnected && now - lastWiFiAttempt >= WIFI_RETRY_MS) {
+        lastWiFiAttempt = now;
+        NetworkPhaseScope phase(NetworkPhase::Wifi);
+        connectWiFi(10000);
+      }
+      if (wifiConnected && !otaPreparing && !otaInProgress && !otaRebootAt && !manualRebootAt) {
+        if (manualNetworkJob.queued) runManualNetworkJob();
+        else if (pollRequested || now - lastPoll >= POLL_INTERVAL_MS) {
+          pollRequested = false;
+          lastPoll = now;
+          fetchLocalFlight();
+        }
+      }
+      {
+        NetworkPhaseScope phase(NetworkPhase::Flash);
+        flushDeferredButtonSettings();
+        flushDeferredRouteCacheIfIdle();
+      }
+    }
+    vTaskDelay(pdMS_TO_TICKS(5));
+  }
+}
 
 void setup() {
   Serial.begin(115200);
@@ -7514,10 +7681,12 @@ void setup() {
       ESP.getFreePsram());
   displayTaskHandle = xTaskGetCurrentTaskHandle();
   initializeLookupOverrides();
+  applicationMutex = xSemaphoreCreateMutex();
+  configureNetworkIo({releaseApplicationForIo, acquireApplicationAfterIo, applicationOperationCancelled});
   flightMutex = xSemaphoreCreateMutex();
   preferencesMutex = xSemaphoreCreateMutex();
   weatherMutex = xSemaphoreCreateMutex();
-  if (flightMutex == nullptr || preferencesMutex == nullptr ||
+  if (applicationMutex == nullptr || flightMutex == nullptr || preferencesMutex == nullptr ||
       weatherMutex == nullptr) {
     Serial.println("Cannot create FreeRTOS mutexes");
     while (true) delay(1000);
@@ -7712,6 +7881,11 @@ void setup() {
 #if FLIGHTWALL_HAS_MATRIX
   drawStatus("FLIGHTWALL", uiText("VERBINDET...", "CONNECTING..."));
 #endif
+  if (xTaskCreatePinnedToCore(webTask, "web", 12288, nullptr, tskIDLE_PRIORITY,
+                              &webTaskHandle, 0) != pdPASS) {
+    Serial.println("Cannot create web task");
+    while (true) delay(1000);
+  }
   if (xTaskCreatePinnedToCore(
           networkTask, "network", 12288, nullptr, tskIDLE_PRIORITY,
           &networkTaskHandle, 0) != pdPASS) {

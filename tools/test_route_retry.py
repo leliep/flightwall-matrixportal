@@ -12,9 +12,12 @@ start=source.index('RouteResult RouteClient::lookup(')
 lookup=source[start:source.index('\n}\n',start)+3]
 code=r'''
 #include <Arduino.h>
+#include "NetworkIo.hpp"
 #include <cassert>
 #include <cstdint>
 #include <iostream>
+bool cancelResult=false;
+bool cancelled(){return cancelResult;}
 bool operator!=(const String& a,const String& b){return !(a==b);}
 struct RouteResult {String status="unavailable",source,error;};
 struct RouteContext {double latitude=0;};
@@ -66,6 +69,11 @@ int main(){
  assert(c.lookup("RYR20JX",context,63).status==String("cached"));assert(c.fetches==2);
  c.enabled_=false;assert(c.lookup("RYR20JX",context,64).status==String("unavailable"));
  assert(c.fetches==2);
+ c.enabled_=true;c.memory.status="unavailable";c.disk.status="unavailable";
+ auto remembered=c.remembers;cancelResult=true;configureNetworkIo({nullptr,nullptr,cancelled});
+ assert(c.lookup("RYR20JX",context,65).status==String("unavailable"));
+ assert(c.remembers==remembered); // A newer config/cache action prevents publication.
+ cancelResult=false;configureNetworkIo({});
  std::cout << "Route retry: timing, wrap, rejected-cache bypass, fresh context and unchanged valid cache passed\n";
 }
 '''
@@ -75,5 +83,5 @@ with tempfile.TemporaryDirectory(prefix='flightwall-route-retry-') as folder:
   binary=path/f'test-{variant}'
   subprocess.run(['c++','-std=c++11','-Wall','-Wextra','-pedantic',
                   '-fsanitize=address,undefined',f'-DFLIGHTWALL_HAS_MATRIX={variant}',
-                  '-I'+str(root/'tools/test_support'),str(path/'test.cpp'),'-o',str(binary)],check=True)
+                  '-I'+str(root/'tools/test_support'),'-I'+str(root/'include'),str(path/'test.cpp'),str(root/'src/NetworkIo.cpp'),'-o',str(binary)],check=True)
   subprocess.run([str(binary)],check=True)

@@ -1,5 +1,26 @@
 # Changelog
 
+## 3.6.1-dual-target.50 – 2026-11-15
+
+- Eigener Web-Task auf Core 0 für beide Varianten; ausgehende ADS-B-/Routen-
+  Verbindungen, Antwortlesen und HTTP-Abschluss geben die Anwendungsdatensperre
+  frei, sodass Status, Konfiguration und Webdisplay weiter bedient werden können
+- Gemeinsame Konfiguration, Cache, Lookup-Daten, Journal und Diagnosen bleiben
+  serialisiert; geänderte Einstellungen oder Cacheaktionen machen laufende
+  Ergebnisse ungültig, bevor diese übernommen oder gespeichert werden
+- Manuelle ADS-B-/Routentests als einzelner begrenzter Hintergrundauftrag mit
+  automatisch aktualisierter Ergebnisseite; keine parallelen TLS-Routenclients,
+  verworfene Antworten aus .49 bleiben sichtbar
+- Web-Task erhält eigenen 12-KiB-Stack; Web-Stackreserve und Hintergrundstatus in
+  HTML/Status-API, PSRAM-Allokatorstatistik für parallele Puffer abgesichert
+- OTA-/manuelle Neustarttermine werden vom Web-Task bedient; kein Warten auf
+  eine externe Abfrage, keine Änderung an Einstellungen oder Lookup-Formaten
+- Tests mit tatsächlichen Abfragepfaden und blockiertem HTTP-/JSON-Stream,
+  paralleler Webbedienung, Abbruch veralteter Ergebnisse, Auftragspolling,
+  PSRAM-Parallelzugriff sowie Stackprüfung für beide Zielvarianten
+- Vorab Status-API-Codes auf .105/.189/.196 leer, Konfigurationen und Lookups
+  geschützt gesichert; keine neuen Codes und kein OTA
+
 ## 3.6.1-dual-target.49 – 2026-11-15
 
 - Status-JSON in einzelnen PSRAM-Anhängeschritten statt einer langen

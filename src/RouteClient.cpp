@@ -1,6 +1,7 @@
 #include "TemporaryPsram.hpp"
 #include "RouteClient.hpp"
 #include "RouteCallsign.hpp"
+#include "NetworkIo.hpp"
 
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
@@ -712,18 +713,22 @@ RouteResult RouteClient::fetchPrimary(const String& callsign,
   http.addHeader("Content-Type", "application/json");
   http.addHeader("Accept", "application/json");
   const int status = captureRouteHttp(diagnostic, client,
-      [&]() { return http.POST(reinterpret_cast<uint8_t*>(body.data()), body.length()); }, routeMemorySnapshot, []() { return millis(); });
+      [&]() { NetworkIoScope io; return http.POST(reinterpret_cast<uint8_t*>(body.data()), body.length()); }, routeMemorySnapshot, []() { return millis(); });
+  if (networkOperationCancelled()) return result;
   if (test) test->httpCode = status;
   diagnostics_.rememberFailure(diagnostic);
   if (status != HTTP_CODE_OK) {
     result.error = "Routen-HTTP " + String(status);
-    http.end();
+    { NetworkIoScope io; http.end(); }
     return result;
   }
 
   JsonDocument document(&temporaryJsonAllocator());
-  const DeserializationError error = deserializeJson(document, http.getStream());
-  http.end();
+  DeserializationError error;
+  { NetworkIoScope io; error = deserializeJson(document, http.getStream()); }
+  if (networkOperationCancelled()) return result;
+  { NetworkIoScope io; http.end(); }
+  if (networkOperationCancelled()) return result;
   if (error) {
     result.error = "Routen-JSON: " + String(error.c_str());
     return result;
@@ -788,23 +793,27 @@ RouteResult RouteClient::fetchAdsbDb(const String& callsign,
   }
   http.addHeader("Accept", "application/json");
   const int status = captureRouteHttp(diagnostic, client,
-      [&]() { return http.GET(); }, routeMemorySnapshot, []() { return millis(); });
+      [&]() { NetworkIoScope io; return http.GET(); }, routeMemorySnapshot, []() { return millis(); });
+  if (networkOperationCancelled()) return result;
   if (test) test->httpCode = status;
   diagnostics_.rememberFailure(diagnostic);
   if (status == HTTP_CODE_NOT_FOUND) {
     result.status = "not_found";
-    http.end();
+    { NetworkIoScope io; http.end(); }
     return result;
   }
   if (status != HTTP_CODE_OK) {
     result.error = "ADSBDB-HTTP " + String(status);
-    http.end();
+    { NetworkIoScope io; http.end(); }
     return result;
   }
 
   JsonDocument document(&temporaryJsonAllocator());
-  const DeserializationError error = deserializeJson(document, http.getStream());
-  http.end();
+  DeserializationError error;
+  { NetworkIoScope io; error = deserializeJson(document, http.getStream()); }
+  if (networkOperationCancelled()) return result;
+  { NetworkIoScope io; http.end(); }
+  if (networkOperationCancelled()) return result;
   if (error) {
     result.error = "ADSBDB-JSON: " + String(error.c_str());
     return result;
@@ -868,6 +877,7 @@ RouteResult RouteClient::fetchAdsbDb(const String& callsign,
 RouteResult RouteClient::fetch(const String& callsign,
                                const RouteContext& context) {
   RouteResult primary = fetchPrimary(callsign, context);
+  if (networkOperationCancelled()) return {};
   if (captureTestResponses_) {
     testResponses_[0].status = primary.status;
     testResponses_[0].error = primary.error;
@@ -875,6 +885,7 @@ RouteResult RouteClient::fetch(const String& callsign,
   if (primary.found() || !adsbDbFallbackEnabled_) return primary;
 
   RouteResult fallback = fetchAdsbDb(callsign, context);
+  if (networkOperationCancelled()) return {};
   if (captureTestResponses_) {
     testResponses_[1].status = fallback.status;
     testResponses_[1].error = fallback.error;
@@ -910,6 +921,7 @@ RouteResult RouteClient::lookup(const String& callsign,
   }
 
   RouteResult result = fetch(callsign, context);
+  if (networkOperationCancelled()) return {};
   lastError_ = result.error;
   if (result.error.isEmpty()) {
     // ADSBDB is a runtime fallback only. Keep its data in RAM and do not copy

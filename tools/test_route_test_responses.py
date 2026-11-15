@@ -11,6 +11,7 @@ fetch=''.join(function(route,s) for s in ['void RouteClient::configure(', 'Route
 renderer=function(main,'void appendRouteTestHtmlText(')+function(main,'void appendRouteTestResponseHtml(')
 code=r'''
 #include "RouteClient.hpp"
+#include "NetworkIo.hpp"
 #include "TemporaryPsram.hpp"
 #include "RouteCallsign.hpp"
 #include <esp_heap_caps.h>
@@ -20,7 +21,23 @@ code=r'''
 #include <string>
 #include <vector>
 #include <iostream>
+#include <atomic>
+#include <thread>
+#include <mutex>
+#include <chrono>
 bool failAllocation=false;
+std::timed_mutex state;
+std::atomic<bool> entered(false), finish(false);
+int blockedMethod=0;
+bool cancelled=false;
+void releaseState(){state.unlock();}
+void acquireState(){state.lock();}
+bool isCancelled(){return cancelled;}
+void awaitWeb(int method){
+ if(blockedMethod!=method)return;
+ entered=true;
+ while(!finish)std::this_thread::sleep_for(std::chrono::milliseconds(1));
+}
 void *heap_caps_realloc(void *p,size_t n,uint32_t caps){assert(caps==(MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT));return failAllocation?nullptr:std::realloc(p,n);}
 void *heap_caps_malloc(size_t n,uint32_t caps){return heap_caps_realloc(nullptr,n,caps);}
 void heap_caps_free(void *p){std::free(p);}
@@ -34,7 +51,7 @@ struct HTTPClient {
  HTTPClient():reply(replies.at(nextReply++)),stream(reply.json){}
  void setConnectTimeout(int){} void setTimeout(int){} void addHeader(const char*,const char*){}
  bool begin(WiFiClientSecure&,const String&){return true;}
- int POST(uint8_t*,size_t){return reply.status;} int GET(){return reply.status;}
+ int POST(uint8_t*,size_t){awaitWeb(1);return reply.status;} int GET(){awaitWeb(2);return reply.status;}
  std::istringstream &getStream(){return stream;} void end(){}
 };
 constexpr int HTTP_CODE_OK=200,HTTP_CODE_NOT_FOUND=404;
@@ -95,17 +112,34 @@ int main(){
   assert(failed.captureFailed && failed.json.isEmpty());failed.attempted=true;
   assert(html(failed).find("Could not capture")!=std::string::npos);
  }
+
+ for(int method: {1,2}) {
+  fixtures(response);client.configure(true,"https://adsb.im",true);
+  entered=false;finish=false;cancelled=false;blockedMethod=method;
+  configureNetworkIo({releaseState,acquireState,isCancelled});
+  RouteResult aborted;
+  std::thread worker([&]{state.lock();aborted=client.test("DLH072",context);state.unlock();});
+  const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(2);
+  while(!entered && std::chrono::steady_clock::now()<deadline)std::this_thread::yield();
+  assert(entered);
+  // A web request acquires the same state gate while HTTP is still blocked.
+  assert(state.try_lock_for(std::chrono::milliseconds(250)));
+  assert(!finish);assert(client.testResponse(false).attempted);
+  cancelled=true;finish=true;state.unlock();worker.join();
+  assert(!aborted.found());assert(nextReply==static_cast<size_t>(method));
+  blockedMethod=0;cancelled=false;configureNetworkIo({});client.clearTestResponses();
+ }
  assert(temporaryPsramStats().allocatedBytes==0);
  assert(psramTextMemoryStats().blocks==0);
- std::cout<<"Manual route test: preserved replies before all rejection branches, provider separation, leading zeros, stale reset, bounded PSRAM, OOM and HTML escaping passed\n";
+ std::cout<<"Manual route test: preserved replies before all rejection branches, provider separation, leading zeros, stale reset, bounded PSRAM, OOM, HTML escaping, concurrent web access during HTTP and cancellation passed\n";
 }
 '''
 with tempfile.TemporaryDirectory(prefix='flightwall-route-responses-') as folder:
  p=Path(folder);(p/'test.cpp').write_text(code)
  for variant in (0,1):
   binary=p/str(variant)
-  subprocess.run(['c++','-std=c++11','-Wall','-Wextra','-pedantic','-fsanitize=address,undefined',f'-DFLIGHTWALL_HAS_MATRIX={variant}',
+  subprocess.run(['c++','-std=c++11','-pthread','-Wall','-Wextra','-pedantic','-fsanitize=address,undefined',f'-DFLIGHTWALL_HAS_MATRIX={variant}',
    '-DARDUINOJSON_ENABLE_ARDUINO_STRING=0','-DARDUINOJSON_ENABLE_ARDUINO_STREAM=0','-DARDUINOJSON_ENABLE_ARDUINO_PRINT=0',
    '-I'+str(root/'tools/test_support'),'-I'+str(root/'include'),'-I'+str(root/'.pio/libdeps/adafruit_matrixportal_esp32s3/ArduinoJson/src'),
-   str(p/'test.cpp'),str(root/'src/TemporaryPsram.cpp'),str(root/'src/PsramText.cpp'),'-o',str(binary)],check=True)
+   str(p/'test.cpp'),str(root/'src/TemporaryPsram.cpp'),str(root/'src/PsramText.cpp'),str(root/'src/NetworkIo.cpp'),'-o',str(binary)],check=True)
   subprocess.run([str(binary)],check=True)

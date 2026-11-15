@@ -27,6 +27,8 @@ char* lookupUploadData=nullptr;
 size_t lookupUploadBytes=0;
 bool lookupUploadComplete=false,lookupUploadStarted=false;
 String lookupUploadError;
+int applicationRevision=0;
+void noteWebMutation(){++applicationRevision;}
 int allocated=0;
 void* allocateLookupUpload(){++allocated;return std::malloc(lookupUploadLimit);}
 void releaseLookupUpload(void* value){if(value){--allocated;std::free(value);}}
@@ -36,7 +38,8 @@ int main(){
  webServer.authenticated=false;event(UPLOAD_FILE_START);assert(allocated==0);
  webServer.authenticated=true;webServer.headerPresent=false;event(UPLOAD_FILE_START);assert(allocated==0);
  webServer.headerPresent=true;otaPassword="";event(UPLOAD_FILE_START);assert(allocated==0);otaPassword="abcdefgh";
- event(UPLOAD_FILE_START);assert(allocated==1);event(UPLOAD_FILE_WRITE,4);event(UPLOAD_FILE_WRITE,4);
+ assert(applicationRevision==0);
+ event(UPLOAD_FILE_START);assert(applicationRevision==1);assert(allocated==1);event(UPLOAD_FILE_WRITE,4);event(UPLOAD_FILE_WRITE,4);
  assert(lookupUploadBytes==8);assert(memcmp(lookupUploadData,request.buf,4)==0);
  event(UPLOAD_FILE_END);assert(lookupUploadComplete);assert(lookupUploadError.isEmpty());
  event(UPLOAD_FILE_START);assert(!lookupUploadError.isEmpty());assert(allocated==1);

@@ -57,7 +57,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.49` |
+| Firmware | `3.6.1-dual-target.50` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -1133,6 +1133,44 @@ Die Statusseite zeigt unter anderem:
 - maximale Laufzeiten einzelner Netzwerkphasen und Taskdiagnose
 
 ### Temporäre Puffer und TLS-Reserve
+
+Ab `.50` hat die Webbedienung einen eigenen Task. Der Daten-Task bleibt allein
+für ausgehende ADS-B-/Routenabfragen zuständig. Beide Tasks schützen die
+gemeinsamen Anwendungsdaten mit einer Sperre; während blockierender HTTP-/TLS-
+Zugriffe, Antwortlesen und Verbindungsabschluss arbeitet der Daten-Task nur mit
+seinen lokalen Objekten und gibt die Sperre frei. Dadurch können die Webseiten
+auch während eines langsamen Routendienstes oder ADS-B-Ersatzabrufs antworten.
+Es werden keine zweiten gleichzeitigen TLS-Routenverbindungen gestartet.
+
+Änderungen an Konfiguration, Lookups oder Routencache invalidieren laufende
+Abfrageergebnisse. Nach Rückkehr aus dem blockierenden Zugriff werden diese
+verworfen und die Verarbeitung mit aktuellem Stand erneut angefordert; eine
+bereits laufende Socketoperation wird damit nicht sofort zwangsweise beendet.
+Die Web- und Daten-Task-Stacks sind jeweils 12 KiB groß. Der zusätzliche
+Web-Stack benötigt internen RAM; große Antwort-/JSON-Puffer bleiben im PSRAM.
+Die technische Diagnose zeigt zusätzlich die **Web-Stackreserve**, die API
+unter `background_network` auch laufende I/O und ausstehende manuelle Tests.
+Die zusätzliche Stack-/TLS-Reserve muss nach einer Installation am Gerät
+kontrolliert werden. Schwacher WLAN-Empfang wird durch diese Trennung nicht
+behoben; MQTT-Verbindungsversuche und ausdrückliche Flashaktionen sind weiterhin
+eigene Arbeitsabschnitte.
+
+Manuelle ADS-B-/Routentests starten ab `.50` einen einzelnen Hintergrundauftrag.
+Der Browser folgt automatisch zu `/request-result?id=…` und lädt die Seite
+während der Bearbeitung erneut. Andere Webseiten bleiben während der externen
+Abfragen verfügbar. Weitere Tests werden mit HTTP 409 abgewiesen, solange einer
+läuft. Nach Abschluss erscheinen die bisherigen Ergebnisse einschließlich der
+verworfenen Routenantworten. Nur das jüngste fertige Testergebnis wird bis zum
+nächsten Test oder Neustart im PSRAM gehalten. Für Skripte: POST liefert eine
+303-Weiterleitung, GET während der Bearbeitung HTTP 202, danach das fertige
+Ergebnis mit HTTP 200 oder 502; ersetzte IDs liefern HTTP 410.
+
+Die Tests `tools/test_adsb_background_io.py`,
+`tools/test_route_test_responses.py` und `tools/test_background_jobs.py` prüfen
+die tatsächlichen Abfrage-/Auftragspfade mit verzögerten HTTP-/JSON-Streams und
+gleichzeitiger Webbedienung. Der PSRAM-Puffertest enthält zusätzlich parallele
+Allokationen. Diese Prüfungen ersetzen keine spätere Laufzeitmessung auf den
+Controllern.
 
 Ab `.49` baut die Status-API ihr JSON in kurzen, aufeinanderfolgenden Schritten
 auf. Große Verkettungen halten sonst viele temporäre Objekte gleichzeitig auf

@@ -32,6 +32,9 @@ jobs:
         run: |
           python3 tools/test_temporary_psram.py
           python3 tools/test_route_test_responses.py
+          python3 tools/test_adsb_background_io.py
+          python3 tools/test_background_jobs.py
+          python3 tools/test_route_publication.py
       - name: Build headless ESP32-S3 N16R8 firmware
         run: pio run -e esp32s3_n16r8_headless
       - name: Check network handler stack frames on both targets

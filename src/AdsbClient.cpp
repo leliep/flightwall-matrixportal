@@ -1,6 +1,7 @@
 #include "TemporaryPsram.hpp"
 #include "AdsbClient.hpp"
 #include "NetworkRecovery.hpp"
+#include "NetworkIo.hpp"
 
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
@@ -40,12 +41,14 @@ AdsbResult AdsbClient::fetch(const ProcessingConfig& config) {
   http.addHeader("User-Agent",
                  "FlightWall-MatrixPortal/3 (+https://github.com/leliep/flightwall-matrixportal)");
 
-  const int status = http.GET();
+  int status;
+  { NetworkIoScope io; status = http.GET(); }
+  if (networkOperationCancelled()) { { NetworkIoScope io; http.end(); } return result; }
   result.transportFailed = NetworkRecovery::isTransportFailure(status);
   result.httpResponded = status > 0;
   if (status != HTTP_CODE_OK) {
     result.error = "ADS-B HTTP " + String(status);
-    http.end();
+    { NetworkIoScope io; http.end(); }
     return result;
   }
 
@@ -64,14 +67,18 @@ AdsbResult AdsbClient::fetch(const ProcessingConfig& config) {
 
   if (filter.overflowed()) {
     result.error="ADS-B filter: PSRAM allocation failed";
-    http.end();return result;
+    { NetworkIoScope io; http.end(); }return result;
   }
   JsonDocument document(&temporaryJsonAllocator());
-  DeserializationError error = deserializeJson(
-      document, http.getStream(), DeserializationOption::Filter(filter));
+  DeserializationError error;
+  {
+    NetworkIoScope io;
+    error = deserializeJson(document, http.getStream(), DeserializationOption::Filter(filter));
+  }
+  if (networkOperationCancelled()) { { NetworkIoScope io; http.end(); } return result; }
   if (error) {
     result.error = "ADS-B JSON: " + String(error.c_str());
-    http.end();
+    { NetworkIoScope io; http.end(); }
     return result;
   }
 
@@ -79,7 +86,7 @@ AdsbResult AdsbClient::fetch(const ProcessingConfig& config) {
   const bool hasAdsbFiAircraft = document["ac"].is<JsonArrayConst>();
   if (!hasReadsbAircraft && !hasAdsbFiAircraft) {
     result.error = "ADS-B JSON: Format";
-    http.end();
+    { NetworkIoScope io; http.end(); }
     return result;
   }
 
@@ -110,6 +117,6 @@ AdsbResult AdsbClient::fetch(const ProcessingConfig& config) {
       result.candidates.push_back(std::move(aircraft));
   }
   result.ok = true;
-  http.end();
+  { NetworkIoScope io; http.end(); }
   return result;
 }
