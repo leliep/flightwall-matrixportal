@@ -2,6 +2,8 @@
 
 ## 3.6.1-dual-target.48 – 2026-11-15
 
+- Vor OTA zusätzlich LED (Pulkovo) samt OurAirports-Koordinaten ergänzt
+
 - Große temporäre Status-/Konfigurations-/API-Puffer und JSON-Dokumente für
   ADS-B, Routen und Konfiguration ausschließlich in PSRAM; kein interner Fallback
 - Status-Refresh versendet einen Bereich des vorhandenen PSRAM-Puffers statt
