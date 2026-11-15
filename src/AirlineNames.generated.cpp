@@ -304,6 +304,7 @@ const AirlineName names[] = {
   {"PLF", "Polish Air Force"},
   {"POF", "Police Aux Frontières"},
   {"PTN", "Platoon Aviation"},
+  {"PVD", "PAD Aviation Service"},
   {"PWF", "Private Wings"},
   {"QAJ", "Quick Air Jet Charter"},
   {"QFA", "Qantas"},

@@ -2,6 +2,8 @@
 
 ## 3.6.1-dual-target.50 – 2026-11-15
 
+- Vor OTA PVD (PAD Aviation Service GmbH, FAA-Verzeichnis) ergänzt
+
 - Eigener Web-Task auf Core 0 für beide Varianten; ausgehende ADS-B-/Routen-
   Verbindungen, Antwortlesen und HTTP-Abschluss geben die Anwendungsdatensperre
   frei, sodass Status, Konfiguration und Webdisplay weiter bedient werden können
