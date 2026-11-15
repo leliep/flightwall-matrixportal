@@ -1,3 +1,4 @@
+#include "TemporaryPsram.hpp"
 #include "AdsbClient.hpp"
 #include "NetworkRecovery.hpp"
 
@@ -48,7 +49,7 @@ AdsbResult AdsbClient::fetch(const ProcessingConfig& config) {
     return result;
   }
 
-  JsonDocument filter;
+  JsonDocument filter(&temporaryJsonAllocator());
   filter["now"] = true;
   const char* fields[] = {"hex",       "flight",    "r",         "t",
                           "desc",      "ownOp",     "category",  "dbFlags",
@@ -61,7 +62,11 @@ AdsbResult AdsbClient::fetch(const ProcessingConfig& config) {
     filter["ac"][0][field] = true;
   }
 
-  JsonDocument document;
+  if (filter.overflowed()) {
+    result.error="ADS-B filter: PSRAM allocation failed";
+    http.end();return result;
+  }
+  JsonDocument document(&temporaryJsonAllocator());
   DeserializationError error = deserializeJson(
       document, http.getStream(), DeserializationOption::Filter(filter));
   if (error) {

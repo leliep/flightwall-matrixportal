@@ -11,7 +11,8 @@ import tempfile
 
 root = Path(__file__).resolve().parents[1]
 source = (root / 'src/main.cpp').read_text()
-escape = source[source.index('String jsonEscape('):source.index('String configurationJson()')]
+start=source.index('String jsonEscape(')
+escape=source[start:source.index('\n}\n',start)+3]
 serializers = source[source.index('void appendRouteMemoryJson('):source.index('void appendRouteRequestHtml(')]
 append = source[source.index('  // Append without building a second full JSON'):source.index('  webServer.sendHeader', source.index('  // Append without building a second full JSON'))]
 adapter = r'''
@@ -43,6 +44,9 @@ class String {
   }
   const char *c_str() const { return value.c_str(); }
 };
+using PsramBuffer=String;
+struct TemporaryPsramStats {size_t allocatedBytes=0,peakBytes=0;uint32_t allocationFailures=0;};
+const TemporaryPsramStats &temporaryPsramStats(){static TemporaryPsramStats stats;return stats;}
 uint32_t millis() { return 10000; }
 PsramTextMemoryStats textMemoryStats;
 const PsramTextMemoryStats &psramTextMemoryStats() { return textMemoryStats; }
@@ -64,6 +68,7 @@ int main() {
  d.httpAttempted=true;d.httpCode=-1;d.tlsCode=-32512;
  std::snprintf(d.tlsMessage,sizeof(d.tlsMessage),"%s","SSL - \"allocation\" failed\n");
  d.before=statusMemory;d.after=statusMemory;d.durationMs=500;
+ d.afterCleanup=statusMemory;d.afterCleanup.freeInternal=62000;d.cleanupCaptured=true;
  routeClient.data.rememberFailure(d);
  routeClient.data.fallback.begin("adsbdb","DLH2HT",6000,statusMemory);
  routeClient.data.fallback.httpAttempted=true;routeClient.data.fallback.httpCode=200;
@@ -93,6 +98,9 @@ assert d['primary']['tls_error_detail_available'] is True
 assert '"allocation"' in d['primary']['tls_error_text']
 assert d['primary']['age_seconds'] == 5
 assert d['primary']['before_request']['free_internal_bytes'] == 54000
+assert d['primary']['after_cleanup']['free_internal_bytes'] == 62000
+assert d['fallback']['after_cleanup'] is None
+assert empty['temporary_memory']['storage']=='psram'
 assert d['fallback']['http_code'] == 200 and not d['fallback']['tls_error_detail_available']
 assert d['last_failure'] == d['primary']
 print('Status-API diagnostic output passed: valid JSON, empty state, TLS details, escaping, independent providers, retained failure')

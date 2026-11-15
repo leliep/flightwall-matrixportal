@@ -1,5 +1,19 @@
 # Changelog
 
+## 3.6.1-dual-target.48 – 2026-11-15
+
+- Große temporäre Status-/Konfigurations-/API-Puffer und JSON-Dokumente für
+  ADS-B, Routen und Konfiguration ausschließlich in PSRAM; kein interner Fallback
+- Status-Refresh versendet einen Bereich des vorhandenen PSRAM-Puffers statt
+  einer zweiten vollständigen Kopie; fehlgeschlagene Puffer liefern HTTP 503
+- Messpunkt after_cleanup nach HTTP-/TLS-/JSON-Destruktoren auf allen Rückwegen,
+  auch Fehlern und rejected; Anzeige im Status und Erhalt beim letzten Fehler
+- API zeigt aktuelle/spitzenmäßige temporäre PSRAM-Belegung und Fehlerzahl
+- Vorab IND, XCR und DSA samt OurAirports-Koordinaten ergänzt; DSA als historischer
+  Routencode des in der Quelle geschlossenen Doncaster Sheffield erhalten
+- Auf .196 unter .47 unvollständige Statusantwort mit Nullbytes am Ende erfasst;
+  neue Puffer zusätzlich mit großen HTML-Antworten und Speicherfehlern geprüft
+
 ## 3.6.1-dual-target.47 – 2026-11-14
 
 - Bei unverändert ausgewähltem Flug werden neben unavailable auch rejected

@@ -1132,6 +1132,32 @@ Die Statusseite zeigt unter anderem:
 - Matrix-Farbtiefe, Bildwiederholrate sowie letzte/maximale `show()`-Dauer
 - maximale Laufzeiten einzelner Netzwerkphasen und Taskdiagnose
 
+### Temporäre Puffer und TLS-Reserve
+
+Ab `.48` liegen große Status-/Konfigurations-/API-Antworten und die JSON-Dokumente
+für ADS-B, Routendienste und Konfiguration ausschließlich in PSRAM. Die
+Statusaktualisierung versendet direkt einen Ausschnitt des vorhandenen Puffers,
+ohne eine zweite vollständige interne String-Kopie. Ein einzelner Antwortpuffer
+ist auf 512 KiB begrenzt; bei fehlendem PSRAM wird keine unvollständige Seite
+als erfolgreiche Antwort versendet, sondern HTTP 503. Bereits begonnene
+Streaming-Downloads werden bei Pufferfehlern abgebrochen. Kleine Formatierungs-
+und Frameworkpuffer können weiterhin internen RAM benötigen; TLS selbst bleibt
+entsprechend der eingebundenen SDK-Konfiguration im internen Speicher.
+
+`/api/status` enthält unter `temporary_memory` aktuelle und maximale
+PSRAM-Pufferbelegung sowie `allocation_failures`. Die aktuelle Belegung umfasst
+auch den Puffer der gerade aufgebauten Statusantwort und den Scan-Ergebniscache.
+Der Spitzenwert gilt seit Start. Es gibt keinen Rückfall auf internen Speicher.
+
+Die Routen-Verbindungsdiagnose enthält zusätzlich `after_cleanup`: interner
+freier RAM, größter Block und Minimum **nach** Freigabe der lokalen HTTP-, TLS-
+und JSON-Ressourcen. Dieser Messpunkt wird auch bei Fehlern und abgelehnten Routen
+erfasst und beim letzten Fehler mitgeführt. `after_request` bleibt die Messung
+unmittelbar nach GET/POST, bevor alle Ressourcen freigegeben wurden. Die
+Differenz ist deshalb für sich kein Nachweis eines Speicherlecks. Die Werte
+beim Funktionsende enthalten weiterhin andere laufende Anwendungsdaten und
+messen nicht den Speicherbedarf mitten im TLS-Handshake.
+
 ### Automatische WLAN-Wiederherstellung
 
 Ab `.45` wird das WLAN auch dann neu verbunden, wenn es weiterhin als verbunden

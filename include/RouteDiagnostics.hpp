@@ -24,6 +24,8 @@ struct RouteRequestDiagnostics {
   RouteMemorySnapshot entry;
   RouteMemorySnapshot before;
   RouteMemorySnapshot after;
+  RouteMemorySnapshot afterCleanup;
+  bool cleanupCaptured = false;
 
   void begin(const char *provider, const char *flight, uint32_t now,
              const RouteMemorySnapshot &memory) {
@@ -34,7 +36,7 @@ struct RouteRequestDiagnostics {
     startedMs = now;
     std::snprintf(source, sizeof(source), "%s", provider);
     std::snprintf(callsign, sizeof(callsign), "%s", flight);
-    entry = before = after = memory;
+    entry = before = after = afterCleanup = memory;
   }
   bool failed() const {
     return available && (!httpAttempted ||
@@ -73,4 +75,23 @@ struct RouteDiagnostics {
   void rememberFailure(const RouteRequestDiagnostics &diagnostic) {
     if (diagnostic.failed()) lastFailure = diagnostic;
   }
+};
+
+// Declare before HTTP/TLS/JSON locals so reverse destruction samples only after
+// those resources have been released, including every early-return path.
+class RouteCleanupCapture {
+ public:
+  RouteCleanupCapture(RouteDiagnostics &all, RouteRequestDiagnostics &request,
+                      RouteMemorySnapshot (*memory)())
+      : all_(all),request_(request),memory_(memory) {}
+  ~RouteCleanupCapture() {
+    request_.afterCleanup=memory_();request_.cleanupCaptured=true;
+    all_.rememberFailure(request_);
+  }
+  RouteCleanupCapture(const RouteCleanupCapture&)=delete;
+  RouteCleanupCapture &operator=(const RouteCleanupCapture&)=delete;
+ private:
+  RouteDiagnostics &all_;
+  RouteRequestDiagnostics &request_;
+  RouteMemorySnapshot (*memory_)();
 };

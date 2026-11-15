@@ -1,3 +1,4 @@
+#include "TemporaryPsram.hpp"
 // Version generated: 2026-10-03 12:17:49 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
@@ -50,8 +51,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.47";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-14 retry rejected routes";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.48";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-15 temporary PSRAM and TLS cleanup diagnostics";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -370,7 +371,7 @@ String otaPassword = OTA_PASSWORD;
 String wifiSetupAccessPointSsid;
 bool wifiScanRequested = false;
 uint32_t wifiScanStartedAt = 0;
-String wifiScanResultJson;
+PsramBuffer wifiScanResultJson;
 uint32_t wifiReconnectCount = 0;
 uint32_t webServerStartCount = 0;
 uint32_t lastWifiDisconnect = 0;
@@ -3765,8 +3766,22 @@ String jsonEscape(String value) {
 }
 
 
-String configurationJson() {
-  JsonDocument document;
+void sendPsramResponse(const char *type, const PsramBuffer &body,
+                       size_t offset=0, size_t count=SIZE_MAX) {
+  if (body.failed() || offset > body.length()) {
+    webServer.send(503, "text/plain; charset=utf-8", "Insufficient PSRAM for response");
+    return;
+  }
+  const size_t available=body.length()-offset;
+  if (count > available) count=available;
+  webServer.setContentLength(count);
+  webServer.send(200,type,"");
+  if (count) webServer.sendContent(body.c_str()+offset,count);
+}
+
+
+PsramBuffer configurationJson() {
+  JsonDocument document(&temporaryJsonAllocator());
   document["format"] = "flightwall-config-v1";
   document["firmware"] = APP_VERSION;
   document["device_variant"] = DEVICE_VARIANT;
@@ -3825,8 +3840,9 @@ String configurationJson() {
     item["order"] = pageOrder[page];
   }
 #endif
-  String json;
-  serializeJsonPretty(document, json);
+  PsramBuffer json;
+  if (document.overflowed()) json.reserve(PsramBuffer::maximumSize+1);
+  else serializeJsonPretty(document, json);
   return json;
 }
 
@@ -3842,7 +3858,7 @@ void handleConfigurationDownload() {
       "Content-Disposition",
       String("attachment; filename=\"flightwall-config-") +
           DEVICE_VARIANT + ".json\"");
-  webServer.send(200, "application/json; charset=utf-8", configurationJson());
+  sendPsramResponse("application/json; charset=utf-8", configurationJson());
 }
 
 
@@ -3855,7 +3871,7 @@ bool validSiteNameSetting(JsonVariantConst value) {
 
 
 void handleConfigurationRestore() {
-  JsonDocument document;
+  JsonDocument document(&temporaryJsonAllocator());
   const DeserializationError error =
       deserializeJson(document, webServer.arg("plain"));
   if (error || String(document["format"] | "") != "flightwall-config-v1" ||
@@ -4034,7 +4050,8 @@ String wifiSignalQualityText() {
 }
 
 
-void translateWebPageToEnglish(String &html) {
+template<typename Text>
+void translateWebPageToEnglish(Text &html) {
   if (!uiEnglish) return;
   struct Translation { const char *de; const char *en; };
   static const Translation translations[] = {
@@ -4219,7 +4236,7 @@ void translateWebPageToEnglish(String &html) {
 }
 
 
-void appendDailyJournalStatus(String &html) {
+void appendDailyJournalStatus(PsramBuffer &html) {
   html += F("<section class='statusCard wide'><h3>");
   html += uiText("Tagesjournal", "Daily journal");
   html += " · " + String(dailyJournalCount) + " / " +
@@ -4263,24 +4280,32 @@ void appendDailyJournalStatus(String &html) {
 }
 
 
-void appendRouteMemoryJson(String &json, const RouteMemorySnapshot &memory) {
-  json += "{\"free_internal_bytes\":" + String(memory.freeInternal) +
+void appendRouteMemoryJson(PsramBuffer &json, const RouteMemorySnapshot &memory) {
+  json += PsramBuffer("{\"free_internal_bytes\":") + String(memory.freeInternal) +
           ",\"largest_internal_block_bytes\":" + String(memory.largestInternal) +
           ",\"minimum_internal_bytes\":" + String(memory.minimumInternal) + '}';
 }
 
-void appendPersistentTextMemoryJson(String &json) {
+void appendPersistentTextMemoryJson(PsramBuffer &json) {
   const auto &memory = psramTextMemoryStats();
-  json += "{\"storage\":\"psram\",\"allocated_bytes\":" + String(memory.allocatedBytes) +
+  json += PsramBuffer("{\"storage\":\"psram\",\"allocated_bytes\":") + String(memory.allocatedBytes) +
           ",\"blocks\":" + String(memory.blocks) +
           ",\"allocation_failures\":" + String(memory.allocationFailures) + '}';
 }
 
-void appendRouteRequestJson(String &json, const RouteRequestDiagnostics &d) {
+void appendTemporaryMemoryJson(PsramBuffer &json) {
+  const auto memory=temporaryPsramStats();
+  json += PsramBuffer("{\"storage\":\"psram\",\"allocated_bytes\":") +
+      String(memory.allocatedBytes) + ",\"peak_bytes\":" + String(memory.peakBytes) +
+      ",\"allocation_failures\":" + String(memory.allocationFailures) + '}';
+}
+
+
+void appendRouteRequestJson(PsramBuffer &json, const RouteRequestDiagnostics &d) {
   if (!d.available) { json += "null"; return; }
   char hex[16];
   snprintf(hex, sizeof(hex), "-0x%04lX", static_cast<unsigned long>(0U - static_cast<uint32_t>(d.tlsCode)));
-  json += "{\"source\":\"" + jsonEscape(d.source) +
+  json += PsramBuffer("{\"source\":\"") + jsonEscape(d.source) +
           "\",\"callsign\":\"" + jsonEscape(d.callsign) +
           "\",\"attempts\":" + String(d.attempts) +
           ",\"started_ms\":" + String(d.startedMs) +
@@ -4298,10 +4323,13 @@ void appendRouteRequestJson(String &json, const RouteRequestDiagnostics &d) {
   appendRouteMemoryJson(json, d.before);
   json += ",\"after_request\":";
   appendRouteMemoryJson(json, d.after);
+  json += ",\"after_cleanup\":";
+  if (d.cleanupCaptured) appendRouteMemoryJson(json,d.afterCleanup);
+  else json += "null";
   json += '}';
 }
 
-void appendRouteRequestHtml(String &html, const char *label,
+void appendRouteRequestHtml(PsramBuffer &html, const char *label,
                             const RouteRequestDiagnostics &d) {
   html += "<h4>" + String(label) + "</h4>";
   if (!d.available) {
@@ -4332,6 +4360,9 @@ void appendRouteRequestHtml(String &html, const char *label,
           String(d.before.freeInternal) + " / " + String(d.before.largestInternal) +
           "<br>" + uiText("Nach HTTP: ", "After HTTP: ") +
           String(d.after.freeInternal) + " / " + String(d.after.largestInternal) +
+          "<br>" + uiText("Nach TLS-Freigabe: ", "After TLS cleanup: ") +
+          (d.cleanupCaptured ? String(d.afterCleanup.freeInternal) + " / " +
+              String(d.afterCleanup.largestInternal) : String("-")) +
           "<br>" + uiText("Minimum seit Start: ", "Minimum since boot: ") +
           String(d.after.minimumInternal) + "</p>";
 }
@@ -4348,7 +4379,7 @@ String lookupStatusJson() {
       ",\"last_error\":\"" + jsonEscape(lookupLastError()) + "\"}";
 }
 
-void appendLookupStatusHtml(String &html) {
+void appendLookupStatusHtml(PsramBuffer &html) {
   html += "<section class='statusCard wide'><h3>Lookup " +
       String(uiText("Ergänzungen", "extensions")) + "</h3><p>" +
       htmlEscape(lookupDataVersion()) + " · " + String(lookupAirportCount()) +
@@ -4358,7 +4389,7 @@ void appendLookupStatusHtml(String &html) {
       uiText("Lookup-Datei verwalten", "Manage lookup file") + "</a></section>";
 }
 
-void appendRouteDiagnosticsHtml(String &html) {
+void appendRouteDiagnosticsHtml(PsramBuffer &html) {
   const auto &diagnostics = routeClient.diagnostics();
   html += "<details id='routeDiagnosis' class='statusCard wide'><summary>" +
           String(uiText("Routen-Verbindungsdiagnose", "Route connection diagnostics")) + "</summary>";
@@ -4366,11 +4397,11 @@ void appendRouteDiagnosticsHtml(String &html) {
   appendRouteRequestHtml(html, "ADSBDB", diagnostics.fallback);
   appendRouteRequestHtml(html, uiText("Letzter gespeicherter Fehler", "Last recorded failure"), diagnostics.lastFailure);
   html += "<p class='muted'>" + String(uiText(
-      "Messungen vor und nach HTTP, nicht während des TLS-Handshakes. Cachetreffer starten keine Messung. Fehler bleiben bis zum Neustart oder nächsten Fehler erhalten.",
-      "Measurements before and after HTTP, not during the TLS handshake. Cache hits do not start measurements. Failures are retained until reboot or the next failure.")) + "</p></details>";
+      "Messungen vor/nach HTTP und nach TLS-Freigabe, nicht während des Handshakes. Cachetreffer starten keine Messung. Fehler bleiben bis zum Neustart oder nächsten Fehler erhalten.",
+      "Measurements before/after HTTP and after TLS cleanup, not during the handshake. Cache hits do not start measurements. Failures are retained until reboot or the next failure.")) + "</p></details>";
 }
 
-String webPage(bool configurationPage = false, bool includeRouteCache = true) {
+PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = true) {
   const RouteMemorySnapshot statusMemory = routeMemorySnapshot();
   FlightData statusFlight;
   String statusError;
@@ -4394,7 +4425,7 @@ String webPage(bool configurationPage = false, bool includeRouteCache = true) {
     xSemaphoreGive(weatherMutex);
   }
 
-  String html;
+  PsramBuffer html;
   // Status and configuration are deliberately separate. Besides making the
   // UI clearer, this keeps a normal status request from assembling the large
   // settings form and keeps automatic refreshes away from user input.
@@ -5213,7 +5244,11 @@ wifiScanResults.addEventListener('change',()=>{
 
 
 void handleStatusFragment() {
-  String page = webPage(false, false);
+  PsramBuffer page = webPage(false, false);
+  if (page.failed()) {
+    sendPsramResponse("text/html; charset=utf-8",page);
+    return;
+  }
   const String opening = "<div id='statusData'>";
   const String closing = "</div><form method='post' action='/restart'";
   const int start = page.indexOf(opening);
@@ -5222,10 +5257,10 @@ void handleStatusFragment() {
     webServer.send(500, "text/plain; charset=utf-8", "Status nicht verfügbar");
     return;
   }
-  const String fragment = page.substring(start + opening.length(), end);
+
   webServer.sendHeader("Cache-Control", "no-store");
   webServer.sendHeader("Connection", "close");
-  webServer.send(200, "text/html; charset=utf-8", fragment);
+  sendPsramResponse("text/html; charset=utf-8", page, start+opening.length(), end-start-opening.length());
 }
 
 
@@ -5752,9 +5787,9 @@ void handleDisplayApi() {
     updated = networkLastSuccessfulPoll;
     xSemaphoreGive(flightMutex);
   }
-  String json;
+  PsramBuffer json;
   json.reserve(FLIGHTWALL_HAS_MATRIX ? 4200 : 24000);
-  json = "{\"language\":\"" + String(uiEnglish ? "en" : "de") +
+  json = PsramBuffer("{\"language\":\"") + String(uiEnglish ? "en" : "de") +
          "\",\"device_variant\":\"" + jsonEscape(DEVICE_VARIANT) +
          "\",\"web_radar\":" +
              String(FLIGHTWALL_HAS_MATRIX ? "false" : "true") +
@@ -5781,7 +5816,7 @@ void handleDisplayApi() {
     if (page) json += ',';
     json += String(pageDurationMs[page]);
   }
-  json += "],\"radar_trails_enabled\":" + String(radarTrailsEnabled ? "true" : "false") +
+  json += PsramBuffer("],\"radar_trails_enabled\":") + String(radarTrailsEnabled ? "true" : "false") +
           ",\"radar_trails_available\":" + String(radarTrailStorage ? "true" : "false") +
           ",\"radar\":{\"radius_km\":" + String(displayRadiusKm, 1) +
           ",\"view_heading\":" + String(viewHeading, 1) +
@@ -5809,7 +5844,7 @@ void handleDisplayApi() {
   }
 #endif
   json += "]},\"flight\":{";
-  json += "\"available\":" + String(shown.available ? "true" : "false") +
+  json += PsramBuffer("\"available\":") + String(shown.available ? "true" : "false") +
           ",\"emergency\":" + String(shown.emergency ? "true" : "false") +
           ",\"has_position\":" + String(shown.hasPosition ? "true" : "false") +
           ",\"on_ground\":" + String(shown.onGround ? "true" : "false") +
@@ -5851,7 +5886,7 @@ void handleDisplayApi() {
           ",\"relative_bearing\":" +
               jsonNumberOrNull(shown.relativeBearing) + "}}";
   webServer.sendHeader("Cache-Control", "no-store");
-  webServer.send(200, "application/json; charset=utf-8", json);
+  sendPsramResponse("application/json; charset=utf-8", json);
 }
 
 
@@ -5882,7 +5917,7 @@ void handleStatusApi() {
                                   statusFlight.specialType.length()
                                       ? displayRadiusKm * 2.0f
                                       : displayRadiusKm;
-  String json = "{\"version\":\"" + jsonEscape(APP_VERSION) +
+  PsramBuffer json = PsramBuffer("{\"version\":\"") + jsonEscape(APP_VERSION) +
       "\",\"device_name\":\"" + jsonEscape(DEVICE_NAME) +
       "\",\"device_variant\":\"" + jsonEscape(DEVICE_VARIANT) +
       "\",\"matrix_available\":" +
@@ -6139,13 +6174,15 @@ void handleStatusApi() {
           ",\"route\":" + String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Route)]) +
           ",\"flash\":" + String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Flash)]) + "}}";
   json.remove(json.length() - 1);
-  json += ",\"lookup_overrides\":" + lookupStatusJson() + "}";
+  json += PsramBuffer(",\"lookup_overrides\":") + lookupStatusJson() + "}";
   // Append without building a second full JSON document or large stack copy.
   json.remove(json.length() - 1);
-  json += ",\"radar_trails_storage_bytes\":" + String(radarTrailStorage ? sizeof(RadarTrailStorage) : 0) +
+  json += PsramBuffer(",\"radar_trails_storage_bytes\":") + String(radarTrailStorage ? sizeof(RadarTrailStorage) : 0) +
           ",\"free_psram_bytes\":" + String(ESP.getFreePsram());
   json += ",\"persistent_text_memory\":";
   appendPersistentTextMemoryJson(json);
+  json += ",\"temporary_memory\":";
+  appendTemporaryMemoryJson(json);
   json += ",\"route_memory\":";
   appendRouteMemoryJson(json, statusMemory);
   json += ",\"route_diagnostics\":{\"primary\":";
@@ -6157,14 +6194,14 @@ void handleStatusApi() {
   json += "}}";
   webServer.sendHeader("Cache-Control", "no-store");
   webServer.sendHeader("Connection", "close");
-  webServer.send(200, "application/json; charset=utf-8", json);
+  sendPsramResponse("application/json; charset=utf-8", json);
 }
 
 
 void handleUnknownCodesDownload() {
-  String json;
+  PsramBuffer json;
   json.reserve(512);
-  json = "{\n  \"firmware_version\":\"" + jsonEscape(APP_VERSION) +
+  json = PsramBuffer("{\n  \"firmware_version\":\"") + jsonEscape(APP_VERSION) +
          "\",\n  \"uptime_seconds\":" + String(millis() / 1000UL) +
          ",\n  \"capacity_per_type\":" + String(unknownCodeLimit) +
          ",\n  \"unknown_airports\":" + unknownCodesJson(true) +
@@ -6178,7 +6215,7 @@ void handleUnknownCodesDownload() {
       "Content-Disposition",
       "attachment; filename=\"flightwall-unknown-codes.json\"");
   webServer.sendHeader("Connection", "close");
-  webServer.send(200, "application/json; charset=utf-8", json);
+  sendPsramResponse("application/json; charset=utf-8", json);
 }
 
 
@@ -6190,10 +6227,12 @@ String csvEscape(String value) {
 }
 
 
-void flushDownloadChunk(String &chunk) {
-  if (!chunk.length()) return;
-  webServer.sendContent(chunk);
+bool flushDownloadChunk(PsramBuffer &chunk) {
+  if (chunk.failed()) { webServer.client().stop(); return false; }
+  if (!chunk.length()) return true;
+  webServer.sendContent(chunk.c_str(),chunk.length());
   chunk = "";
+  return true;
 }
 
 
@@ -6205,7 +6244,7 @@ void handleJournalJsonDownload() {
   webServer.setContentLength(CONTENT_LENGTH_UNKNOWN);
   webServer.send(200, "application/json; charset=utf-8", "");
 
-  String chunk;
+  PsramBuffer chunk;
   chunk.reserve(4600);
   chunk = "{\n  \"firmware_version\":\"" + jsonEscape(APP_VERSION) +
           "\",\n  \"period_started\":\"" +
@@ -6240,10 +6279,10 @@ void handleJournalJsonDownload() {
              ",\"minimum_cpa_km\":" + jsonNumberOrNull(entry.minimumCpaKm) +
              ",\"last_altitude_ft\":" +
              jsonNumberOrNull(entry.altitudeFt, 0) + "}";
-    if (chunk.length() >= 4096) flushDownloadChunk(chunk);
+    if (chunk.length() >= 4096 && !flushDownloadChunk(chunk)) return;
   }
   chunk += "\n  ]\n}\n";
-  flushDownloadChunk(chunk);
+  if (!flushDownloadChunk(chunk)) return;
   webServer.sendContent("");
 }
 
@@ -6256,7 +6295,7 @@ void handleJournalCsvDownload() {
   webServer.setContentLength(CONTENT_LENGTH_UNKNOWN);
   webServer.send(200, "text/csv; charset=utf-8", "");
 
-  String chunk;
+  PsramBuffer chunk;
   chunk.reserve(4600);
   chunk = "First seen,Last seen,Hex,Flight,Airline,Type,Type description,Route codes,Route names,Classification,Selection reason,Squawk,Minimum distance km,Minimum CPA km,Last altitude ft\r\n";
   for (size_t index = 0; index < dailyJournalCount; ++index) {
@@ -6274,17 +6313,17 @@ void handleJournalCsvDownload() {
              numberOrDash(entry.minimumDistanceKm) + ',' +
              numberOrDash(entry.minimumCpaKm) + ',' +
              numberOrDash(entry.altitudeFt, 0) + "\r\n";
-    if (chunk.length() >= 4096) flushDownloadChunk(chunk);
+    if (chunk.length() >= 4096 && !flushDownloadChunk(chunk)) return;
   }
-  flushDownloadChunk(chunk);
+  if (!flushDownloadChunk(chunk)) return;
   webServer.sendContent("");
 }
 
 
 void handleSpecialsJsonDownload() {
-  String json;
+  PsramBuffer json;
   json.reserve(18000);
-  json = "{\n  \"firmware_version\":\"" + jsonEscape(APP_VERSION) +
+  json = PsramBuffer("{\n  \"firmware_version\":\"") + jsonEscape(APP_VERSION) +
          "\",\n  \"period_started\":\"" +
          jsonEscape(journalTimeText(dailyStatisticsStarted, true)) +
          "\",\n  \"entries_count\":" + String(specialChronicleCount) +
@@ -6295,7 +6334,7 @@ void handleSpecialsJsonDownload() {
   for (size_t index = 0; index < specialChronicleCount; ++index) {
     const SpecialChronicleEntry &entry = specialChronicle[index];
     if (index) json += ',';
-    json += "\n    {\"first_seen\":\"" +
+    json += PsramBuffer("\n    {\"first_seen\":\"") +
             jsonEscape(journalTimeText(entry.firstSeen, true)) +
             "\",\"last_seen\":\"" +
             jsonEscape(journalTimeText(entry.lastSeen, true)) +
@@ -6321,7 +6360,7 @@ void handleSpecialsJsonDownload() {
       "Content-Disposition",
       "attachment; filename=\"flightwall-special-chronicle.json\"");
   webServer.sendHeader("Connection", "close");
-  webServer.send(200, "application/json; charset=utf-8", json);
+  sendPsramResponse("application/json; charset=utf-8", json);
 }
 
 
@@ -6347,7 +6386,7 @@ void handleSpecialsCsvDownload() {
       "Content-Disposition",
       "attachment; filename=\"flightwall-special-chronicle.csv\"");
   webServer.sendHeader("Connection", "close");
-  webServer.send(200, "text/csv; charset=utf-8", csv);
+  sendPsramResponse("text/csv; charset=utf-8", csv);
 }
 
 
@@ -6397,8 +6436,7 @@ void handleWifiScanResult() {
   if (!wifiScanRequested) {
     if (wifiScanResultJson.length()) {
       webServer.sendHeader("Cache-Control", "no-store");
-      webServer.send(200, "application/json; charset=utf-8",
-                     wifiScanResultJson);
+      sendPsramResponse("application/json; charset=utf-8", wifiScanResultJson);
     } else {
       webServer.send(200, "application/json; charset=utf-8",
                      "{\"state\":\"idle\",\"networks\":[]}");
@@ -6462,11 +6500,11 @@ void handleWifiScanResult() {
     }
   }
 
-  String json = "{\"state\":\"ready\",\"networks\":[";
+  PsramBuffer json = PsramBuffer("{\"state\":\"ready\",\"networks\":[");
   json.reserve(256 + networks.size() * 80);
   for (size_t i = 0; i < networks.size(); ++i) {
     if (i) json += ',';
-    json += "{\"ssid\":\"" + jsonEscape(networks[i].ssid) +
+    json += PsramBuffer("{\"ssid\":\"") + jsonEscape(networks[i].ssid) +
             "\",\"rssi\":" + String(networks[i].rssi) +
             ",\"security\":\"" + wifiSecurityName(networks[i].security) +
             "\",\"open\":" +
@@ -6479,9 +6517,9 @@ void handleWifiScanResult() {
   json += "]}";
   WiFi.scanDelete();
   wifiScanRequested = false;
-  wifiScanResultJson = json;
+  wifiScanResultJson = std::move(json);
   webServer.sendHeader("Cache-Control", "no-store");
-  webServer.send(200, "application/json; charset=utf-8", json);
+  sendPsramResponse("application/json; charset=utf-8", wifiScanResultJson);
 }
 
 
@@ -6543,7 +6581,7 @@ struct LookupFlashGuard {
 
 void handleLookupPage() {
   if (!otaAuthenticated()) return;
-  String html = "<!doctype html><html lang='" + String(uiEnglish ? "en" : "de") +
+  PsramBuffer html = PsramBuffer("<!doctype html><html lang='") + String(uiEnglish ? "en" : "de") +
       "'><meta name='viewport' content='width=device-width'><title>Lookup</title>"
       "<style>body{font:16px system-ui;max-width:720px;margin:30px auto;padding:16px}button,input{margin:8px 0;padding:9px}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style><body><h1>Lookup " +
       String(uiText("Ergänzungen", "extensions")) + "</h1><p>" +
@@ -6578,7 +6616,7 @@ const initialize=document.getElementById('initialize');if(initialize)initialize.
 };
 </script></body></html>)HTML";
   webServer.sendHeader("Cache-Control", "no-store");
-  webServer.send(200, "text/html; charset=utf-8", html);
+  sendPsramResponse("text/html; charset=utf-8", html);
 }
 
 void handleLookupUpload() {
@@ -6928,12 +6966,12 @@ void startWebServer() {
     webServer.on("/status", HTTP_GET, []() {
       pulseHttpActivity();
       webServer.sendHeader("Cache-Control", "no-store");
-      webServer.send(200, "text/html; charset=utf-8", webPage(false));
+      sendPsramResponse("text/html; charset=utf-8", webPage(false));
     });
     webServer.on("/config", HTTP_GET, []() {
       pulseHttpActivity();
       webServer.sendHeader("Cache-Control", "no-store");
-      webServer.send(200, "text/html; charset=utf-8", webPage(true, false));
+      sendPsramResponse("text/html; charset=utf-8", webPage(true, false));
     });
     webServer.on("/display", HTTP_GET, []() {
       pulseHttpActivity();

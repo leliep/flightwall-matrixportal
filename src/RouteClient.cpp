@@ -1,3 +1,4 @@
+#include "TemporaryPsram.hpp"
 #include "RouteClient.hpp"
 #include "RouteCallsign.hpp"
 
@@ -658,6 +659,7 @@ RouteResult RouteClient::fetchPrimary(const String& callsign,
   result.source = primarySourceName(url_);
   auto &diagnostic = diagnostics_.primary;
   diagnostic.begin(result.source.c_str(), callsign.c_str(), millis(), routeMemorySnapshot());
+  RouteCleanupCapture cleanup(diagnostics_, diagnostic, routeMemorySnapshot);
   WiFiClientSecure client;
   // The ESP32 has no trusted wall clock before ADS-B data arrives. HTTPS still
   // encrypts transport, but certificate verification is therefore disabled.
@@ -673,17 +675,21 @@ RouteResult RouteClient::fetchPrimary(const String& callsign,
     return result;
   }
 
-  JsonDocument request;
+  JsonDocument request(&temporaryJsonAllocator());
   JsonObject plane = request["planes"].add<JsonObject>();
   plane["callsign"] = callsign;
   plane["lat"] = context.hasPosition ? context.latitude : 0.0;
   plane["lng"] = context.hasPosition ? context.longitude : 0.0;
-  String body;
+  PsramBuffer body;
   serializeJson(request, body);
+  if (request.overflowed() || body.failed()) {
+    result.error="Routen-JSON: PSRAM allocation failed";
+    return result;
+  }
   http.addHeader("Content-Type", "application/json");
   http.addHeader("Accept", "application/json");
   const int status = captureRouteHttp(diagnostic, client,
-      [&]() { return http.POST(body); }, routeMemorySnapshot, []() { return millis(); });
+      [&]() { return http.POST(reinterpret_cast<uint8_t*>(body.data()), body.length()); }, routeMemorySnapshot, []() { return millis(); });
   diagnostics_.rememberFailure(diagnostic);
   if (status != HTTP_CODE_OK) {
     result.error = "Routen-HTTP " + String(status);
@@ -691,7 +697,7 @@ RouteResult RouteClient::fetchPrimary(const String& callsign,
     return result;
   }
 
-  JsonDocument document;
+  JsonDocument document(&temporaryJsonAllocator());
   const DeserializationError error = deserializeJson(document, http.getStream());
   http.end();
   if (error) {
@@ -730,6 +736,7 @@ RouteResult RouteClient::fetchAdsbDb(const String& callsign,
   result.source = "adsbdb";
   auto &diagnostic = diagnostics_.fallback;
   diagnostic.begin("adsbdb", callsign.c_str(), millis(), routeMemorySnapshot());
+  RouteCleanupCapture cleanup(diagnostics_, diagnostic, routeMemorySnapshot);
   WiFiClientSecure client;
   client.setInsecure();
   HTTPClient http;
@@ -757,7 +764,7 @@ RouteResult RouteClient::fetchAdsbDb(const String& callsign,
     return result;
   }
 
-  JsonDocument document;
+  JsonDocument document(&temporaryJsonAllocator());
   const DeserializationError error = deserializeJson(document, http.getStream());
   http.end();
   if (error) {

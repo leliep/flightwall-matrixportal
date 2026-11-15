@@ -659,6 +659,11 @@
     "longitude": 13.767831,
     "elevation_ft": 755
   },
+  "DSA": {
+    "latitude": 53.475287,
+    "longitude": -1.004267,
+    "elevation_ft": 55
+  },
   "DTM": {
     "latitude": 51.518299,
     "longitude": 7.61224,
@@ -1128,6 +1133,11 @@
     "latitude": 37.469101,
     "longitude": 126.450996,
     "elevation_ft": 23
+  },
+  "IND": {
+    "latitude": 39.7173,
+    "longitude": -86.294403,
+    "elevation_ft": 797
   },
   "INI": {
     "latitude": 43.336538,
@@ -2453,6 +2463,11 @@
     "latitude": 51.103719,
     "longitude": 16.882096,
     "elevation_ft": 404
+  },
+  "XCR": {
+    "latitude": 48.77333,
+    "longitude": 4.20611,
+    "elevation_ft": 587
   },
   "XFW": {
     "latitude": 53.535278,

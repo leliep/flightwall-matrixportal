@@ -28,6 +28,8 @@ jobs:
           python3 tools/test_cpa_page.py
       - name: Build MatrixPortal firmware
         run: pio run -e adafruit_matrixportal_esp32s3
+      - name: Test temporary PSRAM buffers and TLS cleanup
+        run: python3 tools/test_temporary_psram.py
       - name: Build headless ESP32-S3 N16R8 firmware
         run: pio run -e esp32s3_n16r8_headless
       - name: Upload MatrixPortal firmware
