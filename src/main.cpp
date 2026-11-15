@@ -52,8 +52,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.51";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-15 independent MQTT service and background diagnostics";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.52";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-15 site titles and current route test callsign";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -4528,6 +4528,7 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
   html += F("<meta name='viewport' content='width=device-width,initial-scale=1'>");
   html += F("<title>");
   html += DEVICE_NAME;
+  if (siteName.length()) html += F(" · %FW_SITE_NAME%");
   html += F("</title><style>");
   html += F("body{font:16px system-ui;background:#10131a;color:#eef2ff;margin:auto;max-width:920px;padding:20px}");
   html += F(".flightAwareLink,.flightAwareLink:visited{color:#7ee7f0;text-decoration:underline;text-underline-offset:2px}.flightAwareLink:hover,.flightAwareLink:focus-visible{color:#fff}.flightAwareLink:focus-visible{outline:2px solid #7ee7f0;outline-offset:3px}");
@@ -4539,6 +4540,7 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
   html += DEVICE_NAME;
   html += ' ';
   html += APP_VERSION;
+  if (siteName.length()) html += F(" · %FW_SITE_NAME%");
   html += F("</h1><nav class='nav'><a href='/status'");
   if (!configurationPage) html += F(" class='active'");
   html += F(">Status</a><a href='/config'");
@@ -4657,7 +4659,7 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
   html += checked(adsbDbFallbackEnabled);
   html += F("> ADSBDB bei fehlender Route verwenden</label><label class='fieldWide'>Routen-Dienst<input type='url' name='routeUrl' maxlength='180' value='");
   html += htmlEscape(routeUrl);
-  html += F("'></label><label class='third'>Test-Callsign<input type='text' name='routeTestCallsign' maxlength='10' value='DLH123'></label></div>"
+  html += F("'></label><label class='third'>Test-Callsign<input type='text' name='routeTestCallsign' maxlength='10' value=\"%FW_ROUTE_TEST_CALLSIGN%\"></label></div>"
             "<div class='buttonRow'><button type='submit' formaction='/test-route'>Routendienst testen</button>"
             "<button type='submit' formaction='/test-adsb'>ADS-B-Verbindung testen</button></div>"
             "<hr><div class='fieldGrid'><label>Notfalltest-Code<select name='emergencyTestCode'>"
@@ -5344,6 +5346,9 @@ wifiScanResults.addEventListener('change',()=>{
   html += F("</body></html>");
   translateWebPageToEnglish(html);
   // Insert user text after translating labels; never translate the site name.
+  html.replace("%FW_ROUTE_TEST_CALLSIGN%", htmlEscape(
+      statusFlight.available && statusFlight.flight.length() && statusFlight.flight != statusFlight.hex
+          ? statusFlight.flight : String("DLH123")));
   html.replace("%FW_SITE_NAME%", htmlEscape(siteName));
   return html;
 }

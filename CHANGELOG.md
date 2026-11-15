@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.6.1-dual-target.52 – 2026-11-15
+
+- Standortbezeichnung in Browser-Titel und Überschrift von Status und Konfiguration
+- Routentest beim Seitenaufruf mit aktuellem Callsign vorbelegt; ohne verfügbares
+  Callsign weiterhin DLH123, keine automatische Überschreibung eigener Eingaben
+- Beide Varianten; keine Änderung an gespeicherten Einstellungen oder Lookups
+
 ## 3.6.1-dual-target.51 – 2026-11-15
 
 - MQTT unabhängig von ADS-B/Routen in eigenem Task; Netz-/Webdatensperre bei

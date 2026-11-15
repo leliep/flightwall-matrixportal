@@ -57,7 +57,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.51` |
+| Firmware | `3.6.1-dual-target.52` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -695,6 +695,11 @@ Die physische Matrixanzeige bleibt davon unberührt. Der Text wird gespeichert,
 bei OTA erhalten und als `site_name` mit der Konfiguration gesichert.
 Ältere Sicherungen ohne dieses Feld behalten eine vorhandene Bezeichnung bei;
 eine ausdrücklich leere Bezeichnung löscht sie.
+
+Die Standortbezeichnung erscheint auch im Browser-Titel und in der Überschrift
+von Status und Konfiguration. Beim Öffnen der Konfiguration wird das aktuelle
+Callsign als Routentest-Vorgabe verwendet; ohne Callsign gilt `DLH123`. Eigene
+Eingaben bleiben bis zum erneuten Laden der Seite erhalten.
 
 Matrixbezogene Felder werden im Headless-Build ausgeblendet. Einstellungen
 werden im NVS gespeichert und bleiben bei normalen USB- und OTA-Updates
