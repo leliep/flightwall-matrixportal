@@ -29,9 +29,13 @@ jobs:
       - name: Build MatrixPortal firmware
         run: pio run -e adafruit_matrixportal_esp32s3
       - name: Test temporary PSRAM buffers and TLS cleanup
-        run: python3 tools/test_temporary_psram.py
+        run: |
+          python3 tools/test_temporary_psram.py
+          python3 tools/test_route_test_responses.py
       - name: Build headless ESP32-S3 N16R8 firmware
         run: pio run -e esp32s3_n16r8_headless
+      - name: Check network handler stack frames on both targets
+        run: python3 tools/check_network_stack.py
       - name: Upload MatrixPortal firmware
         uses: actions/upload-artifact@v4
         with:

@@ -4,6 +4,7 @@
 #include <vector>
 #include "RouteDiagnostics.hpp"
 #include "PsramText.hpp"
+#include "RouteTestResponse.hpp"
 
 RouteMemorySnapshot routeMemorySnapshot();
 
@@ -107,6 +108,13 @@ class RouteClient {
   RouteResult test(const String& callsign, const RouteContext& context);
   const String& lastError() const { return lastError_; }
   const RouteDiagnostics &diagnostics() const { return diagnostics_; }
+  const RouteTestResponse &testResponse(bool fallback) const {
+    return testResponses_[fallback ? 1 : 0];
+  }
+  void clearTestResponses() {
+    testResponses_[0] = {};
+    testResponses_[1] = {};
+  }
   bool hasPendingWrites() const;
   void flushPendingWrites();
   std::vector<RouteCacheEntryInfo> cacheEntries(uint32_t now) const;
@@ -140,6 +148,8 @@ class RouteClient {
   String url_;
   String lastError_;
   RouteDiagnostics diagnostics_;
+  RouteTestResponse testResponses_[2];
+  bool captureTestResponses_ = false;
   static constexpr size_t memoryCacheSlots_ = 32;
   MemoryCacheEntry memoryCache_[memoryCacheSlots_];
   size_t nextMemorySlot_ = 0;

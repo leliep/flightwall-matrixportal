@@ -36,6 +36,27 @@ constexpr uint32_t specialTtl = 30U * 60U;
 constexpr char adsbDbUrl[] = "https://api.adsbdb.com/v0/callsign/";
 constexpr double earthRadiusKm = 6371.0;
 
+void captureRouteTestJson(RouteTestResponse &response, const JsonDocument &document) {
+  PsramBuffer json;
+  struct Writer {
+    PsramBuffer &json;
+    bool &truncated;
+    size_t write(uint8_t value) { return write(&value, 1); }
+    size_t write(const uint8_t *data, size_t length) {
+      const size_t remaining = RouteTestResponse::jsonLimit - json.length();
+      const size_t keep = length < remaining ? length : remaining;
+      if (keep) json.write(data, keep);
+      if (length > keep) truncated = true;
+      // Continue traversal without retaining bytes beyond the limit.
+      return length;
+    }
+  } writer{json, response.truncated};
+  serializeJsonPretty(document, writer);
+  response.captureFailed = json.failed();
+  if (!response.captureFailed)
+    response.captureFailed = !response.json.assign(json.c_str(), json.length());
+}
+
 String cacheKey(size_t slot) {
   char key[5];
   snprintf(key, sizeof(key), "r%02u", static_cast<unsigned>(slot));
@@ -657,6 +678,8 @@ RouteResult RouteClient::fetchPrimary(const String& callsign,
                                       const RouteContext& context) {
   RouteResult result;
   result.source = primarySourceName(url_);
+  RouteTestResponse *test = captureTestResponses_ ? &testResponses_[0] : nullptr;
+  if (test) { test->attempted = true; test->source = result.source; }
   auto &diagnostic = diagnostics_.primary;
   diagnostic.begin(result.source.c_str(), callsign.c_str(), millis(), routeMemorySnapshot());
   RouteCleanupCapture cleanup(diagnostics_, diagnostic, routeMemorySnapshot);
@@ -677,7 +700,7 @@ RouteResult RouteClient::fetchPrimary(const String& callsign,
 
   JsonDocument request(&temporaryJsonAllocator());
   JsonObject plane = request["planes"].add<JsonObject>();
-  plane["callsign"] = callsign;
+  plane["callsign"] = callsign.c_str();
   plane["lat"] = context.hasPosition ? context.latitude : 0.0;
   plane["lng"] = context.hasPosition ? context.longitude : 0.0;
   PsramBuffer body;
@@ -690,6 +713,7 @@ RouteResult RouteClient::fetchPrimary(const String& callsign,
   http.addHeader("Accept", "application/json");
   const int status = captureRouteHttp(diagnostic, client,
       [&]() { return http.POST(reinterpret_cast<uint8_t*>(body.data()), body.length()); }, routeMemorySnapshot, []() { return millis(); });
+  if (test) test->httpCode = status;
   diagnostics_.rememberFailure(diagnostic);
   if (status != HTTP_CODE_OK) {
     result.error = "Routen-HTTP " + String(status);
@@ -704,6 +728,7 @@ RouteResult RouteClient::fetchPrimary(const String& callsign,
     result.error = "Routen-JSON: " + String(error.c_str());
     return result;
   }
+  if (test) captureRouteTestJson(*test, document);
 
   JsonArrayConst rows;
   if (document.is<JsonArrayConst>()) rows = document.as<JsonArrayConst>();
@@ -713,9 +738,19 @@ RouteResult RouteClient::fetchPrimary(const String& callsign,
     rows = document["planes"].as<JsonArrayConst>();
   for (JsonObjectConst row : rows) {
     const String returned = upperTrimmed(row["callsign"] | "");
+    if (test && test->returnedCallsign.isEmpty()) {
+      test->returnedCallsign = returned;
+      RouteResult candidate;
+      extractCodes(row, candidate);
+      test->routeCodes = candidate.routeCodes;
+    }
     if (!returned.isEmpty() &&
         !routeCallsignMatches(callsign.c_str(), returned.c_str())) continue;
     extractCodes(row, result);
+    if (test) {
+      test->returnedCallsign = returned;
+      test->routeCodes = result.routeCodes;
+    }
     result.airlineCode = upperTrimmed(row["airline_code"] | "");
     if (result.airlineCode == "UNKNOWN") result.airlineCode = "";
     break;
@@ -734,6 +769,8 @@ RouteResult RouteClient::fetchAdsbDb(const String& callsign,
                                      const RouteContext& context) {
   RouteResult result;
   result.source = "adsbdb";
+  RouteTestResponse *test = captureTestResponses_ ? &testResponses_[1] : nullptr;
+  if (test) { test->attempted = true; test->source = result.source; }
   auto &diagnostic = diagnostics_.fallback;
   diagnostic.begin("adsbdb", callsign.c_str(), millis(), routeMemorySnapshot());
   RouteCleanupCapture cleanup(diagnostics_, diagnostic, routeMemorySnapshot);
@@ -752,6 +789,7 @@ RouteResult RouteClient::fetchAdsbDb(const String& callsign,
   http.addHeader("Accept", "application/json");
   const int status = captureRouteHttp(diagnostic, client,
       [&]() { return http.GET(); }, routeMemorySnapshot, []() { return millis(); });
+  if (test) test->httpCode = status;
   diagnostics_.rememberFailure(diagnostic);
   if (status == HTTP_CODE_NOT_FOUND) {
     result.status = "not_found";
@@ -771,12 +809,25 @@ RouteResult RouteClient::fetchAdsbDb(const String& callsign,
     result.error = "ADSBDB-JSON: " + String(error.c_str());
     return result;
   }
+  if (test) captureRouteTestJson(*test, document);
 
   JsonObjectConst route =
       document["response"]["flightroute"].as<JsonObjectConst>();
   if (route.isNull()) {
     result.status = "not_found";
     return result;
+  }
+  if (test) {
+    test->returnedCallsign = upperTrimmed(route["callsign"] | "");
+    String codes;
+    appendRouteCode(codes, airportCode(route["origin"]));
+    JsonVariantConst midpoint = route["midpoint"];
+    if (midpoint.is<JsonArrayConst>()) {
+      for (JsonVariantConst item : midpoint.as<JsonArrayConst>())
+        appendRouteCode(codes, airportCode(item));
+    } else appendRouteCode(codes, airportCode(midpoint));
+    appendRouteCode(codes, airportCode(route["destination"]));
+    test->routeCodes = codes;
   }
   const String returnedCallsign = upperTrimmed(route["callsign"] | "");
   if (!returnedCallsign.isEmpty() &&
@@ -817,9 +868,17 @@ RouteResult RouteClient::fetchAdsbDb(const String& callsign,
 RouteResult RouteClient::fetch(const String& callsign,
                                const RouteContext& context) {
   RouteResult primary = fetchPrimary(callsign, context);
+  if (captureTestResponses_) {
+    testResponses_[0].status = primary.status;
+    testResponses_[0].error = primary.error;
+  }
   if (primary.found() || !adsbDbFallbackEnabled_) return primary;
 
   RouteResult fallback = fetchAdsbDb(callsign, context);
+  if (captureTestResponses_) {
+    testResponses_[1].status = fallback.status;
+    testResponses_[1].error = fallback.error;
+  }
   if (fallback.found()) return fallback;
   if (primary.error.length() && fallback.error.length())
     fallback.error = primary.error + "; " + fallback.error;
@@ -863,13 +922,16 @@ RouteResult RouteClient::lookup(const String& callsign,
 
 RouteResult RouteClient::test(const String& callsign,
                               const RouteContext& context) {
+  clearTestResponses();
   if (callsign.isEmpty()) {
     lastError_ = "Test-Callsign fehlt";
     RouteResult result;
     result.error = lastError_;
     return result;
   }
+  captureTestResponses_ = true;
   RouteResult result = fetch(callsign, context);
+  captureTestResponses_ = false;
   lastError_ = result.error;
   return result;
 }

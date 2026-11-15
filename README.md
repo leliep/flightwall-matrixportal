@@ -57,7 +57,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.43` |
+| Firmware | `3.6.1-dual-target.49` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -1133,6 +1133,28 @@ Die Statusseite zeigt unter anderem:
 - maximale Laufzeiten einzelner Netzwerkphasen und Taskdiagnose
 
 ### Temporäre Puffer und TLS-Reserve
+
+Ab `.49` baut die Status-API ihr JSON in kurzen, aufeinanderfolgenden Schritten
+auf. Große Verkettungen halten sonst viele temporäre Objekte gleichzeitig auf
+dem Task-Stack, auch wenn deren Textdaten im PSRAM liegen. Der vom Zielcompiler
+ausgewiesene Stackframe dieser Funktion beträgt auf beiden Varianten 528 statt
+10.272 Bytes; der Netzwerk-Task behält seinen 12-KiB-Stack. Die Prüfung
+`python3 tools/check_network_stack.py` kontrolliert nach dem Bau beider Varianten
+die Handlerframes im tatsächlichen ESP32-Binärprogramm. Sie ersetzt keine
+Laufzeitkontrolle der Stackreserve nach Installation.
+
+Der manuelle **Routendienst-Test** zeigt Hauptdienst und ADSBDB getrennt:
+HTTP-Status, zurückgegebenes Callsign, gelieferte Routencodes, Ergebnis und
+Fehler sowie die dekodierte JSON-Antwort. Diese wird vor dem Verwerfen einer
+Route ausschließlich für die Testseite erfasst und danach freigegeben.
+Je Anbieter werden höchstens 8192 Bytes JSON im PSRAM erhalten; Kürzung oder
+Speichermangel werden sichtbar gemeldet. HTTP-Fehler ohne dekodierte JSON-Antwort
+zeigen stattdessen den Status und einen entsprechenden Hinweis. Abgelehnte
+Antworten werden weiterhin weder als gültige Route angezeigt noch gespeichert.
+Der Test nennt ausdrücklich den **Controllerstandort als Prüfposition**;
+automatische Routenabfragen verwenden dagegen die aktuelle Flugposition.
+`python3 tools/test_route_test_responses.py` prüft die tatsächlichen Abfrage-
+und Ablehnungszweige sowie die sichere Darstellung beider Varianten.
 
 Ab `.48` liegen große Status-/Konfigurations-/API-Antworten und die JSON-Dokumente
 für ADS-B, Routendienste und Konfiguration ausschließlich in PSRAM. Die

@@ -3,15 +3,22 @@
 #include <string>
 #include <algorithm>
 #include <cctype>
+#include <type_traits>
 class String {
  public:
   String(const char *text = "") : value_(text ? text : "") {}
   String(const char *text, unsigned int length) : value_(text, length) {}
+  template<typename T, typename std::enable_if<std::is_integral<T>::value,int>::type = 0>
+  String(T number) : value_(std::to_string(number)) {}
   const char *c_str() const { return value_.c_str(); }
   char operator[](size_t index) const { return value_[index]; }
   unsigned int length() const { return value_.size(); }
   bool isEmpty() const { return value_.empty(); }
   bool startsWith(const char *prefix) const { return value_.rfind(prefix, 0) == 0; }
+  bool endsWith(const char *suffix) const {
+    const size_t size=std::char_traits<char>::length(suffix);
+    return size<=value_.size() && value_.compare(value_.size()-size,size,suffix)==0;
+  }
   void trim() {
     const auto first=value_.find_first_not_of(" \t\r\n");
     if (first==std::string::npos) { value_.clear(); return; }

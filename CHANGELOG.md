@@ -1,5 +1,22 @@
 # Changelog
 
+## 3.6.1-dual-target.49 – 2026-11-15
+
+- Status-JSON in einzelnen PSRAM-Anhängeschritten statt einer langen
+  Verkettung; Stackframe der Status-API auf beiden Zielplattformen von
+  10.272 auf 528 Bytes reduziert, ohne Vergrößerung des Netzwerk-Task-Stacks
+- Manueller Routendienst-Test zeigt Hauptdienst und ADSBDB getrennt mit
+  HTTP-Status, zurückgegebenem Callsign, gelieferter Route, Ergebnis und Fehler
+- Dekodierte JSON-Antwort vor einer Ablehnung erfasst, auf 8192 Bytes je
+  Anbieter begrenzt im PSRAM; HTML-sichere Ausgabe mit Kürzungs-/Fehlerhinweis,
+  Freigabe nach der Testseite und keine Übernahme in gültige Routen oder Caches
+- Verwendete Prüfposition des manuellen Tests (Controllerstandort) sichtbar
+- Zielcompiler-Stackprüfung sowie Tests für verworfene Antworten, Callsign-
+  und Positionsfehler, führende Nullen, PSRAM-Ausfall und HTML-Escaping
+- Vorab Konfigurationen und Lookups aller drei Controller gesichert;
+  Status-API auf .105 erfolgreich, auf .189/.196 Verbindungsreset,
+  separate Code-Listen auf allen drei Geräten leer
+
 ## 3.6.1-dual-target.48 – 2026-11-15
 
 - Vor OTA zusätzlich LED (Pulkovo) samt OurAirports-Koordinaten ergänzt

@@ -51,8 +51,8 @@
 
 constexpr uint16_t MATRIX_WIDTH = 128;
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.48";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-15 temporary PSRAM and TLS cleanup diagnostics";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.49";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-15 bounded status stack and rejected route responses";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -3767,7 +3767,7 @@ String jsonEscape(String value) {
 
 
 void sendPsramResponse(const char *type, const PsramBuffer &body,
-                       size_t offset=0, size_t count=SIZE_MAX) {
+                       size_t offset=0, size_t count=SIZE_MAX, int statusCode=200) {
   if (body.failed() || offset > body.length()) {
     webServer.send(503, "text/plain; charset=utf-8", "Insufficient PSRAM for response");
     return;
@@ -3775,7 +3775,7 @@ void sendPsramResponse(const char *type, const PsramBuffer &body,
   const size_t available=body.length()-offset;
   if (count > available) count=available;
   webServer.setContentLength(count);
-  webServer.send(200,type,"");
+  webServer.send(statusCode,type,"");
   if (count) webServer.sendContent(body.c_str()+offset,count);
 }
 
@@ -5702,6 +5702,66 @@ void handleStopEmergencyTest() {
 }
 
 
+// Escape directly into PSRAM, including untrusted provider JSON. Never make
+// an Arduino String copy of an entire response just to display it.
+void appendRouteTestHtmlText(PsramBuffer &html, const char *text) {
+  for (; *text; ++text) {
+    switch (*text) {
+      case '&': html += "&amp;"; break;
+      case '<': html += "&lt;"; break;
+      case '>': html += "&gt;"; break;
+      case '"': html += "&quot;"; break;
+      case '\'': html += "&#39;"; break;
+      default: html += *text;
+    }
+  }
+}
+
+void appendRouteTestResponseHtml(PsramBuffer &html,
+                                 const RouteTestResponse &response,
+                                 const char *title) {
+  if (!response.attempted) return;
+  html += "<section><h2>";
+  appendRouteTestHtmlText(html, title);
+  html += "</h2><p>";
+  appendRouteTestHtmlText(html, response.source.c_str());
+  char code[24];
+  snprintf(code, sizeof(code), " · HTTP %d", response.httpCode);
+  html += code;
+  html += "</p><dl><dt>";
+  html += uiText("Zurückgegebenes Callsign", "Returned callsign");
+  html += "</dt><dd>";
+  appendRouteTestHtmlText(html, response.returnedCallsign.isEmpty() ? "-" : response.returnedCallsign.c_str());
+  html += "</dd><dt>";
+  html += uiText("Gelieferte Route", "Returned route");
+  html += "</dt><dd>";
+  appendRouteTestHtmlText(html, response.routeCodes.isEmpty() ? "-" : response.routeCodes.c_str());
+  html += "</dd><dt>Status</dt><dd>";
+  appendRouteTestHtmlText(html, response.status.c_str());
+  html += "</dd></dl>";
+  if (!response.error.isEmpty()) {
+    html += "<p>";
+    appendRouteTestHtmlText(html, response.error.c_str());
+    html += "</p>";
+  }
+  if (response.captureFailed) {
+    html += uiText("<p>Antwort konnte nicht im PSRAM erfasst werden.</p>",
+                   "<p>Could not capture the response in PSRAM.</p>");
+  } else if (response.json.length()) {
+    html += uiText("<details open><summary>Dekodierte JSON-Antwort</summary><pre>",
+                   "<details open><summary>Decoded JSON response</summary><pre>");
+    appendRouteTestHtmlText(html, response.json.c_str());
+    html += "</pre></details>";
+    if (response.truncated)
+      html += uiText("<p>Antwortanzeige nach 8192 Bytes gekürzt.</p>",
+                     "<p>Response display truncated after 8192 bytes.</p>");
+  } else {
+    html += uiText("<p>Keine dekodierte JSON-Antwort erfasst.</p>",
+                   "<p>No decoded JSON response captured.</p>");
+  }
+  html += "</section>";
+}
+
 void handleRouteTest() {
   String callsign = webServer.arg("routeTestCallsign");
   callsign.trim();
@@ -5750,14 +5810,34 @@ void handleRouteTest() {
       detail += "<br>" + String(uiText("Letzte Quelle: ", "Last source: ")) +
                 "<b>" + htmlEscape(result.source) + "</b>";
   }
-  webServer.send(reachable ? 200 : 502, "text/html; charset=utf-8",
-      String("<!doctype html><html lang='") + (uiEnglish ? "en" : "de") +
-      "'><meta name='viewport' content='width=device-width'>"
-      "<body style='font:18px system-ui;max-width:600px;margin:40px auto;padding:16px'>"
-      "<h1>" + uiText("Routendienst-Test", "Route service test") + "</h1><p>" +
-      uiText("Direkte Abfrage ohne Cache für ", "Direct query without cache for ") + "<b>" +
-      htmlEscape(callsign) + "</b>.</p><p>" + detail +
-      "</p><p><a href='/config'>" + uiText("Zurück", "Back") + "</a></p></body></html>");
+  PsramBuffer page;
+  page += "<!doctype html><html lang='";
+  page += uiEnglish ? "en" : "de";
+  page += "'><meta name='viewport' content='width=device-width'>"
+          "<style>body{font:18px system-ui;max-width:800px;margin:40px auto;padding:16px}"
+          "section{border-top:1px solid #888;margin-top:24px}h2{font-size:1.1em}"
+          "pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px}dd{overflow-wrap:anywhere}</style><body><h1>";
+  page += uiText("Routendienst-Test", "Route service test");
+  page += "</h1><p>";
+  page += uiText("Direkte Abfrage ohne Cache für ", "Direct query without cache for ");
+  page += "<b>";
+  page += htmlEscape(callsign);
+  page += "</b>.</p><p>";
+  page += detail;
+  page += "</p><p>";
+  page += uiText("Prüfposition: Controllerstandort ", "Validation position: controller location ");
+  page += String(siteLatitude, 6);
+  page += " / ";
+  page += String(siteLongitude, 6);
+  page += "</p>";
+  appendRouteTestResponseHtml(page, routeClient.testResponse(false), uiText("Hauptdienst", "Primary service"));
+  appendRouteTestResponseHtml(page, routeClient.testResponse(true), "ADSBDB");
+  page += "<p><a href='/config'>";
+  page += uiText("Zurück", "Back");
+  page += "</a></p></body></html>";
+  webServer.sendHeader("Cache-Control", "no-store");
+  sendPsramResponse("text/html; charset=utf-8", page, 0, SIZE_MAX, reachable ? 200 : 502);
+  routeClient.clearTestResponses();
 }
 
 
@@ -5917,262 +5997,423 @@ void handleStatusApi() {
                                   statusFlight.specialType.length()
                                       ? displayRadiusKm * 2.0f
                                       : displayRadiusKm;
-  PsramBuffer json = PsramBuffer("{\"version\":\"") + jsonEscape(APP_VERSION) +
-      "\",\"device_name\":\"" + jsonEscape(DEVICE_NAME) +
-      "\",\"device_variant\":\"" + jsonEscape(DEVICE_VARIANT) +
-      "\",\"matrix_available\":" +
-          String(FLIGHTWALL_HAS_MATRIX ? "true" : "false") +
-      ",\"status_led_available\":" +
-          String("true") +
-      ",\"status_led_brightness\":" + String(statusLedBrightnessMode) +
-      ",\"status_led_state\":\"" +
-          jsonEscape(statusLedStateName(statusLedState())) + "\"" +
-      ",\"ota_configured\":" +
-          String(otaPassword.length() >= 8 ? "true" : "false") +
-      ",\"language\":\"" + String(uiEnglish ? "en" : "de") +
-      "\",\"build\":\"" + jsonEscape(BUILD_TIMESTAMP) +
-      "\",\"uptime_seconds\":" + String(millis() / 1000) +
-      ",\"free_heap\":" + String(ESP.getFreeHeap()) +
-      ",\"chip_temperature_c\":" + jsonNumberOrNull(chipTemperatureC()) +
-      ",\"bme280_available\":" + String(environmentSensorAvailable ? "true" : "false") +
-      ",\"environment_idle_display_enabled\":" +
-          String(environmentIdleDisplayEnabled ? "true" : "false") +
-      ",\"ambient_temperature_c\":" + jsonNumberOrNull(ambientTemperatureC) +
-      ",\"relative_humidity_percent\":" + jsonNumberOrNull(relativeHumidityPercent) +
-      ",\"dew_point_c\":" + jsonNumberOrNull(dewPointC) +
-      ",\"mold_critical_surface_temperature_c\":" +
-          jsonNumberOrNull(moldCriticalSurfaceTemperatureC) +
-      ",\"mold_risk\":\"" + String(moldRiskLevel == MoldRiskLevel::High
+  // End each append expression here: long operator+ chains retain all
+  // temporaries until the final semicolon and exhaust the network task stack.
+  PsramBuffer json;
+  json.reserve(8192);
+  json += PsramBuffer("{\"version\":\"");
+  json += jsonEscape(APP_VERSION);
+  json += "\",\"device_name\":\"";
+  json += jsonEscape(DEVICE_NAME);
+  json += "\",\"device_variant\":\"";
+  json += jsonEscape(DEVICE_VARIANT);
+  json += "\",\"matrix_available\":";
+  json += String(FLIGHTWALL_HAS_MATRIX ? "true" : "false");
+  json += ",\"status_led_available\":";
+  json += String("true");
+  json += ",\"status_led_brightness\":";
+  json += String(statusLedBrightnessMode);
+  json += ",\"status_led_state\":\"";
+  json += jsonEscape(statusLedStateName(statusLedState()));
+  json += "\"";
+  json += ",\"ota_configured\":";
+  json += String(otaPassword.length() >= 8 ? "true" : "false");
+  json += ",\"language\":\"";
+  json += String(uiEnglish ? "en" : "de");
+  json += "\",\"build\":\"";
+  json += jsonEscape(BUILD_TIMESTAMP);
+  json += "\",\"uptime_seconds\":";
+  json += String(millis() / 1000);
+  json += ",\"free_heap\":";
+  json += String(ESP.getFreeHeap());
+  json += ",\"chip_temperature_c\":";
+  json += jsonNumberOrNull(chipTemperatureC());
+  json += ",\"bme280_available\":";
+  json += String(environmentSensorAvailable ? "true" : "false");
+  json += ",\"environment_idle_display_enabled\":";
+  json += String(environmentIdleDisplayEnabled ? "true" : "false");
+  json += ",\"ambient_temperature_c\":";
+  json += jsonNumberOrNull(ambientTemperatureC);
+  json += ",\"relative_humidity_percent\":";
+  json += jsonNumberOrNull(relativeHumidityPercent);
+  json += ",\"dew_point_c\":";
+  json += jsonNumberOrNull(dewPointC);
+  json += ",\"mold_critical_surface_temperature_c\":";
+  json += jsonNumberOrNull(moldCriticalSurfaceTemperatureC);
+  json += ",\"mold_risk\":\"";
+  json += String(moldRiskLevel == MoldRiskLevel::High
           ? "high" : moldRiskLevel == MoldRiskLevel::Elevated
           ? "elevated" : moldRiskLevel == MoldRiskLevel::Normal
-          ? "low" : "unavailable") + "\"" +
-      ",\"elevated_humidity_duration_seconds\":" +
-          (elevatedHumiditySince
+          ? "low" : "unavailable");
+  json += "\"";
+  json += ",\"elevated_humidity_duration_seconds\":";
+  json += (elevatedHumiditySince
                ? String((millis() - elevatedHumiditySince) / 1000UL)
-               : "0") +
-      ",\"station_pressure_hpa\":" + jsonNumberOrNull(stationPressureHpa) +
-      ",\"air_pressure_hpa\":" + jsonNumberOrNull(airPressureHpa) +
-      ",\"mqtt_weather_enabled\":" + String(mqttWeatherEnabled ? "true" : "false") +
-      ",\"mqtt_connected\":" + String(mqttConnected ? "true" : "false") +
-      ",\"mqtt_host\":\"" + jsonEscape(mqttHost) + "\"" +
-      ",\"mqtt_port\":" + String(mqttPort) +
-      ",\"mqtt_last_message_age_seconds\":" +
-          (lastMqttMessage ? String((millis() - lastMqttMessage) / 1000) : "null") +
-      ",\"mqtt_error\":\"" + jsonEscape(mqttLastError) + "\"" +
-      ",\"wind_direction\":\"" + jsonEscape(statusWindDirection) + "\"" +
-      ",\"wind_speed_kph\":" + jsonNumberOrNull(statusWindSpeed) +
-      ",\"wind_gust_kph\":" + jsonNumberOrNull(statusWindGust) +
-      ",\"rain24_mm\":" + jsonNumberOrNull(statusRain) +
-      ",\"wifi_ssid\":\"" + jsonEscape(wifiSsid) + "\"" +
-      ",\"wifi_connected_ssid\":\"" +
-          jsonEscape(WiFi.status() == WL_CONNECTED ? WiFi.SSID() : String("")) +
-          "\"" +
-      ",\"wifi_connected\":" +
-          String(WiFi.status() == WL_CONNECTED ? "true" : "false") +
-      ",\"hostname\":\"" + String(DEVICE_HOSTNAME) + ".local\"" +
-      ",\"local_ip\":\"" + currentNetworkIpText() + "\"" +
-      ",\"gateway_ip\":\"" +
-          (WiFi.status() == WL_CONNECTED ? WiFi.gatewayIP().toString() : "") +
-          "\"" +
-      ",\"subnet_mask\":\"" +
-          (WiFi.status() == WL_CONNECTED ? WiFi.subnetMask().toString() : "") +
-          "\"" +
-      ",\"dns_server\":\"" +
-          (WiFi.status() == WL_CONNECTED ? WiFi.dnsIP(0).toString() : "") +
-          "\"" +
-      ",\"wifi_channel\":" +
-          (WiFi.status() == WL_CONNECTED ? String(WiFi.channel()) : "null") +
-      ",\"mac_address\":\"" + WiFi.macAddress() + "\"" +
-      ",\"wifi_signal_quality\":\"" +
-          jsonEscape(wifiSignalQualityText()) + "\"" +
-      ",\"wifi_setup_ap_active\":" +
-          String(wifiSetupAccessPointActive ? "true" : "false") +
-      ",\"wifi_setup_ap_ssid\":\"" +
-          jsonEscape(wifiSetupAccessPointSsid) + "\"" +
-      ",\"wifi_setup_ap_ip\":\"" +
-          (wifiSetupAccessPointActive ? WiFi.softAPIP().toString() : "") +
-          "\"" +
-      ",\"rssi\":" + String(WiFi.RSSI()) +
-      ",\"wifi_reconnects\":" + String(wifiReconnectCount) +
-      ",\"wifi_transport_failure_cycles\":" + String(networkRecovery.failures()) +
-      ",\"wifi_transport_recoveries\":" + String(networkRecovery.recoveries()) +
-      ",\"last_wifi_transport_recovery_age_seconds\":" +
-          (networkRecovery.recoveries()
+               : "0");
+  json += ",\"station_pressure_hpa\":";
+  json += jsonNumberOrNull(stationPressureHpa);
+  json += ",\"air_pressure_hpa\":";
+  json += jsonNumberOrNull(airPressureHpa);
+  json += ",\"mqtt_weather_enabled\":";
+  json += String(mqttWeatherEnabled ? "true" : "false");
+  json += ",\"mqtt_connected\":";
+  json += String(mqttConnected ? "true" : "false");
+  json += ",\"mqtt_host\":\"";
+  json += jsonEscape(mqttHost);
+  json += "\"";
+  json += ",\"mqtt_port\":";
+  json += String(mqttPort);
+  json += ",\"mqtt_last_message_age_seconds\":";
+  json += (lastMqttMessage ? String((millis() - lastMqttMessage) / 1000) : "null");
+  json += ",\"mqtt_error\":\"";
+  json += jsonEscape(mqttLastError);
+  json += "\"";
+  json += ",\"wind_direction\":\"";
+  json += jsonEscape(statusWindDirection);
+  json += "\"";
+  json += ",\"wind_speed_kph\":";
+  json += jsonNumberOrNull(statusWindSpeed);
+  json += ",\"wind_gust_kph\":";
+  json += jsonNumberOrNull(statusWindGust);
+  json += ",\"rain24_mm\":";
+  json += jsonNumberOrNull(statusRain);
+  json += ",\"wifi_ssid\":\"";
+  json += jsonEscape(wifiSsid);
+  json += "\"";
+  json += ",\"wifi_connected_ssid\":\"";
+  json += jsonEscape(WiFi.status() == WL_CONNECTED ? WiFi.SSID() : String(""));
+  json += "\"";
+  json += ",\"wifi_connected\":";
+  json += String(WiFi.status() == WL_CONNECTED ? "true" : "false");
+  json += ",\"hostname\":\"";
+  json += String(DEVICE_HOSTNAME);
+  json += ".local\"";
+  json += ",\"local_ip\":\"";
+  json += currentNetworkIpText();
+  json += "\"";
+  json += ",\"gateway_ip\":\"";
+  json += (WiFi.status() == WL_CONNECTED ? WiFi.gatewayIP().toString() : "");
+  json += "\"";
+  json += ",\"subnet_mask\":\"";
+  json += (WiFi.status() == WL_CONNECTED ? WiFi.subnetMask().toString() : "");
+  json += "\"";
+  json += ",\"dns_server\":\"";
+  json += (WiFi.status() == WL_CONNECTED ? WiFi.dnsIP(0).toString() : "");
+  json += "\"";
+  json += ",\"wifi_channel\":";
+  json += (WiFi.status() == WL_CONNECTED ? String(WiFi.channel()) : "null");
+  json += ",\"mac_address\":\"";
+  json += WiFi.macAddress();
+  json += "\"";
+  json += ",\"wifi_signal_quality\":\"";
+  json += jsonEscape(wifiSignalQualityText());
+  json += "\"";
+  json += ",\"wifi_setup_ap_active\":";
+  json += String(wifiSetupAccessPointActive ? "true" : "false");
+  json += ",\"wifi_setup_ap_ssid\":\"";
+  json += jsonEscape(wifiSetupAccessPointSsid);
+  json += "\"";
+  json += ",\"wifi_setup_ap_ip\":\"";
+  json += (wifiSetupAccessPointActive ? WiFi.softAPIP().toString() : "");
+  json += "\"";
+  json += ",\"rssi\":";
+  json += String(WiFi.RSSI());
+  json += ",\"wifi_reconnects\":";
+  json += String(wifiReconnectCount);
+  json += ",\"wifi_transport_failure_cycles\":";
+  json += String(networkRecovery.failures());
+  json += ",\"wifi_transport_recoveries\":";
+  json += String(networkRecovery.recoveries());
+  json += ",\"last_wifi_transport_recovery_age_seconds\":";
+  json += (networkRecovery.recoveries()
                ? String((millis() - networkRecovery.lastRecovery()) / 1000)
-               : "null") +
-      ",\"webserver_starts\":" + String(webServerStartCount) +
-      ",\"last_wifi_disconnect_age_seconds\":" +
-          (lastWifiDisconnect
+               : "null");
+  json += ",\"webserver_starts\":";
+  json += String(webServerStartCount);
+  json += ",\"last_wifi_disconnect_age_seconds\":";
+  json += (lastWifiDisconnect
                ? String((millis() - lastWifiDisconnect) / 1000)
-               : "null") +
-      ",\"lux\":" + (isnan(filteredLux) ? String("null") : String(filteredLux, 1)) +
-      ",\"brightness_percent\":" + String(BRIGHTNESS_LEVELS[brightnessIndex]) +
-      ",\"matrix_bit_depth\":" + String(BIT_DEPTH) +
-      ",\"matrix_refresh_hz\":" + String(matrixRefreshHz) +
-      ",\"matrix_show_count\":" + String(matrixShowCount) +
-      ",\"matrix_show_last_us\":" + String(matrixShowLastUs) +
-      ",\"matrix_show_max_us\":" + String(matrixShowMaxUs) +
-      ",\"observer_elevation_m\":" + String(observerElevationM, 0) +
-      ",\"far_elevation_angle_deg\":" + String(farDirectionElevationDeg, 0) +
-      ",\"adsb_url\":\"" + jsonEscape(activeAdsbUrl()) + "\"" +
-      ",\"adsb_url_1\":\"" + jsonEscape(adsbUrl1) + "\"" +
-      ",\"adsb_url_2\":\"" + jsonEscape(adsbUrl2) + "\"" +
-      ",\"adsb_url_3\":\"" + jsonEscape(adsbFiUrl()) + "\"" +
-      ",\"adsb_source_name\":\"" + jsonEscape(activeAdsbSourceName()) + "\"" +
-      ",\"active_adsb_source\":" + String(activeAdsbSource + 1) +
-      ",\"current_adsb_source\":" + String(currentAdsbSource + 1) +
-      ",\"adsb_failover_enabled\":" +
-          String(automaticAdsbFailover ? "true" : "false") +
-      ",\"adsb_failover_active\":" +
-          String(currentAdsbSource != activeAdsbSource ? "true" : "false") +
-      ",\"site_name\":\"" + jsonEscape(siteName) + "\"" +
-      ",\"site_latitude\":" + String(siteLatitude, 6) +
-      ",\"site_longitude\":" + String(siteLongitude, 6) +
-      ",\"view_heading\":" + String(viewHeading, 0) +
-      ",\"display_radius_km\":" + String(displayRadiusKm, 1) +
-      ",\"radar_sweep_interval_seconds\":" +
-          String(radarSweepIntervalSeconds) +
-      ",\"effective_radius_km\":" + jsonNumberOrNull(effectiveRadiusKm) +
-      ",\"routes_enabled\":" + String(routesEnabled ? "true" : "false") +
-      ",\"adsbdb_route_fallback_enabled\":" +
-          String(adsbDbFallbackEnabled ? "true" : "false") +
-      ",\"hide_sport_aircraft\":" + String(hideSportAircraft ? "true" : "false") +
-      ",\"altitude_filter_enabled\":" + String(altitudeFilterEnabled ? "true" : "false") +
-      ",\"maximum_altitude_ft\":" + String(maximumAltitudeFt) +
-      ",\"received_aircraft\":" + String(lastReceivedAircraft) +
-      ",\"candidate_aircraft\":" + String(lastCandidateAircraft) +
-      ",\"radar_trails_enabled\":" + String(radarTrailsEnabled ? "true" : "false") +
-          ",\"radar_trails_available\":" + String(radarTrailStorage ? "true" : "false") +
-      ",\"radar_aircraft\":" + String(networkRadarPointCount) +
-      ",\"last_adsb_attempt_age_seconds\":" +
-          (lastAdsbAttempt ? String((millis() - lastAdsbAttempt) / 1000) : "null") +
-      ",\"last_adsb_success_age_seconds\":" +
-          (lastAdsbSuccess ? String((millis() - lastAdsbSuccess) / 1000) : "null") +
-      ",\"display_update_age_seconds\":" +
-          (statusUpdated ? String((millis() - statusUpdated) / 1000) : "null") +
-      ",\"feed_timestamp\":" +
-          (lastFeedTimestamp ? String(lastFeedTimestamp) : "null") +
-      ",\"adsb_error\":\"" + jsonEscape(lastAdsbError) + "\"" +
-      ",\"display_error\":\"" + jsonEscape(statusError) + "\"" +
-      ",\"route_error\":\"" + jsonEscape(lastRouteError) + "\"" +
-      ",\"route_status\":\"" + jsonEscape(currentRoute.status) + "\"" +
-      ",\"route_source\":\"" + jsonEscape(currentRoute.source) + "\"" +
-      ",\"route_confidence\":" + String(currentRoute.confidence) +
-      ",\"route_confidence_reason\":\"" +
-          jsonEscape(currentRoute.confidenceReason) + "\"" +
-      ",\"route_cache_write_pending\":" +
-          String(routeClient.hasPendingWrites() ? "true" : "false") +
-      ",\"flight_available\":" + String(statusFlight.available ? "true" : "false") +
-      ",\"emergency\":" + String(statusFlight.emergency ? "true" : "false") +
-      ",\"has_position\":" + String(statusFlight.hasPosition ? "true" : "false") +
-      ",\"hex\":\"" + jsonEscape(statusFlight.hex) + "\"" +
-      ",\"flight\":\"" + jsonEscape(statusFlight.flight) + "\"" +
-      ",\"on_ground\":" + String(statusFlight.onGround ? "true" : "false") +
-      ",\"squawk\":\"" + jsonEscape(statusFlight.squawk) + "\"" +
-      ",\"emergency_meaning\":\"" +
-          jsonEscape(statusFlight.emergency ? emergencyMeaning(statusFlight.squawk) : "") + "\"" +
-      ",\"emergency_count\":" + String(statusFlight.emergencyCount) +
-      ",\"emergency_index\":" + String(statusFlight.emergencyIndex) +
-      ",\"emergency_test_active\":" +
-          String(emergencyTestCount &&
+               : "null");
+  json += ",\"lux\":";
+  json += (isnan(filteredLux) ? String("null") : String(filteredLux, 1));
+  json += ",\"brightness_percent\":";
+  json += String(BRIGHTNESS_LEVELS[brightnessIndex]);
+  json += ",\"matrix_bit_depth\":";
+  json += String(BIT_DEPTH);
+  json += ",\"matrix_refresh_hz\":";
+  json += String(matrixRefreshHz);
+  json += ",\"matrix_show_count\":";
+  json += String(matrixShowCount);
+  json += ",\"matrix_show_last_us\":";
+  json += String(matrixShowLastUs);
+  json += ",\"matrix_show_max_us\":";
+  json += String(matrixShowMaxUs);
+  json += ",\"observer_elevation_m\":";
+  json += String(observerElevationM, 0);
+  json += ",\"far_elevation_angle_deg\":";
+  json += String(farDirectionElevationDeg, 0);
+  json += ",\"adsb_url\":\"";
+  json += jsonEscape(activeAdsbUrl());
+  json += "\"";
+  json += ",\"adsb_url_1\":\"";
+  json += jsonEscape(adsbUrl1);
+  json += "\"";
+  json += ",\"adsb_url_2\":\"";
+  json += jsonEscape(adsbUrl2);
+  json += "\"";
+  json += ",\"adsb_url_3\":\"";
+  json += jsonEscape(adsbFiUrl());
+  json += "\"";
+  json += ",\"adsb_source_name\":\"";
+  json += jsonEscape(activeAdsbSourceName());
+  json += "\"";
+  json += ",\"active_adsb_source\":";
+  json += String(activeAdsbSource + 1);
+  json += ",\"current_adsb_source\":";
+  json += String(currentAdsbSource + 1);
+  json += ",\"adsb_failover_enabled\":";
+  json += String(automaticAdsbFailover ? "true" : "false");
+  json += ",\"adsb_failover_active\":";
+  json += String(currentAdsbSource != activeAdsbSource ? "true" : "false");
+  json += ",\"site_name\":\"";
+  json += jsonEscape(siteName);
+  json += "\"";
+  json += ",\"site_latitude\":";
+  json += String(siteLatitude, 6);
+  json += ",\"site_longitude\":";
+  json += String(siteLongitude, 6);
+  json += ",\"view_heading\":";
+  json += String(viewHeading, 0);
+  json += ",\"display_radius_km\":";
+  json += String(displayRadiusKm, 1);
+  json += ",\"radar_sweep_interval_seconds\":";
+  json += String(radarSweepIntervalSeconds);
+  json += ",\"effective_radius_km\":";
+  json += jsonNumberOrNull(effectiveRadiusKm);
+  json += ",\"routes_enabled\":";
+  json += String(routesEnabled ? "true" : "false");
+  json += ",\"adsbdb_route_fallback_enabled\":";
+  json += String(adsbDbFallbackEnabled ? "true" : "false");
+  json += ",\"hide_sport_aircraft\":";
+  json += String(hideSportAircraft ? "true" : "false");
+  json += ",\"altitude_filter_enabled\":";
+  json += String(altitudeFilterEnabled ? "true" : "false");
+  json += ",\"maximum_altitude_ft\":";
+  json += String(maximumAltitudeFt);
+  json += ",\"received_aircraft\":";
+  json += String(lastReceivedAircraft);
+  json += ",\"candidate_aircraft\":";
+  json += String(lastCandidateAircraft);
+  json += ",\"radar_trails_enabled\":";
+  json += String(radarTrailsEnabled ? "true" : "false");
+  json += ",\"radar_trails_available\":";
+  json += String(radarTrailStorage ? "true" : "false");
+  json += ",\"radar_aircraft\":";
+  json += String(networkRadarPointCount);
+  json += ",\"last_adsb_attempt_age_seconds\":";
+  json += (lastAdsbAttempt ? String((millis() - lastAdsbAttempt) / 1000) : "null");
+  json += ",\"last_adsb_success_age_seconds\":";
+  json += (lastAdsbSuccess ? String((millis() - lastAdsbSuccess) / 1000) : "null");
+  json += ",\"display_update_age_seconds\":";
+  json += (statusUpdated ? String((millis() - statusUpdated) / 1000) : "null");
+  json += ",\"feed_timestamp\":";
+  json += (lastFeedTimestamp ? String(lastFeedTimestamp) : "null");
+  json += ",\"adsb_error\":\"";
+  json += jsonEscape(lastAdsbError);
+  json += "\"";
+  json += ",\"display_error\":\"";
+  json += jsonEscape(statusError);
+  json += "\"";
+  json += ",\"route_error\":\"";
+  json += jsonEscape(lastRouteError);
+  json += "\"";
+  json += ",\"route_status\":\"";
+  json += jsonEscape(currentRoute.status);
+  json += "\"";
+  json += ",\"route_source\":\"";
+  json += jsonEscape(currentRoute.source);
+  json += "\"";
+  json += ",\"route_confidence\":";
+  json += String(currentRoute.confidence);
+  json += ",\"route_confidence_reason\":\"";
+  json += jsonEscape(currentRoute.confidenceReason);
+  json += "\"";
+  json += ",\"route_cache_write_pending\":";
+  json += String(routeClient.hasPendingWrites() ? "true" : "false");
+  json += ",\"flight_available\":";
+  json += String(statusFlight.available ? "true" : "false");
+  json += ",\"emergency\":";
+  json += String(statusFlight.emergency ? "true" : "false");
+  json += ",\"has_position\":";
+  json += String(statusFlight.hasPosition ? "true" : "false");
+  json += ",\"hex\":\"";
+  json += jsonEscape(statusFlight.hex);
+  json += "\"";
+  json += ",\"flight\":\"";
+  json += jsonEscape(statusFlight.flight);
+  json += "\"";
+  json += ",\"on_ground\":";
+  json += String(statusFlight.onGround ? "true" : "false");
+  json += ",\"squawk\":\"";
+  json += jsonEscape(statusFlight.squawk);
+  json += "\"";
+  json += ",\"emergency_meaning\":\"";
+  json += jsonEscape(statusFlight.emergency ? emergencyMeaning(statusFlight.squawk) : "");
+  json += "\"";
+  json += ",\"emergency_count\":";
+  json += String(statusFlight.emergencyCount);
+  json += ",\"emergency_index\":";
+  json += String(statusFlight.emergencyIndex);
+  json += ",\"emergency_test_active\":";
+  json += String(emergencyTestCount &&
                  static_cast<int32_t>(emergencyTestUntil - millis()) > 0
-                     ? "true" : "false") +
-      ",\"airline\":\"" + jsonEscape(statusFlight.airline) + "\"" +
-      ",\"aircraft_type\":\"" + jsonEscape(statusFlight.type) + "\"" +
-      ",\"aircraft_type_description\":\"" +
-          jsonEscape(statusFlight.typeDescription) + "\"" +
-      ",\"special_type\":\"" + jsonEscape(statusFlight.specialType) + "\"" +
-      ",\"origin\":\"" + jsonEscape(statusFlight.origin) + "\"" +
-      ",\"destination\":\"" + jsonEscape(statusFlight.destination) + "\"" +
-      ",\"route_codes\":\"" + jsonEscape(statusFlight.routeCodes) + "\"" +
-      ",\"route_names\":\"" + jsonEscape(statusFlight.routeNames) + "\"" +
-      ",\"distance_km\":" + jsonNumberOrNull(statusFlight.distanceKm) +
-      ",\"altitude_ft\":" + jsonNumberOrNull(statusFlight.altitudeFt, 0) +
-      ",\"speed_kmh\":" + jsonNumberOrNull(statusFlight.speedKmh, 0) +
-      ",\"cpa_km\":" + jsonNumberOrNull(statusFlight.cpaKm) +
-      ",\"cpa_minutes\":" + jsonNumberOrNull(statusFlight.cpaMinutes, 0) +
-      ",\"cpa_seconds\":" +
-          (cpaCountdownSeconds(statusFlight) >= 0
-               ? String(cpaCountdownSeconds(statusFlight)) : "null") +
-      ",\"vertical_rate_fpm\":" +
-          jsonNumberOrNull(statusFlight.verticalRateFpm, 0) +
-      ",\"vertical_motion\":\"" +
-          jsonEscape(statusFlight.verticalMotion) + "\"" +
-      ",\"motion\":\"" + jsonEscape(statusFlight.motion) + "\"" +
-      ",\"selection_reason\":\"" +
-          jsonEscape(statusFlight.selectionReason) + "\"" +
-      ",\"bearing\":" + jsonNumberOrNull(statusFlight.bearing, 0) +
-      ",\"relative_bearing\":" +
-          jsonNumberOrNull(statusFlight.relativeBearing) +
-      ",\"daily_aircraft_statistics\":{\"unique_aircraft\":" +
-          String(seenAircraftCount) +
-          ",\"tracking_limit\":" +
-          String(OBSERVED_AIRCRAFT_TRACKING_LIMIT) +
-          ",\"tracking_limit_reached\":" +
-          String(aircraftTrackingLimitReached ? "true" : "false") +
-          ",\"period_started_epoch\":" +
-          (dailyStatisticsStarted
+                     ? "true" : "false");
+  json += ",\"airline\":\"";
+  json += jsonEscape(statusFlight.airline);
+  json += "\"";
+  json += ",\"aircraft_type\":\"";
+  json += jsonEscape(statusFlight.type);
+  json += "\"";
+  json += ",\"aircraft_type_description\":\"";
+  json += jsonEscape(statusFlight.typeDescription);
+  json += "\"";
+  json += ",\"special_type\":\"";
+  json += jsonEscape(statusFlight.specialType);
+  json += "\"";
+  json += ",\"origin\":\"";
+  json += jsonEscape(statusFlight.origin);
+  json += "\"";
+  json += ",\"destination\":\"";
+  json += jsonEscape(statusFlight.destination);
+  json += "\"";
+  json += ",\"route_codes\":\"";
+  json += jsonEscape(statusFlight.routeCodes);
+  json += "\"";
+  json += ",\"route_names\":\"";
+  json += jsonEscape(statusFlight.routeNames);
+  json += "\"";
+  json += ",\"distance_km\":";
+  json += jsonNumberOrNull(statusFlight.distanceKm);
+  json += ",\"altitude_ft\":";
+  json += jsonNumberOrNull(statusFlight.altitudeFt, 0);
+  json += ",\"speed_kmh\":";
+  json += jsonNumberOrNull(statusFlight.speedKmh, 0);
+  json += ",\"cpa_km\":";
+  json += jsonNumberOrNull(statusFlight.cpaKm);
+  json += ",\"cpa_minutes\":";
+  json += jsonNumberOrNull(statusFlight.cpaMinutes, 0);
+  json += ",\"cpa_seconds\":";
+  json += (cpaCountdownSeconds(statusFlight) >= 0
+               ? String(cpaCountdownSeconds(statusFlight)) : "null");
+  json += ",\"vertical_rate_fpm\":";
+  json += jsonNumberOrNull(statusFlight.verticalRateFpm, 0);
+  json += ",\"vertical_motion\":\"";
+  json += jsonEscape(statusFlight.verticalMotion);
+  json += "\"";
+  json += ",\"motion\":\"";
+  json += jsonEscape(statusFlight.motion);
+  json += "\"";
+  json += ",\"selection_reason\":\"";
+  json += jsonEscape(statusFlight.selectionReason);
+  json += "\"";
+  json += ",\"bearing\":";
+  json += jsonNumberOrNull(statusFlight.bearing, 0);
+  json += ",\"relative_bearing\":";
+  json += jsonNumberOrNull(statusFlight.relativeBearing);
+  json += ",\"daily_aircraft_statistics\":{\"unique_aircraft\":";
+  json += String(seenAircraftCount);
+  json += ",\"tracking_limit\":";
+  json += String(OBSERVED_AIRCRAFT_TRACKING_LIMIT);
+  json += ",\"tracking_limit_reached\":";
+  json += String(aircraftTrackingLimitReached ? "true" : "false");
+  json += ",\"period_started_epoch\":";
+  json += (dailyStatisticsStarted
                ? String(static_cast<uint32_t>(dailyStatisticsStarted))
-               : "null") + "}" +
-      ",\"special_statistics\":{\"total\":" +
-          String(seenSpecialAircraftCount) +
-          ",\"tracking_limit\":" + String(SPECIAL_AIRCRAFT_TRACKING_LIMIT) +
-          ",\"tracking_limit_reached\":" +
-          String(specialAircraftTrackingLimitReached ? "true" : "false") +
-          ",\"categories\":{\"transponder_7500\":" +
-          String(specialAircraftCount(SpecialStatisticCategory::Emergency7500)) +
-          ",\"transponder_7600\":" +
-          String(specialAircraftCount(SpecialStatisticCategory::Emergency7600)) +
-          ",\"transponder_7700\":" +
-          String(specialAircraftCount(SpecialStatisticCategory::Emergency7700)) +
-          ",\"german_airforce\":" +
-          String(specialAircraftCount(SpecialStatisticCategory::GermanAirforce)) +
-          ",\"military\":" +
-          String(specialAircraftCount(SpecialStatisticCategory::Military)) +
-          ",\"federal_police\":" +
-          String(specialAircraftCount(SpecialStatisticCategory::FederalPolice)) +
-          ",\"police\":" +
-          String(specialAircraftCount(SpecialStatisticCategory::Police)) +
-          ",\"government\":" +
-          String(specialAircraftCount(SpecialStatisticCategory::Government)) +
-          ",\"helicopter\":" +
-          String(specialAircraftCount(SpecialStatisticCategory::Helicopter)) +
-          ",\"airship\":" +
-          String(specialAircraftCount(SpecialStatisticCategory::Airship)) +
-          ",\"a380\":" +
-          String(specialAircraftCount(SpecialStatisticCategory::A380)) +
-          ",\"other\":" +
-          String(specialAircraftCount(SpecialStatisticCategory::Other)) + "}}" +
-      ",\"daily_journal\":{\"entries\":" + String(dailyJournalCount) +
-          ",\"limit\":" + String(DAILY_JOURNAL_LIMIT) +
-          ",\"limit_reached\":" +
-          String(dailyJournalLimitReached ? "true" : "false") + "}" +
-      ",\"special_chronicle\":{\"entries\":" +
-          String(specialChronicleCount) +
-          ",\"limit\":" + String(SPECIAL_CHRONICLE_LIMIT) +
-          ",\"limit_reached\":" +
-          String(specialChronicleLimitReached ? "true" : "false") + "}" +
-      ",\"unknown_airports\":" + unknownCodesJson(true) +
-      ",\"unknown_airlines\":" + unknownCodesJson(false) +
-      ",\"unknown_code_limit\":" + String(unknownCodeLimit) +
-      ",\"dropped_unknown_airports\":" +
-          String(droppedUnknownAirports()) +
-      ",\"dropped_unknown_airlines\":" +
-          String(droppedUnknownAirlines()) +
-      ",\"quiet_hours_enabled\":" + String(quietHoursEnabled ? "true" : "false") +
-      ",\"quiet_hours_active\":" + String(quietHoursAreActive() ? "true" : "false") +
-      ",\"display_test\":" + String(displayTestActive ? "true" : "false") +
-      ",\"reset_reason\":\"" + jsonEscape(resetReasonText()) + "\"" +
-      ",\"previous_watchdog_network_phase\":\"" +
-          jsonEscape(networkPhaseName(previousResetNetworkPhase)) + "\"" +
-      ",\"network_phase_max_ms\":{" +
-          "\"web\":" + String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Web)]) +
-          ",\"ota\":" + String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Ota)]) +
-          ",\"mqtt\":" + String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Mqtt)]) +
-          ",\"wifi\":" + String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Wifi)]) +
-          ",\"adsb\":" + String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Adsb)]) +
-          ",\"route\":" + String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Route)]) +
-          ",\"flash\":" + String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Flash)]) + "}}";
+               : "null");
+  json += "}";
+  json += ",\"special_statistics\":{\"total\":";
+  json += String(seenSpecialAircraftCount);
+  json += ",\"tracking_limit\":";
+  json += String(SPECIAL_AIRCRAFT_TRACKING_LIMIT);
+  json += ",\"tracking_limit_reached\":";
+  json += String(specialAircraftTrackingLimitReached ? "true" : "false");
+  json += ",\"categories\":{\"transponder_7500\":";
+  json += String(specialAircraftCount(SpecialStatisticCategory::Emergency7500));
+  json += ",\"transponder_7600\":";
+  json += String(specialAircraftCount(SpecialStatisticCategory::Emergency7600));
+  json += ",\"transponder_7700\":";
+  json += String(specialAircraftCount(SpecialStatisticCategory::Emergency7700));
+  json += ",\"german_airforce\":";
+  json += String(specialAircraftCount(SpecialStatisticCategory::GermanAirforce));
+  json += ",\"military\":";
+  json += String(specialAircraftCount(SpecialStatisticCategory::Military));
+  json += ",\"federal_police\":";
+  json += String(specialAircraftCount(SpecialStatisticCategory::FederalPolice));
+  json += ",\"police\":";
+  json += String(specialAircraftCount(SpecialStatisticCategory::Police));
+  json += ",\"government\":";
+  json += String(specialAircraftCount(SpecialStatisticCategory::Government));
+  json += ",\"helicopter\":";
+  json += String(specialAircraftCount(SpecialStatisticCategory::Helicopter));
+  json += ",\"airship\":";
+  json += String(specialAircraftCount(SpecialStatisticCategory::Airship));
+  json += ",\"a380\":";
+  json += String(specialAircraftCount(SpecialStatisticCategory::A380));
+  json += ",\"other\":";
+  json += String(specialAircraftCount(SpecialStatisticCategory::Other));
+  json += "}}";
+  json += ",\"daily_journal\":{\"entries\":";
+  json += String(dailyJournalCount);
+  json += ",\"limit\":";
+  json += String(DAILY_JOURNAL_LIMIT);
+  json += ",\"limit_reached\":";
+  json += String(dailyJournalLimitReached ? "true" : "false");
+  json += "}";
+  json += ",\"special_chronicle\":{\"entries\":";
+  json += String(specialChronicleCount);
+  json += ",\"limit\":";
+  json += String(SPECIAL_CHRONICLE_LIMIT);
+  json += ",\"limit_reached\":";
+  json += String(specialChronicleLimitReached ? "true" : "false");
+  json += "}";
+  json += ",\"unknown_airports\":";
+  json += unknownCodesJson(true);
+  json += ",\"unknown_airlines\":";
+  json += unknownCodesJson(false);
+  json += ",\"unknown_code_limit\":";
+  json += String(unknownCodeLimit);
+  json += ",\"dropped_unknown_airports\":";
+  json += String(droppedUnknownAirports());
+  json += ",\"dropped_unknown_airlines\":";
+  json += String(droppedUnknownAirlines());
+  json += ",\"quiet_hours_enabled\":";
+  json += String(quietHoursEnabled ? "true" : "false");
+  json += ",\"quiet_hours_active\":";
+  json += String(quietHoursAreActive() ? "true" : "false");
+  json += ",\"display_test\":";
+  json += String(displayTestActive ? "true" : "false");
+  json += ",\"reset_reason\":\"";
+  json += jsonEscape(resetReasonText());
+  json += "\"";
+  json += ",\"previous_watchdog_network_phase\":\"";
+  json += jsonEscape(networkPhaseName(previousResetNetworkPhase));
+  json += "\"";
+  json += ",\"network_phase_max_ms\":{";
+  json += "\"web\":";
+  json += String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Web)]);
+  json += ",\"ota\":";
+  json += String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Ota)]);
+  json += ",\"mqtt\":";
+  json += String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Mqtt)]);
+  json += ",\"wifi\":";
+  json += String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Wifi)]);
+  json += ",\"adsb\":";
+  json += String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Adsb)]);
+  json += ",\"route\":";
+  json += String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Route)]);
+  json += ",\"flash\":";
+  json += String(networkPhaseMaxMs[static_cast<size_t>(NetworkPhase::Flash)]);
+  json += "}}";
   json.remove(json.length() - 1);
   json += PsramBuffer(",\"lookup_overrides\":") + lookupStatusJson() + "}";
   // Append without building a second full JSON document or large stack copy.
