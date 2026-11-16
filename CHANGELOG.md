@@ -2,6 +2,9 @@
 
 ## Noch nicht veröffentlicht
 
+- README mit fünf aktuellen Screenshots ergänzt; Bedienung, 125-Pixel-Option,
+  gemeinsame Lookup-Dateien, Taskaufteilung und TLS-Diagnose aktualisiert
+
 - Layout-Hosttest: std::isfinite explizit importiert für Linux/GCC und macOS/Clang
 - Aircraft-Header bindet cstdint für uint32_t explizit ein, unabhängig von Include-Reihenfolge
 - Vorab Codes aller drei Controller geprüft; TGZ (Georgian Airways) laut

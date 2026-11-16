@@ -9,7 +9,10 @@ ADS-B-Daten direkt ein, wählen das relevanteste Flugzeug aus und ergänzen Rout
 sowie Klartexte. Ein Raspberry Pi oder separater FlightMatrixServer ist nicht
 erforderlich.
 
-![FlightWall MatrixPortal mit aktuellen Flugdaten](IMG_4482.png)
+![FlightWall-Webdisplay mit KLM877, Route Amsterdam–Mumbai und CPA-Countdown](docs/images/flightwall-web-display-2026-11-16.png)
+
+*Webdisplay im laufenden Betrieb: Flugzeugtyp, Airline, Route, Entfernung,
+Höhe, Geschwindigkeit, Blickrichtung und CPA-Countdown auf einen Blick.*
 
 **Neu hier?** Die Anleitung [Getting Started](GETTING_STARTED.md) führt vom
 Hardwareaufbau über die Ersteinrichtung bis zur ersten Flugzeuganzeige und
@@ -59,12 +62,13 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 |---|---|
 | Firmware | `3.6.1-dual-target.53` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
-| Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
+| Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel), optional 125 nutzbare Spalten, und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
 | Farbtiefe | 3 Bit je Farbkanal |
 | Framework | Arduino über PlatformIO |
 | Bedienoberfläche | Deutsch und Englisch |
-| Aktualisierung | USB, Web-OTA oder PlatformIO-OTA |
+| Firmwareaktualisierung | USB, Web-OTA oder PlatformIO-OTA |
+| Lookup-Aktualisierung | gemeinsame JSON-Ergänzungen per Upload, ohne Firmwarebau oder Neustart |
 | Gerätestatus | gemeinsame RGB-LED-Logik; zusätzlicher Betriebs-Pixel auf der Matrix |
 | Lizenz | MIT |
 
@@ -74,6 +78,14 @@ Scanverfahren benötigen Änderungen an Matrixhöhe, Layout, Speicherbedarf und
 Protomatter-Konfiguration und sind kein direkt unterstützter Ersatz.
 
 ## Eindrücke aus dem Betrieb
+
+![FlightWall MatrixPortal mit aktuellen Flugdaten](IMG_4482.png)
+
+*Der reale Aufbau mit zwei horizontal verketteten 64×32-HUB75-Panels.*
+
+Die Screenshots in dieser README stammen vom 16. November 2026 und zeigen
+Firmware `.53`. Flug- und Messwerte sind Momentaufnahmen; aktivierte Optionen
+und vorhandene Sensoren richten sich nach dem jeweiligen Aufbau.
 
 Die folgende Aufnahme zeigt den automatischen WLAN-Rückfallmodus direkt auf
 der Matrix. SSID, Passwort und Konfigurationsadresse bleiben dadurch auch ohne
@@ -108,6 +120,8 @@ Wesentliche Funktionen:
 - vollständige Multi-Hop-Routen und kompakte Darstellung geschlossener Umläufe
 - integrierte Flughafen- und Airline-Klartexte
 - acht frei auswählbare und sortierbare Matrixseiten
+- optional 125 statt 128 nutzbare Matrixspalten bei beschädigtem rechten Panelrand
+- separat aktualisierbare Lookup-Ergänzungen ohne Firmwareupdate
 - maßstabstreue Radaransicht über die gesamte Matrixbreite mit
   Standortzentrum, Blickrichtung, unverzerrtem Radiuskreis und bis zu
   64 gleichzeitig sichtbaren Flugzeugpunkten; bei deaktivierter Wetterseite
@@ -120,7 +134,7 @@ Wesentliche Funktionen:
 - umfangreiche Status-, Test- und Diagnosefunktionen
 - änderbare WLAN-Zugangsdaten mit geschütztem Einrichtungsnetz als Rückfallweg
 - vollständige Konfigurationssicherung und -wiederherstellung als JSON-Datei
-- Dual-Core-Betrieb mit voneinander getrennter Anzeige und Netzverarbeitung
+- Dual-Core-Betrieb mit eigener Web-, Daten- und MQTT-Verarbeitung
 
 ## Systemaufbau
 
@@ -136,10 +150,13 @@ Mosquitto ────────────> Wind/Böen/Regen ─────
 BH1750 ───────────────> automatische Helligkeit
 ```
 
-Die Arduino-Hauptschleife läuft auf Core 1 und bedient Matrix, Tasten und
-Sensoren. Eine FreeRTOS-Task auf Core 0 verarbeitet WLAN, ADS-B, Routen,
-MQTT, Webserver und OTA. Flugzeug- und Wetterdaten werden über geschützte
-Kopien zwischen beiden Bereichen übergeben.
+Die Arduino-Hauptschleife auf Core 1 bedient Matrix, Tasten und Sensoren.
+Auf Core 0 arbeiten drei getrennte FreeRTOS-Tasks: Der Daten-Task übernimmt
+WLAN und ADS-B-/Routenabfragen, der Web-Task bedient die HTTP-Oberfläche und
+Web-OTA, der MQTT-Task hält die Wetterverbindung und führt MQTT-Tests aus.
+Blockierende externe Abfragen geben die Sperre der gemeinsamen Daten frei;
+dadurch bleiben die Webseiten während ADS-B- und Routenabfragen bedienbar.
+Flugzeug- und Wetterdaten werden über geschützte Kopien übergeben.
 
 ## Hardware
 
@@ -649,6 +666,8 @@ Nach erfolgreicher WLAN-Verbindung antwortet der Server auf Port 80:
 | `/api/status` | verfügbar | verfügbar | vollständige Statusdaten einschließlich RGB-LED als JSON |
 | `/unknown-codes.json` | verfügbar | verfügbar | unbekannte Airport-/Airline-Codes herunterladen |
 | `/configuration.json` | verfügbar | verfügbar | vollständige Konfiguration herunterladen |
+| `/lookups` | verfügbar | verfügbar | Lookup-Ergänzungen verwalten und hochladen |
+| `/lookups.json` | verfügbar | verfügbar | aktuelle Lookup-Ergänzungen herunterladen |
 | `/journal.json` | verfügbar | verfügbar | heutiges Flugzeugjournal als JSON herunterladen |
 | `/journal.csv` | verfügbar | verfügbar | heutiges Flugzeugjournal als CSV herunterladen |
 | `/specials.json` | verfügbar | verfügbar | heutige Special-Chronik als JSON herunterladen |
@@ -657,8 +676,8 @@ Nach erfolgreicher WLAN-Verbindung antwortet der Server auf Port 80:
 
 Falls mDNS im Netz nicht funktioniert, kann statt des jeweiligen Namens die im
 seriellen Monitor oder Router angezeigte IP-Adresse verwendet werden.
-Werden mehrere Headless-Controller gleichzeitig betrieben, verwenden sie
-denselben mDNS-Namen. In diesem Fall sollten die numerischen IP-Adressen oder
+Werden mehrere Controller derselben Variante gleichzeitig betrieben, verwenden
+sie denselben mDNS-Namen. In diesem Fall sollten die numerischen IP-Adressen oder
 feste DHCP-Zuordnungen im Router verwendet werden.
 
 Die Konfigurationsseite ist für iPhone, Tablet und Desktop optimiert. Kurze
@@ -670,6 +689,27 @@ Routendienst, MQTT, Seitenreihenfolge, Freitext, Helligkeit und Nachtruhe.
 Statuskarten werden regelmäßig aktualisiert, ohne geöffnete Bereiche zu
 schließen oder ungespeicherte Formulareingaben zu überschreiben.
 
+### Status und Diagnose
+
+![Statusseite mit Netzwerk, aktuellem Flugzeug und Tagesstatistik](docs/images/flightwall-status-2026-11-16.png)
+
+*Statusansicht mit Standortbezeichnung im Titel. Die Aufnahme zeigt einen
+Aufbau ohne BH1750; ein nicht vorhandener optionaler Sensor verhindert den
+Flugbetrieb nicht.*
+
+`/status` bündelt Netzwerkzustand, aktuelles Flugzeug, Tagesstatistik, Journal,
+Special-Chronik und technische Diagnose. Dazu gehören MQTT-Verbindung,
+Stackreserven, PSRAM-Belegung und die Speicherstände der Routenabfragen.
+Geöffnete Diagnosebereiche bleiben bei der automatischen Aktualisierung offen.
+Die Konfigurationsseite wird dagegen nicht automatisch neu geladen.
+
+### Konfiguration und Verbindungstests
+
+![Konfigurationsseite mit Standort, Routenoptionen und Verbindungstests](docs/images/flightwall-configuration-2026-11-16.png)
+
+*Standort, Blickrichtung und Filter sowie ADS-B-, Routen- und Notfalltests.
+Das Routentest-Feld wird beim Seitenaufruf mit dem aktuellen Callsign vorbelegt.*
+
 ### Wichtige Konfigurationsgruppen
 
 | Bereich | Wesentliche Einstellungen |
@@ -679,8 +719,8 @@ schließen oder ungespeicherte Formulareingaben zu überschreiben.
 | ADS-B | zwei lokale URLs, externe adsb.fi-Quelle, bevorzugte Quelle und Failover |
 | Filter | Kleinflugzeuge ausblenden, Maximalhöhe in ft |
 | Routen | adsb.im, ADSBDB-Fallback, Verbindungstest und Cacheverwaltung |
-| Matrixseiten | Seiten aktivieren, Reihenfolge, Dauer, Übergänge, Freitext und Radar-Umlauf |
-| Wetter | BME280-Ruheanzeige, MQTT-Broker, Zugangsdaten und Topics |
+| Matrixdarstellung | 128/125 nutzbare Pixel, Seiten aktivieren, Reihenfolge, Dauer, Übergänge, Freitext und Radar-Umlauf |
+| Wetter | BME280-Ruheanzeige, MQTT-Broker, Zugangsdaten, Topics und MQTT-Hintergrundtest |
 | Helligkeit | BH1750-Automatik, manuelle Stufe und Lux-Schwellen |
 | Betrieb | Nachtruhe, RGB-LED-Helligkeit, Tests und Neustart |
 | Sicherung | vollständige JSON-Sicherung und Wiederherstellung |
@@ -691,7 +731,7 @@ Sie erscheint dezent bei den Standortdaten auf `/status`, als Eingabefeld auf
 `/config` und unter dem Kopfbereich von `/display`, auch ohne aktuelles Flugzeug.
 Ein leeres Feld blendet die Beschriftung aus. Umlaute, Leerzeichen und Satzzeichen
 sind möglich; Steuerzeichen und ungültiges UTF-8 werden abgewiesen.
-Die physische Matrixanzeige bleibt davon unberührt. Der Text wird gespeichert,
+Die Standortbezeichnung wird nicht auf der physischen Matrix eingeblendet. Der Text wird gespeichert,
 bei OTA erhalten und als `site_name` mit der Konfiguration gesichert.
 Ältere Sicherungen ohne dieses Feld behalten eine vorhandene Bezeichnung bei;
 eine ausdrücklich leere Bezeichnung löscht sie.
@@ -722,8 +762,9 @@ wiederhergestellt werden. Die Datei enthält auch WLAN-, MQTT- und
 OTA-Zugangsdaten **im Klartext** und muss deshalb geschützt aufbewahrt werden.
 Ist OTA eingerichtet, verlangt der Download dieselben Zugangsdaten wie die
 Update-Seite. Die Sicherungsdatei selbst ist weder verschlüsselt noch durch ein
-zusätzliches Passwort geschützt. Eine Wiederherstellung ersetzt die gesamte
-Konfiguration und startet den Controller anschließend neu.
+zusätzliches Passwort geschützt. Eine Wiederherstellung übernimmt die
+enthaltenen Einstellungen und startet den Controller anschließend neu.
+Lookup-Ergänzungen werden separat als `lookups.json` gesichert und hochgeladen.
 
 Ist das ADS-B-Failover aktiviert, verwendet die Firmware bei einem Fehler
 sofort eine andere konfigurierte Quelle. Die bevorzugte Quelle wird danach
@@ -740,6 +781,42 @@ Orientierung, Entfernungsskala und Farblogik wie das Matrixradar.
 Deutsch/Englisch wirkt gemeinsam auf Matrix, Konfiguration, Diagnose,
 Web-Display und Wetterkürzel. Airport-, Airline- und Freitextnamen werden nicht
 automatisch übersetzt.
+
+### Tagesjournal und Special-Chronik
+
+![Special-Chronik mit verlinkten Flugkennungen, Klassifizierung und Auswahlgrund](docs/images/flightwall-special-chronicle-2026-11-16.png)
+
+*Die Special-Chronik erfasst auch erkannte Sonderflugzeuge, die nicht auf der
+Anzeige ausgewählt wurden. Türkise Flugkennungen öffnen FlightAware.*
+
+Die Tagesstatistik zählt jedes frische Flugzeug anhand ICAO-Hexadresse,
+Registrierung oder Callsign nur einmal. Bis zu 4096 Flugzeuge und 256 Specials
+werden im RAM verfolgt. Der Reset erfolgt um Mitternacht lokaler NTP-Zeit und
+zusätzlich bei jedem Neustart; die Statusseite zeigt den tatsächlichen
+Erfassungsbeginn und beide Kapazitätsgrenzen.
+
+Das Tagesjournal hält zusätzlich bis zu 256 tatsächlich zur Anzeige ausgewählte
+Flugzeuge im RAM. Für jeden Eintrag werden erster und letzter Sichtzeitpunkt,
+Flug, Typ, Route, Klassifizierung sowie kleinste Entfernung und kleinster CPA
+fortgeschrieben. Die Statusseite zeigt aus Stabilitätsgründen die neuesten 64
+Einträge in umgekehrter zeitlicher Reihenfolge; die JSON- und CSV-Downloads
+enthalten das vollständige Journal. Journal und Tagesstatistik werden gemeinsam
+bei lokalem Datumswechsel oder Neustart gelöscht.
+
+Die Flugkennungen in Tagesjournal und Special-Chronik verlinken auf die
+zugehörige FlightAware-Seite in einem neuen Tab. Ohne Flugkennung bleibt die
+Hex-Kennung normaler Text. Der Link bezeichnet die Flugkennung, nicht zwingend
+den historischen Flug zum Zeitpunkt des Eintrags; JSON-/CSV-Exporte bleiben unverändert.
+
+Die Special-Chronik erfasst unabhängig von der Anzeige bis zu 64 Specials und
+Transpondernotfälle, die der aktive ADS-B-Empfänger innerhalb des
+Verarbeitungsbereichs liefert. Sie enthält Klassifizierung, ersten und letzten
+Zeitpunkt, Typ, minimale Entfernung und CPA sowie die Information, ob das
+Flugzeug tatsächlich angezeigt wurde. Für das aktuelle Flugzeug und jeden
+angezeigten Journaleintrag nennt FlightWall außerdem den Auswahlgrund:
+Transpondernotfall, nächstes Special im doppelten Radius oder geringste
+Entfernung unter den geeigneten Kandidaten.
+
 
 ## Installation per USB
 
@@ -909,6 +986,11 @@ zwei Wege.
 
 ### Web-OTA
 
+![Firmware-Update mit installierter Version und Hardwarevariante](docs/images/flightwall-firmware-update-2026-11-16.png)
+
+*Die Update-Seite zeigt Version und Hardwarevariante vor der Dateiauswahl.
+Für Matrix und Headless sind jeweils unterschiedliche Images erforderlich.*
+
 1. `http://matrixportal.local/update` öffnen.
 2. Mit Benutzer `admin` und dem `OTA_PASSWORD` anmelden.
 3. Das MatrixPortal-Image aus dem aktuellen GitHub Release oder lokal
@@ -937,9 +1019,12 @@ Das Passwort steht bewusst nicht in `platformio.ini`. Die VS-Code-Aufgabe
 `origin/main` aus, fragt das Passwort verdeckt ab und startet anschließend den
 Upload.
 
-Vor jedem geplanten Neustart oder OTA sollten die Listen unbekannter Airports
-und Airlines auf der Statusseite geprüft und neue Codes in die Quelldaten
-übernommen werden, da diese Beobachtungen nur im RAM liegen.
+Vor jedem geplanten Neustart oder OTA die unbekannten Airport- und Airline-Codes
+auf allen betroffenen Controllern prüfen. Fehlende Namen und Airport-Koordinaten
+zuerst in einer Lookup-Ergänzung oder im Firmware-Grundbestand sichern; die
+Beobachtungslisten selbst liegen nur im RAM. Konfiguration und Lookup-Datei
+getrennt sichern, das richtige Firmwareimage auswählen und nach dem Update
+Version, Erreichbarkeit und Code-Listen kontrollieren.
 
 ## Übersetzungstabellen pflegen
 
@@ -994,9 +1079,11 @@ python3 tools/generate_lookup_extensions.py --version local-1 \
 
 ### Unbekannte Codes recherchieren und Bestände zusammenführen
 
-`tools/research_lookup_extensions.py` fragt standardmäßig beide Controller
+`tools/research_lookup_extensions.py` fragt die angegebenen Controller
 lesend ab, lädt ihre vorhandenen Ergänzungen und erstellt einen gemeinsamen
-Bestand. Namen/Koordinaten kommen zuerst aus den lokalen Quelltabellen;
+Bestand. Ohne `--controller` gelten die beiden im Werkzeug hinterlegten
+Standardadressen; für drei oder mehr Geräte jede Adresse explizit angeben.
+Namen/Koordinaten kommen zuerst aus den lokalen Quelltabellen;
 fehlende Airports werden über OurAirports, fehlende ICAO-Airlines über die
 aktuelle FAA-Designatortabelle recherchiert. Die Software setzt Python 3.9+
 voraus und benötigt keine zusätzlichen Python-Pakete.
@@ -1008,7 +1095,22 @@ python3 tools/research_lookup_extensions.py \
   --report work/lookup-review.json
 ```
 
-Für andere Geräteadressen `--controller http://ADRESSE` je Gerät wiederholen.
+Für eine gemeinsame Datei mehrerer Geräte alle Adressen im selben Aufruf
+angeben, beispielsweise:
+
+```bash
+python3 tools/research_lookup_extensions.py \
+  --controller http://controller-matrix-a.local \
+  --controller http://controller-matrix-b.local \
+  --controller http://controller-headless.local \
+  --version local-3 \
+  --output work/lookup-extensions.json \
+  --report work/lookup-review.json
+```
+
+Die Namen sind Platzhalter; die tatsächlichen IP-Adressen oder Hostnamen einsetzen.
+Nach konfliktfreier Prüfung dieselbe Datei auf jedes Gerät hochladen und
+anschließend Lookup-Version sowie leere Code-Listen kontrollieren.
 Das jeweilige OTA-Passwort wird verdeckt abgefragt. Es gibt keine Passwortoption
 in der Kommandozeile; Zugangsdaten werden weder gespeichert noch im Bericht
 veröffentlicht. Eine Eingabe ohne geschütztes Terminal wird abgewiesen.
@@ -1218,8 +1320,9 @@ Die technische Diagnose zeigt zusätzlich die **Web-Stackreserve**, die API
 unter `background_network` auch laufende I/O und ausstehende manuelle Tests.
 Die zusätzliche Stack-/TLS-Reserve muss nach einer Installation am Gerät
 kontrolliert werden. Schwacher WLAN-Empfang wird durch diese Trennung nicht
-behoben; MQTT-Verbindungsversuche und ausdrückliche Flashaktionen sind weiterhin
-eigene Arbeitsabschnitte.
+behoben. MQTT läuft in einem eigenen Task und gibt bei Netzwerk-I/O ebenfalls
+die Datensperre frei. Ausdrückliche Flashaktionen bleiben gesondert geschützte
+Arbeitsabschnitte.
 
 Manuelle ADS-B-/Routentests starten ab `.50` einen einzelnen Hintergrundauftrag.
 Der Browser folgt automatisch zu `/request-result?id=…` und lädt die Seite
@@ -1318,11 +1421,12 @@ werden ausdrücklich als **ohne TLS-Details** gekennzeichnet; daraus lässt sich
 kein bestimmter DNS-, Socket- oder TLS-Fehler ableiten. Ein HTTP-Fehler nach
 erfolgreichem TLS-Aufbau wird nicht als TLS-Fehler ausgegeben.
 
-Der interne, byteweise adressierbare RAM wird an drei Grenzen gemessen:
+Der interne, byteweise adressierbare RAM wird an vier Grenzen gemessen:
 
-1. vor dem Erzeugen des Secure-Clients und der Anfrage,
-2. unmittelbar vor `POST` beziehungsweise `GET`,
-3. unmittelbar nach deren Rückkehr, vor Fehlertextaufbereitung und `http.end()`.
+1. vor dem Erzeugen des Secure-Clients und der Anfrage (`entry`),
+2. unmittelbar vor `POST` beziehungsweise `GET` (`before_request`),
+3. unmittelbar nach deren Rückkehr (`after_request`),
+4. nach Freigabe der lokalen HTTP-, TLS- und JSON-Ressourcen (`after_cleanup`).
 
 Jede Messung enthält freien RAM, den größten zusammenhängenden freien Block
 und das Heap-Minimum seit dem Start. Die verwendete TLS-Bibliothek nutzt
@@ -1343,7 +1447,8 @@ In `/api/status` stehen die Werte unter:
 Noch nicht vorhandene Abfragedatensätze sind `null`. Die Datensätze enthalten
 `http_attempted`, `http_code`, `tls_error_code`, `tls_error_hex`,
 `tls_error_detail_available`, `tls_error_text`, `started_ms`, `age_seconds`,
-`duration_ms` und die Speicherstände `entry`, `before_request`, `after_request`.
+`duration_ms` und die Speicherstände `entry`, `before_request`, `after_request`
+und `after_cleanup`.
 Die Speicherfelder heißen `free_internal_bytes`, `largest_internal_block_bytes`
 und `minimum_internal_bytes`; alle Größen sind Bytes. Die Dauer beginnt vor
 der Anfragevorbereitung und endet nach dem Empfang der HTTP-Antwortheader.
@@ -1351,8 +1456,8 @@ der Anfragevorbereitung und endet nach dem Empfang der HTTP-Antwortheader.
 Cachetreffer lösen keine neue Messung aus; Callsign und Alter zeigen, zu welcher
 Anfrage die Diagnose gehört. HTTP 404 beim ADSBDB-Dienst bedeutet keine gefundene
 Route und ersetzt den gespeicherten Verbindungsfehler nicht. Die Aufzeichnung
-liegt mit 732 Byte festem Speicher ausschließlich im RAM, benötigt bei der
-Erfassung keine zusätzlichen dynamischen Textpuffer und endet mit einem
+verwendet feste Diagnosestrukturen im RAM, benötigt bei der Erfassung keine
+zusätzlichen dynamischen Textpuffer und endet mit einem
 Neustart. URLs, Positionen und Zugangsdaten werden nicht in die neuen
 Diagnosedatensätze aufgenommen. Routenwahl, Cache-Regeln, TLS-Einstellungen und
 Controllerkonfiguration bleiben unverändert.
@@ -1370,43 +1475,17 @@ python3 tools/test_route_validation.py
 
 ### Verfügbare Tests
 
-
 - ADS-B-Verbindungstest der ausgewählten Quelle
-- Routendiensttest mit frei eingegebenem Callsign
+- Routendiensttest mit aktuellem oder frei eingegebenem Callsign, gelieferten
+  Antworten und getrennten Callsign-/Positionsfehlern
+- MQTT-Hintergrundtest mit DNS, TCP, Anmeldung, Abonnements und gültigen Daten;
+  ohne Speichern der Formwerte und ohne Testnachrichten zu veröffentlichen
 - Transpondernotfalltest mit einem bis drei Flugzeugen
 - etwa 23 Sekunden langer Matrixtest mit Farben, Raster, Linien, Text,
   Farbbalken und allen Special-Type-Symbolen
 
-Die Tagesstatistik zählt jedes frische Flugzeug anhand ICAO-Hexadresse,
-Registrierung oder Callsign nur einmal. Bis zu 4096 Flugzeuge und 256 Specials
-werden im RAM verfolgt. Der Reset erfolgt um Mitternacht lokaler NTP-Zeit und
-zusätzlich bei jedem Neustart; die Statusseite zeigt den tatsächlichen
-Erfassungsbeginn und beide Kapazitätsgrenzen.
-
-Das Tagesjournal hält zusätzlich bis zu 256 tatsächlich zur Anzeige ausgewählte
-Flugzeuge im RAM. Für jeden Eintrag werden erster und letzter Sichtzeitpunkt,
-Flug, Typ, Route, Klassifizierung sowie kleinste Entfernung und kleinster CPA
-fortgeschrieben. Die Statusseite zeigt aus Stabilitätsgründen die neuesten 64
-Einträge in umgekehrter zeitlicher Reihenfolge; die JSON- und CSV-Downloads
-enthalten das vollständige Journal. Journal und Tagesstatistik werden gemeinsam
-bei lokalem Datumswechsel oder Neustart gelöscht.
-
-Die Flugkennungen in Tagesjournal und Special-Chronik verlinken auf die
-zugehörige FlightAware-Seite in einem neuen Tab. Ohne Flugkennung bleibt die
-Hex-Kennung normaler Text. Der Link bezeichnet die Flugkennung, nicht zwingend
-den historischen Flug zum Zeitpunkt des Eintrags; JSON-/CSV-Exporte bleiben unverändert.
-
-Die Special-Chronik erfasst unabhängig von der Anzeige bis zu 64 Specials und
-Transpondernotfälle, die der aktive ADS-B-Empfänger innerhalb des
-Verarbeitungsbereichs liefert. Sie enthält Klassifizierung, ersten und letzten
-Zeitpunkt, Typ, minimale Entfernung und CPA sowie die Information, ob das
-Flugzeug tatsächlich angezeigt wurde. Für das aktuelle Flugzeug und jeden
-angezeigten Journaleintrag nennt FlightWall außerdem den Auswahlgrund:
-Transpondernotfall, nächstes Special im doppelten Radius oder geringste
-Entfernung unter den geeigneten Kandidaten.
-
-Der Netzwerk-Task läuft mit niedriger Priorität und kurzen Scheduler-Pausen,
-damit synchrone HTTP-, TLS- und MQTT-Aufrufe den ESP32-Task-Watchdog nicht
+Daten-, Web- und MQTT-Task laufen mit niedriger Priorität und kurzen
+Scheduler-Pausen, damit synchrone Netzwerkaufrufe den ESP32-Task-Watchdog nicht
 blockieren. Bei WLAN-Verlust werden mDNS, MQTT und OTA kontrolliert beendet;
 der Webserver bleibt über das Einrichtungsnetz erreichbar und die normalen
 Netzdienste werden nach der Wiederverbindung neu gestartet.
@@ -1458,6 +1537,7 @@ git pull --ff-only origin main
 |---|---|
 | `src/main.cpp` | Display, Webserver, Sensorik, MQTT, OTA und Laufzeitlogik |
 | `src/AdsbClient.cpp` | ADS-B-Abruf und JSON-Parsing |
+| `src/MqttSession.cpp` | MQTT-Sitzungen, Protokollbeobachtung und Wetterdatenvalidierung |
 | `src/AircraftProcessor.cpp` | Filter, Auswahl, CPA und Klassifizierung |
 | `src/RouteClient.cpp` | Routendienst und Cache |
 | `src/WebDisplay.cpp` | responsives FlightWall-Web-Display |
@@ -1469,6 +1549,7 @@ git pull --ff-only origin main
 | `CHANGELOG.md` | chronologische Änderungen |
 | `GETTING_STARTED.md` | schrittweise Ersteinrichtung einschließlich optionaler Komponenten |
 | `PLATFORMIO.md` | ergänzende Entwicklerhinweise |
+| `docs/images/` | Screenshots von Webdisplay, Status, Konfiguration, Special-Chronik und Web-OTA |
 | `IMG_4482.png` | Beispiel einer Flugdatenseite im realen Aufbau |
 | `IMG_4788.jpeg` | WLAN-Einrichtungsanzeige im realen Aufbau |
 | `IMG_4794.mov` | kurzes Video der laufenden Flugzeuganzeige |
