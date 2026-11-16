@@ -702,7 +702,7 @@ schließen oder ungespeicherte Formulareingaben zu überschreiben.
 
 ### Status und Diagnose
 
-![Statusseite mit Netzwerk, aktuellem Flugzeug und Tagesstatistik](docs/images/flightwall-status-2026-11-16.png)
+![Statusseite mit Netzwerk, aktuellem Flugzeug und Tagesstatistik](docs/images/flightwall-status-2026-11-16.jpeg)
 
 *Statusansicht mit Standortbezeichnung im Titel. Die Aufnahme zeigt einen
 Aufbau ohne BH1750; ein nicht vorhandener optionaler Sensor verhindert den
