@@ -2,6 +2,8 @@
 
 ## Noch nicht veröffentlicht
 
+- Headless-Hardware mit Fotos des offenen und geschlossenen Gehäuses dokumentiert
+
 - README mit fünf aktuellen Screenshots ergänzt; Bedienung, 125-Pixel-Option,
   gemeinsame Lookup-Dateien, Taskaufteilung und TLS-Diagnose aktualisiert
 

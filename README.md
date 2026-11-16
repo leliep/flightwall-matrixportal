@@ -192,6 +192,17 @@ Eine LED-Matrix, ein MatrixPortal, ein BH1750 und ein separates
 5-V-Matrixnetzteil werden für diese Variante nicht benötigt. Das eigentliche
 FlightWall-Display läuft im Browser auf iPhone, Tablet oder Desktop.
 
+Die Fotos zeigen den Headless-Controller im 3D-gedruckten Gehäuse: links
+mit Deckel, rechts geöffnet mit sichtbarem ESP32-S3-N16R8-Modul. Die
+USB-Verbindung versorgt das Board; die RGB-Status-LED bleibt durch die
+Gehäuseöffnung sichtbar. Die beschrifteten RESET- und BOOT-Tasten sind auch
+bei geschlossenem Gehäuse zugänglich.
+
+| Geschlossenes Gehäuse | Offener Aufbau |
+|---|---|
+| <img src="docs/images/flightwall-headless-case-2026-11-16.jpeg" alt="FlightWall-Headless-Controller im geschlossenen Gehäuse mit RESET-/BOOT-Tasten und sichtbarer Status-LED" width="320"> | <img src="docs/images/flightwall-headless-open-2026-11-16.jpeg" alt="Geöffneter FlightWall-Headless-Controller mit ESP32-S3-N16R8 und USB-Stromversorgung" width="320"> |
+
+
 Optional:
 
 - BH1750 zur automatischen Helligkeitsregelung
@@ -1549,7 +1560,7 @@ git pull --ff-only origin main
 | `CHANGELOG.md` | chronologische Änderungen |
 | `GETTING_STARTED.md` | schrittweise Ersteinrichtung einschließlich optionaler Komponenten |
 | `PLATFORMIO.md` | ergänzende Entwicklerhinweise |
-| `docs/images/` | Screenshots von Webdisplay, Status, Konfiguration, Special-Chronik und Web-OTA |
+| `docs/images/` | Fotos des Headless-Aufbaus und Screenshots von Webdisplay, Status, Konfiguration, Special-Chronik und Web-OTA |
 | `IMG_4482.png` | Beispiel einer Flugdatenseite im realen Aufbau |
 | `IMG_4788.jpeg` | WLAN-Einrichtungsanzeige im realen Aufbau |
 | `IMG_4794.mov` | kurzes Video der laufenden Flugzeuganzeige |
