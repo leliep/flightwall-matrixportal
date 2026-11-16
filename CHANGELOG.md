@@ -1,5 +1,11 @@
 # Changelog
 
+## Noch nicht veröffentlicht
+
+- Layout-Hosttest: std::isfinite explizit importiert für Linux/GCC und macOS/Clang
+- Vorab Codes aller drei Controller geprüft; TGZ (Georgian Airways) laut
+  [FAA-Verzeichnis](https://www.faa.gov/air_traffic/publications/atpubs/cnt_html/chap3_section_1.html) ergänzt
+
 ## 3.6.1-dual-target.53 – 2026-11-16
 
 - Optionale Matrixdarstellung mit 125 statt 128 nutzbaren Pixeln; physische

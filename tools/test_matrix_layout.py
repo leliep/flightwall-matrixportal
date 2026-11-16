@@ -30,7 +30,7 @@ code=r'''
 #include <algorithm>
 #include <cstdint>
 #include <iostream>
-using std::min;using std::max;
+using std::min;using std::max;using std::isfinite;
 constexpr int16_t MATRIX_WIDTH=128;
 std::atomic<bool> matrixReducedWidth{false};
 constexpr float PI=3.14159265358979323846F;

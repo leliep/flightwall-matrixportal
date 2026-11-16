@@ -371,6 +371,7 @@ const AirlineName names[] = {
   {"TES", "Taespejo Portugal"},
   {"TEU", "TAG Aviation Malta"},
   {"TFL", "Arkefly"},
+  {"TGZ", "GEORGIAN AIRWAYS"},
   {"THA", "Thai Airways"},
   {"THY", "Turkish Airlines"},
   {"TK", "Turkish Airlines"},
