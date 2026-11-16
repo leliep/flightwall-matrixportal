@@ -3,6 +3,7 @@
 ## Noch nicht veröffentlicht
 
 - Layout-Hosttest: std::isfinite explizit importiert für Linux/GCC und macOS/Clang
+- Aircraft-Header bindet cstdint für uint32_t explizit ein, unabhängig von Include-Reihenfolge
 - Vorab Codes aller drei Controller geprüft; TGZ (Georgian Airways) laut
   [FAA-Verzeichnis](https://www.faa.gov/air_traffic/publications/atpubs/cnt_html/chap3_section_1.html) ergänzt
 
