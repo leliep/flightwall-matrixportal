@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.6.1-dual-target.53 – 2026-11-16
+
+- Optionale Matrixdarstellung mit 125 statt 128 nutzbaren Pixeln; physische
+  Panelansteuerung unverändert, drei rechte Spalten vor jeder Ausgabe schwarz
+- Rechtsbündige Inhalte, Scrollwege/-dauer, Radar einschließlich Spuren,
+  Wetterzentrierung, Pfeile und Displaytest berücksichtigen die logische Breite
+- Einstellung standardmäßig aus; NVS, Sicherung/Wiederherstellung und Status-API;
+  Matrix-only, Headless und Webdisplay behalten native Abmessungen
+- Vorab Codes aller drei Geräte geprüft, Konfigurationen/Lookups gesichert;
+  JET (Svenskt Industriflyg) und HEY (Zondajet.com) laut
+  [FAA-Verzeichnis](https://www.faa.gov/air_traffic/publications/atpubs/cnt_html/chap3_section_3.html) ergänzt
+
 ## 3.6.1-dual-target.52 – 2026-11-15
 
 - Standortbezeichnung in Browser-Titel und Überschrift von Status und Konfiguration

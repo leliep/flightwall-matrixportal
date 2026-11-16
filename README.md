@@ -57,7 +57,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.52` |
+| Firmware | `3.6.1-dual-target.53` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -700,6 +700,17 @@ Die Standortbezeichnung erscheint auch im Browser-Titel und in der Überschrift
 von Status und Konfiguration. Beim Öffnen der Konfiguration wird das aktuelle
 Callsign als Routentest-Vorgabe verwendet; ohne Callsign gilt `DLH123`. Eigene
 Eingaben bleiben bis zum erneuten Laden der Seite erhalten.
+
+Bei beschädigten rechten Panelspalten lässt sich unter **Matrixbreite** die
+Option **Defekte rechte Spalten ausblenden (125 Pixel)** einschalten. Sie ist
+standardmäßig aus. Texte, Scrollwege, Radar und Zentrierungen verwenden dann
+125 Pixel; die drei rechten physischen Spalten erhalten bei jeder Bildausgabe
+schwarze Daten, einschließlich Displaytest und Übergängen. Das Panel bleibt
+physisch 128×32, die Webanzeige unverändert. Die Einstellung wird gespeichert,
+bei OTA erhalten und als `matrix_reduced_width` gesichert. Alte Sicherungen ohne
+dieses Feld behalten die Einstellung bei. Der Headless-Build bietet sie nicht an.
+Ein Hardwarefehler, der auch bei schwarzen Bilddaten leuchtet, lässt sich so
+nicht abschalten.
 
 Matrixbezogene Felder werden im Headless-Build ausgeblendet. Einstellungen
 werden im NVS gespeichert und bleiben bei normalen USB- und OTA-Updates

@@ -15,7 +15,7 @@ helpers='\n'.join(function(signature) for signature in [
  'String cpaPageDetails()', 'uint32_t cpaPageDuration()', 'uint32_t displayDrawIntervalMs()',
  'bool flightHasMultiHopRoute()', 'void drawAirportNamesPage()', 'uint32_t airportNamesPageDuration()'])
 # Integration checks accompany behavioral tests of the actual called functions.
-assert 'drawLine(airportTextX(details, MATRIX_WIDTH, elapsed), 24, details, aircraftColor());' in function('void drawCpaPage()')
+assert 'drawLine(airportTextX(details, matrixLayoutWidth(), elapsed), 24, details, aircraftColor());' in function('void drawCpaPage()')
 processor=(root/'src/AircraftProcessor.cpp').read_text()
 assert 'aircraft.description = resolvedAircraftTypeDescription(aircraft.type, aircraft.description);' in processor
 assert processor.index('detectSpecialTypes(aircraft);') < processor.index('aircraft.description = resolvedAircraftTypeDescription')
@@ -31,6 +31,7 @@ stub=r'''
 using std::min;
 using std::max;
 constexpr int16_t MATRIX_WIDTH=128;
+int16_t matrixLayoutWidth(){ return MATRIX_WIDTH; }
 struct { String specialType,typeDescription,type,routeCodes,routeNames,originName,destinationName,origin,destination; } flight;
 String displayAscii(const String &text) { return text; }
 const char *uiText(const char *de,const char *) { return de; }

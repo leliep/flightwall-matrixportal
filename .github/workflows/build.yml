@@ -26,6 +26,7 @@ jobs:
           python3 tools/test_route_diagnostic_output.py
           python3 tools/validate_aircraft_type_names.py
           python3 tools/test_cpa_page.py
+          python3 tools/test_matrix_layout.py
       - name: Build MatrixPortal firmware
         run: pio run -e adafruit_matrixportal_esp32s3
       - name: Test temporary PSRAM buffers and TLS cleanup

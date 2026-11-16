@@ -15,6 +15,7 @@
 #include <time.h>
 #include <vector>
 #include <utility>
+#include <atomic>
 
 #ifndef FLIGHTWALL_HAS_MATRIX
 #define FLIGHTWALL_HAS_MATRIX 1
@@ -50,10 +51,18 @@
 #define MQTT_PASSWORD ""
 #endif
 
-constexpr uint16_t MATRIX_WIDTH = 128;
+constexpr uint16_t MATRIX_WIDTH = 128; // Physical HUB75/DMA width stays fixed.
+std::atomic<bool> matrixReducedWidth{false};
+int16_t matrixLayoutWidth() {
+#if FLIGHTWALL_HAS_MATRIX
+  return matrixReducedWidth.load(std::memory_order_relaxed) ? 125 : MATRIX_WIDTH;
+#else
+  return MATRIX_WIDTH;
+#endif
+}
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.52";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-15 site titles and current route test callsign";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.53";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-16 optional 125 pixel matrix layout";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -791,6 +800,9 @@ void updateColors() {
 
 void showMatrix() {
   const uint32_t started = micros();
+  // Clear excluded physical columns on every frame, including fills/tests/transitions.
+  const int16_t width = matrixLayoutWidth();
+  if (width < MATRIX_WIDTH) matrix.fillRect(width, 0, MATRIX_WIDTH - width, 32, 0);
   matrix.show();
   matrixShowLastUs = micros() - started;
   matrixShowMaxUs = max(matrixShowMaxUs, matrixShowLastUs);
@@ -1069,7 +1081,7 @@ void drawCurrentSpecialIcon(int16_t x, int16_t y = 0) {
 void drawHeader() {
   String callsign = clipped(flight.flight.length() ? flight.flight : "UNBEKANNT", 8);
   const String aircraftType = clipped(flight.type, 4);
-  const int16_t typeX = MATRIX_WIDTH - aircraftType.length() * 6;
+  const int16_t typeX = matrixLayoutWidth() - aircraftType.length() * 6;
   const bool hasSpecial = flight.specialType.length();
   const int16_t iconX = typeX - 16;
   drawLine(0, 0, callsign, aircraftColor(),
@@ -1286,7 +1298,7 @@ void drawMainPage() {
   }
   const String shownMetrics = clipped(metrics, 19);
   drawLine(0, 16, shownMetrics, white);
-  drawCompactAltitudeIndicatorAt(121, 16);
+  drawCompactAltitudeIndicatorAt(matrixLayoutWidth() - 7, 16);
 
   drawLookArrowAt(flight.relativeBearing, 0, 24, yellow);
   drawLine(10, 24, compactLookDirection(flight.relativeBearing), yellow);
@@ -1413,12 +1425,12 @@ void drawCpaPage() {
 
   const String details = cpaPageDetails();
   const uint32_t elapsed = millis() - currentPageStarted;
-  drawLine(airportTextX(details, MATRIX_WIDTH, elapsed), 24, details, aircraftColor());
+  drawLine(airportTextX(details, matrixLayoutWidth(), elapsed), 24, details, aircraftColor());
 }
 
 
 uint32_t cpaPageDuration() {
-  return airportScrollDuration(cpaPageDetails(), MATRIX_WIDTH);
+  return airportScrollDuration(cpaPageDetails(), matrixLayoutWidth());
 }
 
 
@@ -1428,7 +1440,7 @@ String compactAircraftType() {
 
 
 int16_t compactHeaderLeftRegionWidth() {
-  const int16_t typeX = MATRIX_WIDTH - compactAircraftType().length() * 6;
+  const int16_t typeX = matrixLayoutWidth() - compactAircraftType().length() * 6;
   return typeX - (flight.specialType.length() ? 18 : 2);
 }
 
@@ -1436,7 +1448,7 @@ int16_t compactHeaderLeftRegionWidth() {
 void drawCompactTypeHeader() {
   const String aircraftType = clipped(
       flight.type.length() ? flight.type : "Typ ?", 8);
-  const int16_t typeX = MATRIX_WIDTH - aircraftType.length() * 6;
+  const int16_t typeX = matrixLayoutWidth() - aircraftType.length() * 6;
   if (flight.specialType.length()) {
     const CompactIconKind kind = compactIconKind(flight.specialType);
     drawCompactSpecialIcon(kind, typeX - 16, 0, compactIconColor(kind));
@@ -1464,7 +1476,7 @@ void drawCompactDetails() {
       state == VerticalState::Descending;
   const int16_t tightSpeedX = metrics.length() * 6 + 1;
   int16_t preferredSpeedX = metrics.length() * 6 + 6;
-  if (hasIndicator && indicatorX + 7 <= MATRIX_WIDTH) {
+  if (hasIndicator && indicatorX + 7 <= matrixLayoutWidth()) {
     drawCompactAltitudeIndicatorAt(indicatorX, 8);
     preferredSpeedX = indicatorX + 8;
   }
@@ -1475,13 +1487,13 @@ void drawCompactDetails() {
     const String shortSpeed = speedValue + "k";
     const int16_t fullWidth = fullSpeed.length() * 6 - 1;
     const int16_t shortWidth = shortSpeed.length() * 6 - 1;
-    if (preferredSpeedX + fullWidth <= MATRIX_WIDTH) {
+    if (preferredSpeedX + fullWidth <= matrixLayoutWidth()) {
       drawLine(preferredSpeedX, 8, fullSpeed, yellow);
-    } else if (preferredSpeedX + shortWidth <= MATRIX_WIDTH) {
+    } else if (preferredSpeedX + shortWidth <= matrixLayoutWidth()) {
       drawLine(preferredSpeedX, 8, shortSpeed, yellow);
-    } else if (!hasIndicator && tightSpeedX + fullWidth <= MATRIX_WIDTH) {
+    } else if (!hasIndicator && tightSpeedX + fullWidth <= matrixLayoutWidth()) {
       drawLine(tightSpeedX, 8, fullSpeed, yellow);
-    } else if (!hasIndicator && tightSpeedX + shortWidth <= MATRIX_WIDTH) {
+    } else if (!hasIndicator && tightSpeedX + shortWidth <= matrixLayoutWidth()) {
       drawLine(tightSpeedX, 8, shortSpeed, yellow);
     }
   }
@@ -1490,7 +1502,7 @@ void drawCompactDetails() {
       ? -1 : static_cast<int>(round(flight.bearing)) % 360;
   const String bearingText = absoluteBearing < 0
       ? "?" : String(absoluteBearing);
-  constexpr int16_t degreeX = 114;
+  const int16_t degreeX = matrixLayoutWidth() - 14;
   const int16_t bearingX = degreeX - 1 - bearingText.length() * 6;
   const uint8_t lookTextLength = static_cast<uint8_t>(max(1, bearingX / 6));
   drawLine(0, 16,
@@ -1498,7 +1510,7 @@ void drawCompactDetails() {
            cyan);
   drawLine(bearingX, 16, bearingText, cyan);
   matrix.drawCircle(degreeX + 1, 18, 1, cyan);
-  drawLookArrowAt(flight.relativeBearing, 121, 16, yellow);
+  drawLookArrowAt(flight.relativeBearing, matrixLayoutWidth() - 7, 16, yellow);
 }
 
 
@@ -1541,9 +1553,9 @@ void drawCompactPage() {
 }
 
 
-constexpr int16_t AIRPORT_HALF_WIDTH = 60;
-constexpr int16_t AIRPORT_SEPARATOR_X = 61;
-constexpr int16_t AIRPORT_DESTINATION_X = 68;
+int16_t airportHalfWidth() { return (matrixLayoutWidth() - 8) / 2; }
+int16_t airportSeparatorX() { return airportHalfWidth() + 1; }
+int16_t airportDestinationX() { return airportHalfWidth() + 8; }
 constexpr uint32_t AIRPORT_NAMES_MINIMUM_MS = 5000;
 constexpr uint32_t AIRPORT_HALF_PAUSE_MS = 800;
 constexpr uint32_t AIRPORT_HALF_PIXEL_MS = 80;
@@ -1582,7 +1594,7 @@ uint32_t airportScrollDuration(const String &text, int16_t regionWidth) {
 uint32_t compactAirportsNamePhaseDuration() {
   if (flightHasClosedLoopRoute()) {
     return max(airportScrollDuration(
-                   limitedAirportText(compactLoopRouteNames()), MATRIX_WIDTH),
+                   limitedAirportText(compactLoopRouteNames()), matrixLayoutWidth()),
                AIRPORT_NAMES_MINIMUM_MS);
   }
 
@@ -1593,21 +1605,21 @@ uint32_t compactAirportsNamePhaseDuration() {
   uint32_t scrollDuration = 0;
 
   if (!origin.length()) {
-    scrollDuration = airportScrollDuration(destination, MATRIX_WIDTH);
+    scrollDuration = airportScrollDuration(destination, matrixLayoutWidth());
   } else if (!destination.length()) {
-    scrollDuration = airportScrollDuration(origin, MATRIX_WIDTH);
-  } else if (originWidth + 6 + destinationWidth <= MATRIX_WIDTH) {
+    scrollDuration = airportScrollDuration(origin, matrixLayoutWidth());
+  } else if (originWidth + 6 + destinationWidth <= matrixLayoutWidth()) {
     scrollDuration = 0;
-  } else if (originWidth < MATRIX_WIDTH / 2) {
+  } else if (originWidth < matrixLayoutWidth() / 2) {
     scrollDuration = airportScrollDuration(
-        destination, MATRIX_WIDTH - originWidth - 6);
-  } else if (destinationWidth < MATRIX_WIDTH / 2) {
+        destination, matrixLayoutWidth() - originWidth - 6);
+  } else if (destinationWidth < matrixLayoutWidth() / 2) {
     scrollDuration = airportScrollDuration(
-        origin, MATRIX_WIDTH - destinationWidth - 6);
+        origin, matrixLayoutWidth() - destinationWidth - 6);
   } else {
     scrollDuration = max(
-        airportScrollDuration(origin, AIRPORT_HALF_WIDTH),
-        airportScrollDuration(destination, AIRPORT_HALF_WIDTH));
+        airportScrollDuration(origin, airportHalfWidth()),
+        airportScrollDuration(destination, airportHalfWidth()));
   }
   return max(scrollDuration, AIRPORT_NAMES_MINIMUM_MS);
 }
@@ -1680,8 +1692,8 @@ void drawCompactAirportsPage() {
 
   if (flightHasClosedLoopRoute()) {
     const String route = limitedAirportText(compactLoopRouteNames());
-    drawAirportRegion(route, 0, 24, MATRIX_WIDTH,
-                      airportTextX(route, MATRIX_WIDTH, elapsed), white);
+    drawAirportRegion(route, 0, 24, matrixLayoutWidth(),
+                      airportTextX(route, matrixLayoutWidth(), elapsed), white);
     return;
   }
 
@@ -1691,47 +1703,47 @@ void drawCompactAirportsPage() {
   const int16_t destinationWidth = destination.length() * 6;
 
   if (!origin.length()) {
-    const int16_t x = destinationWidth <= MATRIX_WIDTH ?
-        MATRIX_WIDTH - destinationWidth :
-        airportTextX(destination, MATRIX_WIDTH, elapsed);
-    drawAirportRegion(destination, 0, 24, MATRIX_WIDTH, x, yellow);
+    const int16_t x = destinationWidth <= matrixLayoutWidth() ?
+        matrixLayoutWidth() - destinationWidth :
+        airportTextX(destination, matrixLayoutWidth(), elapsed);
+    drawAirportRegion(destination, 0, 24, matrixLayoutWidth(), x, yellow);
     return;
   }
   if (!destination.length()) {
-    drawAirportRegion(origin, 0, 24, MATRIX_WIDTH,
-                      airportTextX(origin, MATRIX_WIDTH, elapsed), white);
+    drawAirportRegion(origin, 0, 24, matrixLayoutWidth(),
+                      airportTextX(origin, matrixLayoutWidth(), elapsed), white);
     return;
   }
 
-  if (originWidth + 6 + destinationWidth <= MATRIX_WIDTH) {
-    const int16_t destinationX = MATRIX_WIDTH - destinationWidth;
+  if (originWidth + 6 + destinationWidth <= matrixLayoutWidth()) {
+    const int16_t destinationX = matrixLayoutWidth() - destinationWidth;
     const int16_t separatorX = originWidth +
         (destinationX - originWidth - 6) / 2;
     drawAirportRegion(origin, 0, 24, originWidth, 0, white);
     drawLine(separatorX, 24, ">", cyan);
     drawAirportRegion(destination, destinationX, 24, destinationWidth, 0, yellow);
-  } else if (originWidth < MATRIX_WIDTH / 2) {
+  } else if (originWidth < matrixLayoutWidth() / 2) {
     const int16_t separatorX = originWidth;
     const int16_t destinationX = separatorX + 6;
-    const int16_t destinationRegionWidth = MATRIX_WIDTH - destinationX;
+    const int16_t destinationRegionWidth = matrixLayoutWidth() - destinationX;
     drawAirportRegion(origin, 0, 24, originWidth, 0, white);
     drawLine(separatorX, 24, ">", cyan);
     drawAirportRegion(destination, destinationX, 24, destinationRegionWidth,
                       airportTextX(destination, destinationRegionWidth, elapsed),
                       yellow);
-  } else if (destinationWidth < MATRIX_WIDTH / 2) {
-    const int16_t destinationX = MATRIX_WIDTH - destinationWidth;
+  } else if (destinationWidth < matrixLayoutWidth() / 2) {
+    const int16_t destinationX = matrixLayoutWidth() - destinationWidth;
     const int16_t separatorX = destinationX - 6;
     drawAirportRegion(origin, 0, 24, separatorX,
                       airportTextX(origin, separatorX, elapsed), white);
     drawLine(separatorX, 24, ">", cyan);
     drawAirportRegion(destination, destinationX, 24, destinationWidth, 0, yellow);
   } else {
-    drawAirportRegion(origin, 0, 24, AIRPORT_HALF_WIDTH,
-                      airportTextX(origin, AIRPORT_HALF_WIDTH, elapsed), white);
-    drawLine(AIRPORT_SEPARATOR_X, 24, ">", cyan);
-    drawAirportRegion(destination, AIRPORT_DESTINATION_X, 24, AIRPORT_HALF_WIDTH,
-                      airportTextX(destination, AIRPORT_HALF_WIDTH, elapsed),
+    drawAirportRegion(origin, 0, 24, airportHalfWidth(),
+                      airportTextX(origin, airportHalfWidth(), elapsed), white);
+    drawLine(airportSeparatorX(), 24, ">", cyan);
+    drawAirportRegion(destination, airportDestinationX(), 24, airportHalfWidth(),
+                      airportTextX(destination, airportHalfWidth(), elapsed),
                       yellow);
   }
 }
@@ -1743,22 +1755,22 @@ constexpr uint32_t SCROLL_PIXEL_MS = 80;
 
 uint32_t scrollingTextDuration(const String &text) {
   const int16_t textWidth = text.length() * 6;
-  if (textWidth <= MATRIX_WIDTH) return 0;
+  if (textWidth <= matrixLayoutWidth()) return 0;
   return SCROLL_PAUSE_MS +
-         (textWidth - MATRIX_WIDTH) * SCROLL_PIXEL_MS +
+         (textWidth - matrixLayoutWidth()) * SCROLL_PIXEL_MS +
          SCROLL_PAUSE_MS;
 }
 
 
 int16_t scrollingTextX(const String &text, uint32_t elapsedMs) {
   const int16_t textWidth = text.length() * 6;
-  if (textWidth <= MATRIX_WIDTH || elapsedMs < SCROLL_PAUSE_MS) return 0;
-  const uint32_t travelMs = (textWidth - MATRIX_WIDTH) * SCROLL_PIXEL_MS;
+  if (textWidth <= matrixLayoutWidth() || elapsedMs < SCROLL_PAUSE_MS) return 0;
+  const uint32_t travelMs = (textWidth - matrixLayoutWidth()) * SCROLL_PIXEL_MS;
   if (elapsedMs < SCROLL_PAUSE_MS + travelMs) {
     return -static_cast<int16_t>(
         (elapsedMs - SCROLL_PAUSE_MS) / SCROLL_PIXEL_MS);
   }
-  return MATRIX_WIDTH - textWidth;
+  return matrixLayoutWidth() - textWidth;
 }
 
 
@@ -1785,14 +1797,14 @@ bool flightHasMultiHopRoute() {
 
 void drawAirportNamesPage() {
   drawLine(0, 0, uiText("Flughaefen", "Airports"), cyan);
-  drawCurrentSpecialIcon(MATRIX_WIDTH - 14);
+  drawCurrentSpecialIcon(matrixLayoutWidth() - 14);
   const uint32_t elapsed = millis() - currentPageStarted;
   if (flightHasMultiHopRoute()) {
     String codes = displayAscii(flight.routeCodes);
     codes.replace("-", ">");
     const String names = displayAscii(flight.routeNames);
-    drawLine(airportTextX(codes, MATRIX_WIDTH, elapsed), 11, codes, white);
-    drawLine(airportTextX(names, MATRIX_WIDTH, elapsed), 22, names, yellow);
+    drawLine(airportTextX(codes, matrixLayoutWidth(), elapsed), 11, codes, white);
+    drawLine(airportTextX(names, matrixLayoutWidth(), elapsed), 22, names, yellow);
     return;
   }
   String originText = "S " + (flight.originName.length() ?
@@ -1801,8 +1813,8 @@ void drawAirportNamesPage() {
       flight.destinationName : (flight.destination.length() ? flight.destination : uiText("unbekannt", "unknown")));
   originText = displayAscii(originText);
   destinationText = displayAscii(destinationText);
-  drawLine(airportTextX(originText, MATRIX_WIDTH, elapsed), 11, originText, white);
-  drawLine(airportTextX(destinationText, MATRIX_WIDTH, elapsed), 22, destinationText, yellow);
+  drawLine(airportTextX(originText, matrixLayoutWidth(), elapsed), 11, originText, white);
+  drawLine(airportTextX(destinationText, matrixLayoutWidth(), elapsed), 22, destinationText, yellow);
 }
 
 
@@ -1816,15 +1828,15 @@ uint32_t airportNamesPageDuration() {
   if (flightHasMultiHopRoute()) {
     String codes = displayAscii(flight.routeCodes);
     codes.replace("-", ">");
-    return max(airportScrollDuration(codes, MATRIX_WIDTH),
-               airportScrollDuration(displayAscii(flight.routeNames), MATRIX_WIDTH));
+    return max(airportScrollDuration(codes, matrixLayoutWidth()),
+               airportScrollDuration(displayAscii(flight.routeNames), matrixLayoutWidth()));
   }
   String originText = displayAscii("S " + (flight.originName.length() ?
       flight.originName : flight.origin));
   String destinationText = displayAscii("Z " + (flight.destinationName.length() ?
       flight.destinationName : flight.destination));
-  return max(airportScrollDuration(originText, MATRIX_WIDTH),
-             airportScrollDuration(destinationText, MATRIX_WIDTH));
+  return max(airportScrollDuration(originText, matrixLayoutWidth()),
+             airportScrollDuration(destinationText, matrixLayoutWidth()));
 }
 
 
@@ -1849,7 +1861,7 @@ const char *customScrollSpeedName() {
 uint32_t customPageScrollDuration() {
   const uint32_t textWidth = customPageText.length() * 6UL;
   return CUSTOM_SCROLL_PAUSE_MS +
-         (MATRIX_WIDTH + textWidth) * customScrollPixelMs() +
+         (matrixLayoutWidth() + textWidth) * customScrollPixelMs() +
          CUSTOM_SCROLL_PAUSE_MS;
 }
 
@@ -1857,14 +1869,14 @@ uint32_t customPageScrollDuration() {
 void drawCustomTextPage() {
   const uint32_t elapsed = millis() - currentPageStarted;
   const uint32_t textWidth = customPageText.length() * 6UL;
-  int32_t x = MATRIX_WIDTH;
+  int32_t x = matrixLayoutWidth();
   if (elapsed > CUSTOM_SCROLL_PAUSE_MS) {
     x -= (elapsed - CUSTOM_SCROLL_PAUSE_MS) / customScrollPixelMs();
   }
   const int32_t finalX = -static_cast<int32_t>(textWidth);
   if (x < finalX) x = finalX;
   drawLine(static_cast<int16_t>(x), 13, customPageText, cyan);
-  drawCurrentSpecialIcon(MATRIX_WIDTH - 14);
+  drawCurrentSpecialIcon(matrixLayoutWidth() - 14);
 }
 
 
@@ -1895,19 +1907,19 @@ void drawEmergencyPage() {
                                          : 21;
   drawLine(0, 0, clipped(identity, identityCharacters), white);
   if (position.length())
-    drawLine(MATRIX_WIDTH - position.length() * 6, 0, position, white);
+    drawLine(matrixLayoutWidth() - position.length() * 6, 0, position, white);
 
   const String squawk = isEmergencySquawk(flight.squawk)
                             ? flight.squawk
                             : "7???";
   const uint16_t alertColor = squawk == "7600" ? yellow : red;
-  const int16_t squawkX = (MATRIX_WIDTH - squawk.length() * 12) / 2;
+  const int16_t squawkX = (matrixLayoutWidth() - squawk.length() * 12) / 2;
   drawLine(squawkX, 8, squawk, alertColor, 2);
 
   const String meaning = squawk == "7???"
                              ? "ALARM"
                              : emergencyMeaning(squawk);
-  int16_t meaningX = (MATRIX_WIDTH - meaning.length() * 6) / 2;
+  int16_t meaningX = (matrixLayoutWidth() - meaning.length() * 6) / 2;
   if (meaningX < 0) meaningX = 0;
   drawLine(meaningX, 24, meaning, alertColor);
 }
@@ -1981,10 +1993,10 @@ void drawCompactClimateDisplay(bool bmeAvailable, bool mqttAvailable) {
       ? String(relativeHumidityPercent, 0) + "%" : "--%";
   const String pressureText = bmeAvailable
       ? String(airPressureHpa, 0) + "hPa" : "----hPa";
-  constexpr int16_t middleColumnCenterX = 64;
+  const int16_t middleColumnCenterX = matrixLayoutWidth() / 2;
   const int16_t humidityX = middleColumnCenterX -
       static_cast<int16_t>(humidityText.length() * 3);
-  const int16_t pressureX = MATRIX_WIDTH -
+  const int16_t pressureX = matrixLayoutWidth() -
       static_cast<int16_t>(pressureText.length() * 6);
   const uint16_t humidityColor = moldRiskLevel == MoldRiskLevel::High
                                      ? red
@@ -2004,7 +2016,7 @@ void drawCompactClimateDisplay(bool bmeAvailable, bool mqttAvailable) {
   String rainText = "--mm";
   if (isfinite(rain))
     rainText = String(rain, rain < 100.0f ? 1 : 0) + "mm";
-  const int16_t rainX = MATRIX_WIDTH -
+  const int16_t rainX = matrixLayoutWidth() -
       static_cast<int16_t>(rainText.length() * 6);
   drawLine(rainX - 12, 18, "R", blue);
   drawLine(rainX, 18, rainText, blue);
@@ -2020,7 +2032,7 @@ uint16_t radarPointColor(const RadarPoint &point) {
 }
 
 
-constexpr int16_t RADAR_CENTER_X = MATRIX_WIDTH / 2;
+int16_t radarCenterX() { return matrixLayoutWidth() / 2; }
 constexpr int16_t RADAR_CENTER_Y = 15;
 constexpr int16_t RADAR_RADIUS_PIXELS = 15;
 constexpr uint8_t RADAR_RADIUS_DOT_COUNT = 32;
@@ -2050,16 +2062,16 @@ bool radarDataCollectionEnabled() {
 
 
 bool radarPointCoordinates(float distanceKm, float bearing,
-                           int16_t &x, int16_t &y) {
+                           int16_t &x, int16_t &y, int16_t width = MATRIX_WIDTH) {
   if (displayRadiusKm <= 0.0F || !isfinite(distanceKm) ||
       !isfinite(bearing)) return false;
   const float pixelsPerKm = RADAR_RADIUS_PIXELS / displayRadiusKm;
   const float relativeRadians = (bearing - viewHeading) * PI / 180.0F;
-  x = RADAR_CENTER_X + static_cast<int16_t>(
+  x = width / 2 + static_cast<int16_t>(
       roundf(sinf(relativeRadians) * distanceKm * pixelsPerKm));
   y = RADAR_CENTER_Y - static_cast<int16_t>(
       roundf(cosf(relativeRadians) * distanceKm * pixelsPerKm));
-  return x >= 0 && x < MATRIX_WIDTH && y >= 0 && y < matrix.height();
+  return x >= 0 && x < width && y >= 0 && y < matrix.height();
 }
 
 
@@ -2086,14 +2098,14 @@ void drawRadarPage() {
             dimChannel(((base >> 11) & 31) * 255 / 31),
             dimChannel(((base >> 5) & 63) * 255 / 63),
             dimChannel((base & 31) * 255 / 31));
-        matrix.drawPixel(dot.x, dot.y, color);
+        matrix.drawPixel(dot.x + radarCenterX() - MATRIX_WIDTH / 2, dot.y, color);
       }
     }
   }
   for (uint8_t dot = 0; dot < RADAR_RADIUS_DOT_COUNT; ++dot) {
     const float angle = 2.0F * PI * dot / RADAR_RADIUS_DOT_COUNT;
     matrix.drawPixel(
-        RADAR_CENTER_X + static_cast<int16_t>(
+        radarCenterX() + static_cast<int16_t>(
             roundf(cosf(angle) * RADAR_RADIUS_PIXELS)),
         RADAR_CENTER_Y + static_cast<int16_t>(
             roundf(sinf(angle) * RADAR_RADIUS_PIXELS)),
@@ -2123,7 +2135,7 @@ void drawRadarPage() {
       const float sweepAngle = -PI / 2.0F +
           2.0F * PI * sweepDot / RADAR_RADIUS_DOT_COUNT;
       matrix.drawPixel(
-          RADAR_CENTER_X + static_cast<int16_t>(
+          radarCenterX() + static_cast<int16_t>(
               roundf(cosf(sweepAngle) * RADAR_RADIUS_PIXELS)),
           RADAR_CENTER_Y + static_cast<int16_t>(
               roundf(sinf(sweepAngle) * RADAR_RADIUS_PIXELS)),
@@ -2134,11 +2146,11 @@ void drawRadarPage() {
     radarSweepLastDraw = now;
   }
   // Own position remains visible even when no aircraft is present.
-  matrix.drawPixel(RADAR_CENTER_X, RADAR_CENTER_Y, green);
-  matrix.drawPixel(RADAR_CENTER_X - 1, RADAR_CENTER_Y, green);
-  matrix.drawPixel(RADAR_CENTER_X + 1, RADAR_CENTER_Y, green);
-  matrix.drawPixel(RADAR_CENTER_X, RADAR_CENTER_Y - 1, green);
-  matrix.drawPixel(RADAR_CENTER_X, RADAR_CENTER_Y + 1, green);
+  matrix.drawPixel(radarCenterX(), RADAR_CENTER_Y, green);
+  matrix.drawPixel(radarCenterX() - 1, RADAR_CENTER_Y, green);
+  matrix.drawPixel(radarCenterX() + 1, RADAR_CENTER_Y, green);
+  matrix.drawPixel(radarCenterX(), RADAR_CENTER_Y - 1, green);
+  matrix.drawPixel(radarCenterX(), RADAR_CENTER_Y + 1, green);
 
   const bool blinkOn = (millis() / 500U) % 2U == 0;
   for (uint8_t pass = 0; pass < 2; ++pass) {
@@ -2149,7 +2161,7 @@ void drawRadarPage() {
       if ((point.flags & RADAR_POINT_EMERGENCY) && !blinkOn) continue;
       int16_t x = 0;
       int16_t y = 0;
-      if (!radarPointCoordinates(point.distanceKm, point.bearing, x, y))
+      if (!radarPointCoordinates(point.distanceKm, point.bearing, x, y, matrixLayoutWidth()))
         continue;
       const uint16_t color = radarPointColor(point);
       matrix.drawPixel(x, y, color);
@@ -2286,29 +2298,29 @@ bool serviceDisplayTest() {
   else if (stage == 3) matrix.fillScreen(testWhite);
   else if (stage == 4) {
     for (int16_t y = 0; y < 32; y += 4) {
-      for (int16_t x = 0; x < MATRIX_WIDTH; x += 4) {
+      for (int16_t x = 0; x < matrixLayoutWidth(); x += 4) {
         if (((x / 4) + (y / 4)) % 2 == 0) {
           matrix.fillRect(x, y, 4, 4, testWhite);
         }
       }
     }
   } else if (stage == 5) {
-    matrix.drawRect(0, 0, MATRIX_WIDTH, 32, testWhite);
-    matrix.drawLine(0, 0, MATRIX_WIDTH - 1, 31, testRed);
-    matrix.drawLine(MATRIX_WIDTH - 1, 0, 0, 31, testGreen);
-    matrix.drawFastVLine(63, 0, 32, testBlue);
-    matrix.drawFastVLine(64, 0, 32, testBlue);
+    matrix.drawRect(0, 0, matrixLayoutWidth(), 32, testWhite);
+    matrix.drawLine(0, 0, matrixLayoutWidth() - 1, 31, testRed);
+    matrix.drawLine(matrixLayoutWidth() - 1, 0, 0, 31, testGreen);
+    matrix.drawFastVLine(matrixLayoutWidth() / 2 - 1, 0, 32, testBlue);
+    matrix.drawFastVLine(matrixLayoutWidth() / 2, 0, 32, testBlue);
   } else if (stage == 6) {
     drawLine(0, 0, "DISPLAYTEST", testWhite);
     drawLine(0, 11, "0123456789", testGreen);
-    drawLine(0, 22, "RGB 128x32", testBlue);
+    drawLine(0, 22, String("RGB ") + String(matrixLayoutWidth()) + "x32", testBlue);
   } else if (stage == 7) {
-    const int16_t bandWidth = MATRIX_WIDTH / 4;
+    const int16_t bandWidth = matrixLayoutWidth() / 4;
     matrix.fillRect(0, 0, bandWidth, 32, testRed);
     matrix.fillRect(bandWidth, 0, bandWidth, 32, testGreen);
     matrix.fillRect(bandWidth * 2, 0, bandWidth, 32, testBlue);
     matrix.fillRect(bandWidth * 3, 0,
-                    MATRIX_WIDTH - bandWidth * 3, 32, testWhite);
+                    matrixLayoutWidth() - bandWidth * 3, 32, testWhite);
   } else {
     constexpr CompactIconKind TEST_ICONS[7] = {
         CompactIconKind::Helicopter, CompactIconKind::A380,
@@ -3896,6 +3908,7 @@ PsramBuffer configurationJson() {
   settings["altitude_filter"] = altitudeFilterEnabled;
   settings["maximum_altitude_ft"] = maximumAltitudeFt;
 #if FLIGHTWALL_HAS_MATRIX
+  settings["matrix_reduced_width"] = matrixReducedWidth.load(std::memory_order_relaxed);
   settings["custom_text"] = customPageText;
   settings["custom_scroll_speed"] = customScrollSpeed;
   settings["radar_sweep_interval_seconds"] = radarSweepIntervalSeconds;
@@ -4001,6 +4014,7 @@ void handleConfigurationRestore() {
   putBool("hideSport", "hide_sport_aircraft"); putBool("altFilter", "altitude_filter");
   if (!s["maximum_altitude_ft"].isNull()) preferences.putInt("maxAltFt", constrain(s["maximum_altitude_ft"].as<int>(), 1000, 100000));
 #if FLIGHTWALL_HAS_MATRIX
+  putBool("matrixNarrow", "matrix_reduced_width");
   putString("customText", "custom_text");
   if (!s["custom_scroll_speed"].isNull()) preferences.putUChar("customSpd", constrain(s["custom_scroll_speed"].as<int>(), 0, 2));
   if (!s["radar_sweep_interval_seconds"].isNull()) preferences.putUChar("radarSweepSec", constrain(s["radar_sweep_interval_seconds"].as<int>(), 0, 10));
@@ -4244,6 +4258,9 @@ void translateWebPageToEnglish(Text &html) {
     {"Neu laden", "Refresh"}, {"Löschen", "Delete"},
     {"nicht gefunden", "not found"}, {"gefunden", "found"},
     {"wartet", "pending"}, {"abgelaufen", "expired"},
+    {"Matrixbreite", "Matrix width"},
+    {"Defekte rechte Spalten ausblenden (125 Pixel)", "Exclude faulty right columns (125 pixels)"},
+    {"Die drei rechten Spalten bleiben schwarz. Die Matrixinhalte verwenden 125 statt 128 Pixel; die Webanzeige bleibt unverändert.", "The three right columns remain black. Matrix content uses 125 instead of 128 pixels; the web display is unchanged."},
     {"Konfiguration", "Configuration"}, {"Standort / Blickrichtung", "Location / viewing direction"},
     {"Höhenfilter", "Altitude filter"}, {"Kleinflugzeugfilter", "Light aircraft filter"},
     {"Wetteranzeige", "Weather display"}, {"Übersetzungstabellen", "Translation tables"},
@@ -4699,6 +4716,9 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
         "Radar trails unavailable: external memory could not be reserved.")) + "</p>";
   html += F("</fieldset>");
 #if FLIGHTWALL_HAS_MATRIX
+  html += F("<fieldset><legend>Matrixbreite</legend><label class='check'><input type='checkbox' name='matrixReducedWidth' value='1'");
+  html += checked(matrixReducedWidth.load(std::memory_order_relaxed));
+  html += F("> Defekte rechte Spalten ausblenden (125 Pixel)</label><p class='muted'>Die drei rechten Spalten bleiben schwarz. Die Matrixinhalte verwenden 125 statt 128 Pixel; die Webanzeige bleibt unverändert.</p></fieldset>");
   html += F("<fieldset><legend>Anzeigeseiten</legend><div class='fieldGrid'><label class='check'><input type='checkbox' name='smooth' value='1'");
   html += checked(smoothTransitions);
   html += F("> Sanfte Übergänge</label><label class='fieldWide'>Freitext (maximal 128 Zeichen)<textarea name='customText' maxlength='128' rows='3'>");
@@ -5457,6 +5477,7 @@ void applyWebSettings() {
       quietHoursEndMinutes = requestedQuietTime;
     }
 #if FLIGHTWALL_HAS_MATRIX
+    matrixReducedWidth.store(webServer.hasArg("matrixReducedWidth"), std::memory_order_relaxed);
     automaticBrightnessEnabled = webServer.hasArg("autoLight");
 #endif
     displayRadiusKm = constrain(webServer.arg("radius").toFloat(), 1.0f, 100.0f);
@@ -5593,6 +5614,7 @@ void applyWebSettings() {
     preferences.putUShort("quietStart", quietHoursStartMinutes);
     preferences.putUShort("quietEnd", quietHoursEndMinutes);
 #if FLIGHTWALL_HAS_MATRIX
+    preferences.putBool("matrixNarrow", matrixReducedWidth.load(std::memory_order_relaxed));
     preferences.putBool("autoLight", automaticBrightnessEnabled);
     preferences.putUChar("brightness", manualBrightnessIndex);
     preferences.putFloat("lowLux", lowLuxThreshold);
@@ -6354,6 +6376,8 @@ void handleStatusApi() {
   json += (isnan(filteredLux) ? String("null") : String(filteredLux, 1));
   json += ",\"brightness_percent\":";
   json += String(BRIGHTNESS_LEVELS[brightnessIndex]);
+  json += ",\"matrix_layout_width\":";
+  json += String(matrixLayoutWidth());
   json += ",\"matrix_bit_depth\":";
   json += String(BIT_DEPTH);
   json += ",\"matrix_refresh_hz\":";
@@ -7901,6 +7925,7 @@ void setup() {
   }
   if (manualBrightnessIndex >= BRIGHTNESS_LEVEL_COUNT) manualBrightnessIndex = 1;
   brightnessIndex = manualBrightnessIndex;
+  matrixReducedWidth.store(preferences.getBool("matrixNarrow", false), std::memory_order_relaxed);
   automaticBrightnessEnabled = preferences.getBool("autoLight", true);
   displayEnabled = preferences.getBool("displayOn", true);
   uiEnglish = preferences.getBool("uiEnglish", false);
