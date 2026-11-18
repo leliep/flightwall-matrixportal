@@ -62,8 +62,8 @@ int16_t matrixLayoutWidth() {
 #endif
 }
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.54";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-18 matrix boot information";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.55";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-18 optional IP in matrix boot information";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -533,6 +533,7 @@ uint32_t adsbFailoverSince = 0;
 uint32_t lastPreferredAdsbProbe = 0;
 String routeUrl = DEFAULT_ROUTE_URL;
 String siteName;
+std::atomic<bool> bootShowIp{true};
 bool bootScreenVisible = false;
 #if FLIGHTWALL_HAS_MATRIX
 BootScreenState bootScreen;
@@ -1792,14 +1793,16 @@ int16_t bootTextX(const String &text, uint32_t elapsedMs) {
 void drawBootScreen() {
   const uint32_t elapsed = bootScreen.elapsed(millis());
   const String version = String("FW ") + APP_VERSION;
-  const String address = WiFi.status() == WL_CONNECTED
-      ? String("IP ") + WiFi.localIP().toString()
-      : String(uiText("WLAN VERBINDET...", "WIFI CONNECTING..."));
   matrix.fillScreen(0);
   drawLine(0, 0, "FLIGHTWALL START", cyan);
   drawLine(bootTextX(version, elapsed), 8, version, white);
   drawLine(bootTextX(bootSiteText, elapsed), 16, bootSiteText, yellow);
-  drawLine(0, 24, address, green);
+  if (bootShowIp.load(std::memory_order_relaxed)) {
+    const String address = WiFi.status() == WL_CONNECTED
+        ? String("IP ") + WiFi.localIP().toString()
+        : String(uiText("WLAN VERBINDET...", "WIFI CONNECTING..."));
+    drawLine(0, 24, address, green);
+  }
   showMatrix();
 }
 #endif
@@ -3946,6 +3949,7 @@ PsramBuffer configurationJson() {
   settings["altitude_filter"] = altitudeFilterEnabled;
   settings["maximum_altitude_ft"] = maximumAltitudeFt;
 #if FLIGHTWALL_HAS_MATRIX
+  settings["boot_show_ip"] = bootShowIp.load(std::memory_order_relaxed);
   settings["matrix_reduced_width"] = matrixReducedWidth.load(std::memory_order_relaxed);
   settings["custom_text"] = customPageText;
   settings["custom_scroll_speed"] = customScrollSpeed;
@@ -4052,6 +4056,7 @@ void handleConfigurationRestore() {
   putBool("hideSport", "hide_sport_aircraft"); putBool("altFilter", "altitude_filter");
   if (!s["maximum_altitude_ft"].isNull()) preferences.putInt("maxAltFt", constrain(s["maximum_altitude_ft"].as<int>(), 1000, 100000));
 #if FLIGHTWALL_HAS_MATRIX
+  putBool("bootIp", "boot_show_ip");
   putBool("matrixNarrow", "matrix_reduced_width");
   putString("customText", "custom_text");
   if (!s["custom_scroll_speed"].isNull()) preferences.putUChar("customSpd", constrain(s["custom_scroll_speed"].as<int>(), 0, 2));
@@ -4296,6 +4301,8 @@ void translateWebPageToEnglish(Text &html) {
     {"Neu laden", "Refresh"}, {"Löschen", "Delete"},
     {"nicht gefunden", "not found"}, {"gefunden", "found"},
     {"wartet", "pending"}, {"abgelaufen", "expired"},
+    {"Startanzeige", "Startup display"},
+    {"IP-Adresse beim Start anzeigen", "Show IP address at startup"},
     {"Matrixbreite", "Matrix width"},
     {"Defekte rechte Spalten ausblenden (125 Pixel)", "Exclude faulty right columns (125 pixels)"},
     {"Die drei rechten Spalten bleiben schwarz. Die Matrixinhalte verwenden 125 statt 128 Pixel; die Webanzeige bleibt unverändert.", "The three right columns remain black. Matrix content uses 125 instead of 128 pixels; the web display is unchanged."},
@@ -4754,6 +4761,9 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
         "Radar trails unavailable: external memory could not be reserved.")) + "</p>";
   html += F("</fieldset>");
 #if FLIGHTWALL_HAS_MATRIX
+  html += F("<fieldset><legend>Startanzeige</legend><label class='check'><input type='checkbox' name='bootShowIp' value='1'");
+  html += checked(bootShowIp.load(std::memory_order_relaxed));
+  html += F("> IP-Adresse beim Start anzeigen</label></fieldset>");
   html += F("<fieldset><legend>Matrixbreite</legend><label class='check'><input type='checkbox' name='matrixReducedWidth' value='1'");
   html += checked(matrixReducedWidth.load(std::memory_order_relaxed));
   html += F("> Defekte rechte Spalten ausblenden (125 Pixel)</label><p class='muted'>Die drei rechten Spalten bleiben schwarz. Die Matrixinhalte verwenden 125 statt 128 Pixel; die Webanzeige bleibt unverändert.</p></fieldset>");
@@ -5515,6 +5525,7 @@ void applyWebSettings() {
       quietHoursEndMinutes = requestedQuietTime;
     }
 #if FLIGHTWALL_HAS_MATRIX
+    bootShowIp.store(webServer.hasArg("bootShowIp"), std::memory_order_relaxed);
     matrixReducedWidth.store(webServer.hasArg("matrixReducedWidth"), std::memory_order_relaxed);
     automaticBrightnessEnabled = webServer.hasArg("autoLight");
 #endif
@@ -5652,6 +5663,7 @@ void applyWebSettings() {
     preferences.putUShort("quietStart", quietHoursStartMinutes);
     preferences.putUShort("quietEnd", quietHoursEndMinutes);
 #if FLIGHTWALL_HAS_MATRIX
+    preferences.putBool("bootIp", bootShowIp.load(std::memory_order_relaxed));
     preferences.putBool("matrixNarrow", matrixReducedWidth.load(std::memory_order_relaxed));
     preferences.putBool("autoLight", automaticBrightnessEnabled);
     preferences.putUChar("brightness", manualBrightnessIndex);
@@ -7963,6 +7975,9 @@ void setup() {
   }
   if (manualBrightnessIndex >= BRIGHTNESS_LEVEL_COUNT) manualBrightnessIndex = 1;
   brightnessIndex = manualBrightnessIndex;
+#if FLIGHTWALL_HAS_MATRIX
+  bootShowIp.store(preferences.getBool("bootIp", true), std::memory_order_relaxed);
+#endif
   matrixReducedWidth.store(preferences.getBool("matrixNarrow", false), std::memory_order_relaxed);
   automaticBrightnessEnabled = preferences.getBool("autoLight", true);
   displayEnabled = preferences.getBool("displayOn", true);

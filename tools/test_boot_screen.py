@@ -14,10 +14,17 @@ assert '#if FLIGHTWALL_HAS_MATRIX\n  const bool bootWasVisible' in loop
 assert 'bootWasVisible != bootScreenVisible || now - lastDraw' in loop
 assert setup.index('bootSiteText = displayAscii')<setup.index('xTaskCreatePinnedToCore(mqttTask')
 assert 'wifiSetupAccessPointActive || bootScreenVisible' in function('uint32_t displayDrawIntervalMs()')
+assert 'preferences.getBool("bootIp", true)' in setup
+assert 'putBool("bootIp", "boot_show_ip")' in source
+assert 'preferences.putBool("bootIp", bootShowIp.load' in source
+config=function('PsramBuffer configurationJson()')
+assert config.index('#if FLIGHTWALL_HAS_MATRIX') < config.index('settings["boot_show_ip"]') < config.index('#endif')
+
 code=r'''
 #include <Arduino.h>
 #include "BootScreen.hpp"
 #include <cassert>
+#include <atomic>
 #include <algorithm>
 #include <cstdint>
 #include <iostream>
@@ -43,6 +50,7 @@ void states(){
 uint32_t now=100;uint32_t millis(){return now;}
 constexpr char APP_VERSION[]="3.6.1-dual-target.54";
 BootScreenState bootScreen;
+std::atomic<bool> bootShowIp{true};
 String bootSiteText="Ein besonders langer Standortname im Wintergarten";
 int16_t width=128;int16_t matrixLayoutWidth(){return width;}
 constexpr uint16_t cyan=1,white=2,yellow=3,green=4;
@@ -69,6 +77,13 @@ void rendering(){
   now=25500;lines.clear();drawBootScreen();assert(lines[2].x==-travel);
   assert(lines[1].y==8 && lines[2].y==16 && lines[3].y==24);
  }
+ const uint32_t elapsedBefore=bootScreen.elapsed(now);
+ bootShowIp=false;lines.clear();drawBootScreen();
+ assert(lines.size()==3 && lines[0].text==String("FLIGHTWALL START"));
+ assert(lines[1].text==String("FW 3.6.1-dual-target.54") && lines[2].text==bootSiteText);
+ assert(bootScreen.elapsed(now)==elapsedBefore); // Hiding IP never alters the timer.
+ bootShowIp=true;lines.clear();drawBootScreen();assert(lines.size()==4);
+ assert(lines[3].text==String("IP 192.168.10.196"));
 }
 #endif
 int main(){states();

@@ -60,7 +60,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.54` |
+| Firmware | `3.6.1-dual-target.55` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel), optional 125 nutzbare Spalten, und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -512,6 +512,12 @@ zunächst „WLAN VERBINDET…“; nach erfolgreicher Verbindung bleibt die
 Informationsseite sechs Sekunden sichtbar. Lange Versions- und Standorttexte
 scrollen innerhalb dieses Zeitfensters vollständig durch. Ohne Bezeichnung
 steht „Standort nicht benannt“. Die Darstellung berücksichtigt 128/125 Pixel.
+Unter **Startanzeige → IP-Adresse beim Start anzeigen** lässt sich die IP-Zeile
+ausblenden. Die Option ist standardmäßig eingeschaltet. Ausgeschaltet bleibt die
+unterste Zeile leer; Version, Standort und die sechs Sekunden bleiben erhalten.
+Die Einstellung wird pro Matrixcontroller gespeichert und als `boot_show_ip`
+mitgesichert. Ältere Sicherungen ohne dieses Feld behalten den vorhandenen Wert.
+Auf der Statusseite bleibt die IP-Adresse unabhängig davon verfügbar.
 
 Die Anzeige blockiert weder Netzwerkverarbeitung noch Webbedienung. Ein
 Transpondernotfall oder das WLAN-Einrichtungsnetz beendet sie; OTA und

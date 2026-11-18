@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.6.1-dual-target.55 – 2026-11-18
+
+- Matrixoption „IP-Adresse beim Start anzeigen“, standardmäßig eingeschaltet
+- Ausgeschaltet bleibt die IP-Zeile leer; Version, Standort, Zeitablauf und
+  Unterbrechungsregeln bleiben erhalten; Headless ohne neue Einstellung
+- Einstellung in NVS, Konfigurationssicherung und Wiederherstellung enthalten
+
 ## 3.6.1-dual-target.54 – 2026-11-18
 
 - Matrix-Startanzeige mit Version, Standort und IP; sechs Sekunden ab WLAN-Verbindung,
