@@ -60,7 +60,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.53` |
+| Firmware | `3.6.1-dual-target.54` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel), optional 125 nutzbare Spalten, und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -505,6 +505,20 @@ python3 tools/test_psram_text.py
 ```
 
 ## Matrixanzeige
+
+Nach dem Boot zeigt der Matrixcontroller einmalig **Software-Version,
+Standortbezeichnung und IP-Adresse**. Während der WLAN-Anmeldung erscheint
+zunächst „WLAN VERBINDET…“; nach erfolgreicher Verbindung bleibt die
+Informationsseite sechs Sekunden sichtbar. Lange Versions- und Standorttexte
+scrollen innerhalb dieses Zeitfensters vollständig durch. Ohne Bezeichnung
+steht „Standort nicht benannt“. Die Darstellung berücksichtigt 128/125 Pixel.
+
+Die Anzeige blockiert weder Netzwerkverarbeitung noch Webbedienung. Ein
+Transpondernotfall oder das WLAN-Einrichtungsnetz beendet sie; OTA und
+Flash-Schreibschutz behalten Vorrang. Display-Aus und Nachtruhe werden
+beachtet. Nach Verbindungsverlust oder späterer Wiederverbindung wird die
+Startseite nicht erneut eingeblendet. Die Headless-Anzeige bleibt unverändert.
+
 
 Alle acht Flugzeugseiten können einzeln aktiviert, frei angeordnet und mit
 einer Dauer von 2 bis 60 Sekunden versehen werden:

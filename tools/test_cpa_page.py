@@ -41,6 +41,7 @@ uint32_t currentPageStarted=1000;
 constexpr uint16_t cyan=1,white=2,yellow=3;
 void drawLine(int16_t x,int16_t y,const String &text,uint16_t) { lines.push_back({x,y,text}); }
 void drawCurrentSpecialIcon(int16_t) {}
+bool bootScreenVisible=false;
 bool wifiSetupAccessPointActive=false,otaPreparing=false,otaInProgress=false;
 bool routeCacheWritePreparing=false,routeCacheWriteInProgress=false;
 bool settingsWritePreparing=false,settingsWriteInProgress=false,displayTestActive=false;

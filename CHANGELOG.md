@@ -1,6 +1,15 @@
 # Changelog
 
-## Noch nicht veröffentlicht
+## 3.6.1-dual-target.54 – 2026-11-18
+
+- Matrix-Startanzeige mit Version, Standort und IP; sechs Sekunden ab WLAN-Verbindung,
+  lange Texte scrollen, 125/128 Pixel, keine blockierende Wartezeit
+- Einmal pro Boot; Notfall/Einrichtungsnetz beendet die Anzeige, Nachtruhe und
+  Display-Aus bleiben wirksam; Headless ohne Startseite
+- Vorab Konfigurationen/Lookups aller drei Geräte gesichert; CAY, KRS und NSY
+  mit Koordinaten sowie ABD ergänzt; JAK weiterhin offen
+
+Weitere Änderungen seit .53:
 
 - Headless-Hardware mit Fotos des offenen und geschlossenen Gehäuses dokumentiert
 

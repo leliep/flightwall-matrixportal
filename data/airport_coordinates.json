@@ -429,6 +429,11 @@
     "longitude": 113.299004,
     "elevation_ft": 50
   },
+  "CAY": {
+    "latitude": 4.819964,
+    "longitude": -52.361326,
+    "elevation_ft": 26
+  },
   "CBR": {
     "latitude": -35.3069,
     "longitude": 149.195007,
@@ -1294,6 +1299,11 @@
     "longitude": 20.3368,
     "elevation_ft": 1508
   },
+  "KRS": {
+    "latitude": 58.204201,
+    "longitude": 8.08537,
+    "elevation_ft": 57
+  },
   "KSC": {
     "latitude": 48.663101,
     "longitude": 21.2411,
@@ -1698,6 +1708,11 @@
     "latitude": 35.76858,
     "longitude": 140.388714,
     "elevation_ft": 141
+  },
+  "NSY": {
+    "latitude": 37.401699,
+    "longitude": 14.9224,
+    "elevation_ft": 79
   },
   "NTE": {
     "latitude": 47.153198,

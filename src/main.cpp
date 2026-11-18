@@ -36,6 +36,7 @@
 #include "RouteClient.hpp"
 #include "StatusLed.hpp"
 #include "SiteName.hpp"
+#include "BootScreen.hpp"
 #include "NetworkRecovery.hpp"
 #include "NetworkIo.hpp"
 #include "UnknownCodes.hpp"
@@ -61,8 +62,8 @@ int16_t matrixLayoutWidth() {
 #endif
 }
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.53";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-16 optional 125 pixel matrix layout";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.54";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-18 matrix boot information";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -532,6 +533,11 @@ uint32_t adsbFailoverSince = 0;
 uint32_t lastPreferredAdsbProbe = 0;
 String routeUrl = DEFAULT_ROUTE_URL;
 String siteName;
+bool bootScreenVisible = false;
+#if FLIGHTWALL_HAS_MATRIX
+BootScreenState bootScreen;
+String bootSiteText; // Snapshot after loading settings, before other tasks start.
+#endif
 double siteLatitude = DEFAULT_SITE_LATITUDE;
 double siteLongitude = DEFAULT_SITE_LONGITUDE;
 float viewHeading = DEFAULT_VIEW_HEADING;
@@ -1774,6 +1780,31 @@ int16_t scrollingTextX(const String &text, uint32_t elapsedMs) {
 }
 
 
+#if FLIGHTWALL_HAS_MATRIX
+// Fit a complete long line into the fixed six-second information window.
+int16_t bootTextX(const String &text, uint32_t elapsedMs) {
+  const int16_t travel = static_cast<int16_t>(text.length() * 6) - matrixLayoutWidth();
+  if (travel <= 0 || elapsedMs <= 500) return 0;
+  const uint32_t progress = min<uint32_t>(elapsedMs - 500, 5000);
+  return -static_cast<int16_t>(static_cast<uint32_t>(travel) * progress / 5000);
+}
+
+void drawBootScreen() {
+  const uint32_t elapsed = bootScreen.elapsed(millis());
+  const String version = String("FW ") + APP_VERSION;
+  const String address = WiFi.status() == WL_CONNECTED
+      ? String("IP ") + WiFi.localIP().toString()
+      : String(uiText("WLAN VERBINDET...", "WIFI CONNECTING..."));
+  matrix.fillScreen(0);
+  drawLine(0, 0, "FLIGHTWALL START", cyan);
+  drawLine(bootTextX(version, elapsed), 8, version, white);
+  drawLine(bootTextX(bootSiteText, elapsed), 16, bootSiteText, yellow);
+  drawLine(0, 24, address, green);
+  showMatrix();
+}
+#endif
+
+
 void drawWifiSetupPage() {
   matrix.fillScreen(0);
   drawLine(0, 0, "WLAN SETUP", yellow);
@@ -2406,6 +2437,13 @@ void drawDisplay() {
     showMatrix();
     return;
   }
+#if FLIGHTWALL_HAS_MATRIX
+  if (bootScreenVisible) {
+    resetPageTransition();
+    drawBootScreen();
+    return;
+  }
+#endif
   if (!aircraftIsInsideDisplayRadius()) {
     resetPageTransition();
     drawIdleDisplay();
@@ -8049,6 +8087,8 @@ void setup() {
   findEnvironmentSensor();
 
 #if FLIGHTWALL_HAS_MATRIX
+  bootSiteText = displayAscii(siteName.length() ? siteName :
+      String(uiText("Standort nicht benannt", "Site not named")));
   drawStatus("FLIGHTWALL", uiText("VERBINDET...", "CONNECTING..."));
 #endif
   if (xTaskCreatePinnedToCore(mqttTask,"mqtt",8192,nullptr,tskIDLE_PRIORITY,&mqttTaskHandle,0)!=pdPASS) {
@@ -8086,7 +8126,7 @@ void serviceMatrixDiagnostics(uint32_t now) {
 
 
 uint32_t displayDrawIntervalMs() {
-  if (wifiSetupAccessPointActive) return 50;
+  if (wifiSetupAccessPointActive || bootScreenVisible) return 50;
   if (otaPreparing || otaInProgress || routeCacheWritePreparing ||
       routeCacheWriteInProgress || settingsWritePreparing ||
       settingsWriteInProgress || displayTestActive ||
@@ -8163,13 +8203,17 @@ void loop() {
 #endif
   serviceEnvironmentSensor();
 #if FLIGHTWALL_HAS_MATRIX
+  const bool bootWasVisible = bootScreenVisible;
+  bootScreenVisible = bootScreen.update(now, WiFi.status() == WL_CONNECTED,
+      wifiSetupAccessPointActive, flight.emergency,
+      displayEnabled && !quietHoursAreActive());
   serviceMatrixDiagnostics(now);
   if (!automaticBrightnessEnabled && brightnessIndex != manualBrightnessIndex) {
     applyBrightnessIndex(manualBrightnessIndex, false);
   }
 
   static uint32_t lastDraw = 0;
-  if (now - lastDraw >= displayDrawIntervalMs()) {
+  if (bootWasVisible != bootScreenVisible || now - lastDraw >= displayDrawIntervalMs()) {
     lastDraw = now;
     drawDisplay();
   }

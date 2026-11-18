@@ -11,6 +11,7 @@ const AirlineName names[] = {
   {"AAN", "CTR Atmospherica Aviation"},
   {"AAO", "Alpha Aviation"},
   {"AAR", "Asiana Airlines"},
+  {"ABD", "AIR ATLANTA ICELANDIC"},
   {"ABF", "Scanwings"},
   {"ABP", "ABS Jets"},
   {"ABR", "ASL Airlines Ireland"},
