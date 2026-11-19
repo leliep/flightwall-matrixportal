@@ -60,7 +60,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.55` |
+| Firmware | `3.6.1-dual-target.56` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel), optional 125 nutzbare Spalten, und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -396,13 +396,37 @@ Einstellungen.
 
 ## Routen, Klartexte und Cache
 
-Der optionale Routendienst fragt standardmäßig `https://adsb.im/api/0/routeset`
+Der optionale Routendienst fragt standardmäßig `http://adsb.im/api/0/routeset`
 mit Callsign und aktueller Position ab. Er ergänzt:
 
 - Airline beziehungsweise Betreiber
 - Start, Ziel und Zwischenstopps
 - kurze Airport-Codes
 - kompakte deutschsprachige Airport- und Airline-Bezeichnungen
+
+Ab `.56` entspricht der Abruf den [aktuellen adsb.im-Vorgaben](https://adsb.im/api):
+HTTP statt HTTPS, eine eigene FlightWall-Clientkennung mit öffentlicher
+Kontaktmöglichkeit über die Projekt-Issues und gemeinsame POST-Abfragen nach
+mindestens 30 Sekunden Sammelzeit. Zwischen zwei Batch-Anfragen liegen ebenfalls
+mindestens 30 Sekunden. Bereits gespeicherte adsb.im-HTTPS-Adressen werden nur für
+den tatsächlichen Abruf auf HTTP umgesetzt; die gespeicherte Konfiguration bleibt
+erhalten. Andere Routendienst-Adressen werden nicht umgeschrieben.
+
+Die Warteschlange fasst bis zu acht unterschiedliche ausgewählte Callsigns zusammen;
+mehrfache Beobachtungen aktualisieren deren Position, statt weitere Einträge anzulegen.
+Neue Routen erscheinen deshalb frühestens nach der Sammelzeit, normalerweise beim
+nächsten ADS-B-Durchlauf. Währenddessen gilt `pending`; dieser Zustand wird nicht
+im Routencache gespeichert. Bestehende gültige Cacheeinträge sind sofort nutzbar.
+Bei voller Warteschlange wartet ein weiteres Callsign auf einen freien Platz.
+Antworten werden anhand ihres Callsigns einschließlich normalisierter führender
+Nullen zugeordnet und vor Übernahme erneut auf Plausibilität geprüft.
+Nicht abgeholte Batch-Ergebnisse verfallen nach einer Minute. ADS-B-Verarbeitung,
+Radar, MQTT und Webbedienung laufen während der Sammelzeit weiter. Erst nach einer
+fertigen Primärantwort wird gegebenenfalls ADSBDB abgefragt.
+
+Auch der manuelle Routentest hält diese Sammelzeit und den Mindestabstand ein;
+die wartende Ergebnisseite weist darauf hin. Er verwendet weiter den
+Controllerstandort als Prüfposition und übernimmt keine Route in den Cache.
 
 Findet der Primärdienst keine Route, kann die Firmware automatisch den
 kostenlosen, schlüsselfreien Dienst ADSBDB abfragen. Das Ergebnis wird nur
@@ -1386,8 +1410,11 @@ HTTP-Status, zurückgegebenes Callsign, gelieferte Routencodes, Ergebnis und
 Fehler sowie die dekodierte JSON-Antwort. Diese wird vor dem Verwerfen einer
 Route ausschließlich für die Testseite erfasst und danach freigegeben.
 Je Anbieter werden höchstens 8192 Bytes JSON im PSRAM erhalten; Kürzung oder
-Speichermangel werden sichtbar gemeldet. HTTP-Fehler ohne dekodierte JSON-Antwort
-zeigen stattdessen den Status und einen entsprechenden Hinweis. Abgelehnte
+Speichermangel werden sichtbar gemeldet. Bei HTTP-Fehlern wird zusätzlich die
+originale Fehlerantwort des Dienstes angezeigt, auch bei Text- oder HTML-Antworten.
+Sie wird ebenfalls auf 8192 Bytes im PSRAM begrenzt und als sicher maskierter Text
+angezeigt; enthaltenes HTML wird nicht ausgeführt. Das gilt für Hauptdienst und
+ADSBDB. Ohne Antwortkörper bleibt der entsprechende Hinweis sichtbar. Abgelehnte
 Antworten werden weiterhin weder als gültige Route angezeigt noch gespeichert.
 Der Test nennt ausdrücklich den **Controllerstandort als Prüfposition**;
 automatische Routenabfragen verwenden dagegen die aktuelle Flugposition.
@@ -1447,7 +1474,8 @@ beim Hauptdienst und beim ADSBDB-Fallback getrennt. Unter **Status →
 Routen-Verbindungsdiagnose** stehen Quelle, Callsign, Anzahl und Alter der
 Anfragen, Dauer, HTTP-Code sowie der negative Fehlercode des Secure-Clients.
 Bei einem konkreten mbedTLS-Fehler erscheinen zusätzlich Hexadezimalcode und
-Fehlertext. Der allgemeine Secure-Client-Code `-1` und ein fehlender TLS-Code
+Fehlertext. adsb.im verwendet ab `.56` HTTP und benötigt dafür keinen TLS-Handshake;
+ADSBDB und andere konfigurierte HTTPS-Dienste verwenden weiterhin TLS. Der allgemeine Secure-Client-Code `-1` und ein fehlender TLS-Code
 werden ausdrücklich als **ohne TLS-Details** gekennzeichnet; daraus lässt sich
 kein bestimmter DNS-, Socket- oder TLS-Fehler ableiten. Ein HTTP-Fehler nach
 erfolgreichem TLS-Aufbau wird nicht als TLS-Fehler ausgegeben.
@@ -1600,6 +1628,9 @@ git pull --ff-only origin main
 - HTTPS-Verbindungen sind verschlüsselt, die Firmware validiert die
   Serverzertifikate derzeit jedoch nicht, weil beim frühen Systemstart noch
   keine verlässliche Uhrzeit garantiert ist.
+- adsb.im-Routenabfragen verwenden gemäß Dienstvorgabe unverschlüsseltes HTTP.
+  Dabei sind Callsigns und Flugpositionen auf dem Übertragungsweg lesbar. Die
+  Plausibilitätsprüfung bleibt aktiv. ADSBDB verwendet weiterhin HTTPS.
 - Bei aktivierten externen Diensten werden Callsign und Flugzeugposition an
   den konfigurierten Routendienst beziehungsweise Standort und Radius an
   adsb.fi übertragen. MQTT-Zugangsdaten bleiben im Gerät, werden aber bei

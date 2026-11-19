@@ -10,4 +10,5 @@ struct RouteTestResponse {
   bool attempted = false;
   bool truncated = false;
   bool captureFailed = false;
+  bool rawBody = false;
 };

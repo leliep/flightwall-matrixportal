@@ -15,7 +15,7 @@ results=[]
 for env in ('adafruit_matrixportal_esp32s3','esp32s3_n16r8_headless'):
  disassembly=subprocess.check_output([objdump,'-d',str(root/'.pio/build'/env/'firmware.elf')],text=True)
  frames={}
- for symbol,label in [('_Z15handleStatusApiv','status_api'),('_Z15handleRouteTestv','route_test_submit'),('_Z15runRouteTestJobv','route_test_worker'),('_Z16handleDisplayApiv','display_api'),('_Z8mqttTaskPv','mqtt_task'),('_Z14handleMqttTestv','mqtt_test_submit'),('_ZN11MqttSession7connectEPKc','mqtt_connect')]:
+ for symbol,label in [('_ZN11RouteClient14requestPrimaryERK6StringRK12RouteContextb','primary_http_request'),('_ZN11RouteClient14processPendingEv','primary_batch_worker'),('_ZN11RouteClient12fetchPrimaryERK6StringRK12RouteContext','primary_queue'),('_Z16fetchLocalFlightv','adsb_route_cycle'),('_Z15handleStatusApiv','status_api'),('_Z15handleRouteTestv','route_test_submit'),('_Z15runRouteTestJobv','route_test_worker'),('_Z16handleDisplayApiv','display_api'),('_Z8mqttTaskPv','mqtt_task'),('_Z14handleMqttTestv','mqtt_test_submit'),('_ZN11MqttSession7connectEPKc','mqtt_connect')]:
   match=re.search('<'+symbol+r'>:\s*\n[^\n]*entry\s+a1,\s*(\S+)',disassembly)
   assert match, f'Missing frame for {symbol} in {env}'
   size=int(match.group(1),0);frames[label]=size

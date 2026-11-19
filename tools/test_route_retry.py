@@ -33,6 +33,7 @@ class RouteClient {
  bool enabled_=true;
  String lastError_;
  RouteResult memory,disk,next;
+ bool primaryResultReady(const String&)const{return false;}
  int fetches=0,remembers=0;
  double latitudeUsed=0;
  RouteResult readMemoryCache(const String&,const RouteContext&,uint32_t){return memory;}

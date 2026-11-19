@@ -49,7 +49,8 @@ struct RouteRequestDiagnostics {
 // are boundary snapshots, not the largest block during the TLS handshake.
 template <typename Client, typename Operation, typename Memory, typename Clock>
 int captureRouteHttp(RouteRequestDiagnostics &diagnostic, Client &client,
-                     Operation operation, Memory memory, Clock clock) {
+                     Operation operation, Memory memory, Clock clock,
+                     bool usesTls = true) {
   diagnostic.before = memory();
   diagnostic.httpAttempted = true;
   const int status = operation();
@@ -57,8 +58,8 @@ int captureRouteHttp(RouteRequestDiagnostics &diagnostic, Client &client,
   diagnostic.durationMs = clock() - diagnostic.startedMs;
   diagnostic.httpCode = status;
   if (status < 0) {
-    const int tlsCode = client.lastError(diagnostic.tlsMessage,
-                                         sizeof(diagnostic.tlsMessage));
+    const int tlsCode = usesTls ? client.lastError(diagnostic.tlsMessage,
+                                         sizeof(diagnostic.tlsMessage)) : 0;
     diagnostic.tlsCode = tlsCode < 0 ? tlsCode : 0;
     // -1 is the secure client's generic transport error, not an mbedTLS code.
     if (diagnostic.tlsCode >= -1)

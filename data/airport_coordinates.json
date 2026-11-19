@@ -404,6 +404,11 @@
     "longitude": -76.668297,
     "elevation_ft": 146
   },
+  "BXO": {
+    "latitude": 46.974444,
+    "longitude": 8.396944,
+    "elevation_ft": 1475
+  },
   "BZG": {
     "latitude": 53.096802,
     "longitude": 17.977699,
@@ -413,6 +418,11 @@
     "latitude": 46.459245,
     "longitude": 11.326125,
     "elevation_ft": 789
+  },
+  "BZZ": {
+    "latitude": 51.75,
+    "longitude": -1.58362,
+    "elevation_ft": 288
   },
   "CAG": {
     "latitude": 39.251499,
@@ -834,6 +844,11 @@
     "longitude": 5.707778,
     "elevation_ft": 72
   },
+  "EIME": {
+    "latitude": 53.301700592,
+    "longitude": -6.451330184940001,
+    "elevation_ft": 319
+  },
   "EIN": {
     "latitude": 51.4501,
     "longitude": 5.37453,
@@ -1238,6 +1253,11 @@
     "latitude": 63.985001,
     "longitude": -22.6056,
     "elevation_ft": 171
+  },
+  "KEL": {
+    "latitude": 54.37957,
+    "longitude": 10.145266,
+    "elevation_ft": 102
   },
   "KFEW": {
     "latitude": 41.133302,
@@ -1663,6 +1683,11 @@
     "latitude": 36.937599,
     "longitude": -76.289299,
     "elevation_ft": 17
+  },
+  "NHD": {
+    "latitude": 25.0268001556,
+    "longitude": 55.3661994934,
+    "elevation_ft": 165
   },
   "NHT": {
     "latitude": 51.553001,

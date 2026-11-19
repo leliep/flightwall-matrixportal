@@ -34,6 +34,8 @@ jobs:
         run: |
           python3 tools/test_temporary_psram.py
           python3 tools/test_route_test_responses.py
+          python3 tools/test_route_retry.py
+          python3 tools/test_route_validation.py
           python3 tools/test_adsb_background_io.py
           python3 tools/test_background_jobs.py
           python3 tools/test_route_publication.py

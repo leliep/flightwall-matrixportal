@@ -62,8 +62,8 @@ int16_t matrixLayoutWidth() {
 #endif
 }
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.55";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-18 optional IP in matrix boot information";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.56";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-19 adsb.im compliant batching and error responses";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -138,7 +138,7 @@ constexpr float ZENITH_HYSTERESIS_DEG = 2.0f;
 constexpr char DEFAULT_ADSB_URL[] =
     "http://t-eddl146.fritz.box:8080/data/aircraft.json";
 constexpr char ADSB_FI_BASE_URL[] = "https://opendata.adsb.fi/api/v3";
-constexpr char DEFAULT_ROUTE_URL[] = "https://adsb.im/api/0/routeset";
+constexpr char DEFAULT_ROUTE_URL[] = "http://adsb.im/api/0/routeset";
 constexpr double DEFAULT_SITE_LATITUDE = 51.122500;
 constexpr double DEFAULT_SITE_LONGITUDE = 6.839444;
 constexpr float DEFAULT_VIEW_HEADING = 322.0f;
@@ -318,6 +318,8 @@ bool applicationOperationCancelled() { return operationRevision != applicationRe
 enum class ManualJobKind : uint8_t { None, Adsb, Route, Mqtt };
 struct ManualNetworkJob {
   uint32_t id = 0;
+  uint32_t revision = 0;
+  uint32_t lastStepMs = 0;
   ManualJobKind kind = ManualJobKind::None;
   bool queued = false, running = false, done = false;
   String callsign, url;
@@ -3441,6 +3443,23 @@ void appendEmergencyTestAircraft(AdsbResult &result) {
 }
 
 
+RouteContext routeContextForAircraft(const Aircraft &selected) {
+  RouteContext routeContext;
+  routeContext.hasPosition = true;
+  routeContext.latitude = selected.hasPosition
+                              ? selected.latitude : siteLatitude;
+  routeContext.longitude = selected.hasPosition
+                               ? selected.longitude : siteLongitude;
+  routeContext.hasAltitude = selected.hasAltitude;
+  routeContext.altitudeFt = selected.altitudeFt;
+  routeContext.hasTrack = selected.hasTrack;
+  routeContext.trackDegrees = selected.track;
+  routeContext.hasVerticalRate = selected.hasVerticalRate;
+  routeContext.verticalRateFpm = selected.verticalRateFpm;
+  return routeContext;
+}
+
+
 bool fetchLocalFlight() {
   operationRevision = applicationRevision;
   lastAdsbAttempt = millis();
@@ -3461,7 +3480,10 @@ bool fetchLocalFlight() {
                                  : displayRadiusKm * 2.0F;
   config.hideSportAircraft = hideSportAircraft;
   config.maximumAltitudeFt = altitudeFilterEnabled ? maximumAltitudeFt : 0;
-  routeClient.configure(routesEnabled, routeUrl, adsbDbFallbackEnabled);
+  const bool manualRouteActive = manualNetworkJob.running &&
+      manualNetworkJob.kind == ManualJobKind::Route;
+  if (!manualRouteActive)
+    routeClient.configure(routesEnabled, routeUrl, adsbDbFallbackEnabled);
 
   AdsbResult result;
   uint8_t attemptedSource = currentAdsbSource;
@@ -3532,6 +3554,13 @@ bool fetchLocalFlight() {
     Serial.printf("ADS-B error: %s\r\n", result.error.c_str());
     return false;
   }
+  for (const Aircraft &aircraft : result.candidates)
+    routeClient.refreshPending(aircraft.flight, routeContextForAircraft(aircraft));
+  {
+    NetworkPhaseScope phase(NetworkPhase::Route);
+    routeClient.processPending();
+    if (networkOperationCancelled()) return false;
+  }
   FlightData next;
   Aircraft selected;
   size_t emergencyCount = 0;
@@ -3557,23 +3586,20 @@ bool fetchLocalFlight() {
     const bool retryRoute =
         (currentRoute.status == "unavailable" || currentRoute.status == "rejected") &&
         uint32_t(millis() - lastRouteAttempt) >= 60000U;
-    if (selected.flight != routedFlight || retryRoute || newRouteSession) {
+    if (manualRouteActive && (selected.flight != routedFlight || newRouteSession)) {
+      // Flight selection keeps running during the collection window. Never
+      // attach the previous aircraft's route to a newly selected callsign.
+      routedFlight = selected.flight;
+      currentRoute = {};
+      currentRoute.status = "pending";
+    }
+    if (!manualRouteActive && (selected.flight != routedFlight || retryRoute || newRouteSession ||
+        currentRoute.status == "pending" || routeClient.primaryResultReady(selected.flight))) {
       const uint32_t attemptStarted = millis();
       RouteResult pendingRoute;
       if (!selected.flight.startsWith("TEST")) {
         NetworkPhaseScope phase(NetworkPhase::Route);
-        RouteContext routeContext;
-        routeContext.hasPosition = true;
-        routeContext.latitude = selected.hasPosition
-                                    ? selected.latitude : siteLatitude;
-        routeContext.longitude = selected.hasPosition
-                                     ? selected.longitude : siteLongitude;
-        routeContext.hasAltitude = selected.hasAltitude;
-        routeContext.altitudeFt = selected.altitudeFt;
-        routeContext.hasTrack = selected.hasTrack;
-        routeContext.trackDegrees = selected.track;
-        routeContext.hasVerticalRate = selected.hasVerticalRate;
-        routeContext.verticalRateFpm = selected.verticalRateFpm;
+        const RouteContext routeContext = routeContextForAircraft(selected);
         pendingRoute = routeClient.lookup(selected.flight, routeContext,
                                           result.feedTimestamp);
         if (networkOperationCancelled()) return false;
@@ -5827,6 +5853,8 @@ void handleManualNetworkJobResult() {
     webServer.send(202, "text/html; charset=utf-8",
         String("<!doctype html><html><meta name='viewport' content='width=device-width'><body style='font:18px system-ui;margin:30px'><p>") +
         uiText("Verbindungstest läuft. Andere Seiten bleiben bedienbar.", "Connection test running. Other pages remain available.") +
+        (manualNetworkJob.kind == ManualJobKind::Route
+            ? uiText(" adsb.im-Anfragen werden mindestens 30 Sekunden gesammelt.", " adsb.im requests are collected for at least 30 seconds.") : "") +
         "</p><p><a href='/status'>Status</a> · <a href='/config'>" + uiText("Konfiguration", "Configuration") +
         "</a></p><script>setTimeout(()=>location.reload(),1000)</script></body></html>");
   }
@@ -5974,8 +6002,11 @@ void appendRouteTestResponseHtml(PsramBuffer &html,
     html += uiText("<p>Antwort konnte nicht im PSRAM erfasst werden.</p>",
                    "<p>Could not capture the response in PSRAM.</p>");
   } else if (response.json.length()) {
-    html += uiText("<details open><summary>Dekodierte JSON-Antwort</summary><pre>",
-                   "<details open><summary>Decoded JSON response</summary><pre>");
+    html += response.rawBody
+        ? uiText("<details open><summary>Fehlerantwort des Dienstes</summary><pre>",
+                 "<details open><summary>Service error response</summary><pre>")
+        : uiText("<details open><summary>Dekodierte JSON-Antwort</summary><pre>",
+                 "<details open><summary>Decoded JSON response</summary><pre>");
     appendRouteTestHtmlText(html, response.json.c_str());
     html += "</pre></details>";
     if (response.truncated)
@@ -6038,19 +6069,25 @@ void handleRouteTest() {
   redirectToManualNetworkJob();
 }
 
-void runRouteTestJob() {
+bool runRouteTestJob() {
   const String callsign = manualNetworkJob.callsign;
   const String testUrl = manualNetworkJob.url;
   routeClient.configure(true, testUrl, manualNetworkJob.fallback);
   RouteResult result;
-  {
+  if (manualNetworkJob.revision != applicationRevision) {
+    routeClient.cancelTest();
+    result.error = uiText("Abfrage durch eine neuere Bedienaktion abgebrochen.", "Query superseded by a newer action.");
+  } else {
     NetworkPhaseScope phase(NetworkPhase::Route);
     RouteContext routeContext;
     routeContext.hasPosition = true;
     routeContext.latitude = manualNetworkJob.latitude;
     routeContext.longitude = manualNetworkJob.longitude;
-    result = routeClient.test(callsign, routeContext);
+    routeClient.processPending();
+    if (!networkOperationCancelled()) result = routeClient.test(callsign, routeContext);
+    else routeClient.cancelTest();
   }
+  if (!networkOperationCancelled() && result.status == "pending") return false;
   routeClient.configure(routesEnabled, routeUrl, adsbDbFallbackEnabled);
   if (networkOperationCancelled()) result.error = uiText("Abfrage durch eine neuere Bedienaktion abgebrochen.", "Query superseded by a newer action.");
   lastRouteError = result.error;
@@ -6104,15 +6141,16 @@ void runRouteTestJob() {
   manualNetworkJob.page = std::move(page);
   manualNetworkJob.status = reachable ? 200 : 502;
   routeClient.clearTestResponses();
+  return true;
 }
 
 void runManualNetworkJob() {
   if(manualNetworkJob.kind==ManualJobKind::Mqtt)return;
-  manualNetworkJob.queued = false;
+  if (!manualNetworkJob.running) manualNetworkJob.revision = applicationRevision;
   manualNetworkJob.running = true;
   operationRevision = applicationRevision;
   if (manualNetworkJob.kind == ManualJobKind::Route) {
-    runRouteTestJob();
+    if (!runRouteTestJob()) return;
   } else {
     const bool success = fetchLocalFlight();
     manualNetworkJob.page = "<!doctype html><html><meta name='viewport' content='width=device-width'><body><h1>ADS-B-Test</h1><p>";
@@ -6124,6 +6162,7 @@ void runManualNetworkJob() {
     manualNetworkJob.page += "</a></body></html>";
     manualNetworkJob.status = success ? 200 : 502;
   }
+  manualNetworkJob.queued = false;
   manualNetworkJob.running = false;
   manualNetworkJob.done = true;
 }
@@ -7865,8 +7904,13 @@ void networkTask(void *) {
         connectWiFi(10000);
       }
       if (wifiConnected && !otaPreparing && !otaInProgress && !otaRebootAt && !manualRebootAt) {
-        if (manualNetworkJob.queued && manualNetworkJob.kind!=ManualJobKind::Mqtt) runManualNetworkJob();
-        else if (pollRequested || now - lastPoll >= POLL_INTERVAL_MS) {
+        if (manualNetworkJob.queued && manualNetworkJob.kind != ManualJobKind::Mqtt &&
+            (!manualNetworkJob.running || uint32_t(now - manualNetworkJob.lastStepMs) >= 250U)) {
+          manualNetworkJob.lastStepMs = now;
+          runManualNetworkJob();
+        }
+        if ((!manualNetworkJob.running || manualNetworkJob.kind == ManualJobKind::Route) &&
+            (pollRequested || now - lastPoll >= POLL_INTERVAL_MS)) {
           pollRequested = false;
           lastPoll = now;
           fetchLocalFlight();

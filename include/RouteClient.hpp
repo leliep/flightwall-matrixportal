@@ -106,6 +106,11 @@ class RouteClient {
   RouteResult lookup(const String& callsign, const RouteContext& context,
                      uint32_t now);
   RouteResult test(const String& callsign, const RouteContext& context);
+  // Called by the data task; collecting a batch never waits or blocks ADS-B.
+  void processPending();
+  void refreshPending(const String& callsign, const RouteContext& context);
+  bool primaryResultReady(const String& callsign) const;
+  void cancelTest();
   const String& lastError() const { return lastError_; }
   const RouteDiagnostics &diagnostics() const { return diagnostics_; }
   const RouteTestResponse &testResponse(bool fallback) const {
@@ -139,6 +144,26 @@ class RouteClient {
                   uint32_t now);
   RouteResult fetchPrimary(const String& callsign,
                            const RouteContext& context);
+  RouteResult requestPrimary(const String& callsign,
+                             const RouteContext& context, bool batch);
+  void clearPrimaryQueue();
+  struct PrimaryEntry {
+    PsramText callsign;
+    RouteContext context;
+    StoredRouteResult result;
+    uint32_t completedMs = 0;
+    bool ready = false;
+    bool manual = false;
+    bool storageFailed = false;
+  };
+  static constexpr size_t primarySlots_ = 8;
+  PrimaryEntry primaryQueue_[primarySlots_];
+  uint32_t primaryWindowStarted_ = 0;
+  uint32_t primaryLastPost_ = 0;
+  bool primaryWindowActive_ = false;
+  bool primaryPosted_ = false;
+  bool manualPrimaryWaiting_ = false;
+  bool managedPrimary_ = false;
   RouteResult fetchAdsbDb(const String& callsign,
                           const RouteContext& context);
   RouteResult fetch(const String& callsign, const RouteContext& context);

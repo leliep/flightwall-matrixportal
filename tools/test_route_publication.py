@@ -3,7 +3,7 @@
 from pathlib import Path
 import subprocess,tempfile
 root=Path(__file__).resolve().parents[1];s=(root/'src/main.cpp').read_text()
-a=s.index('    if (selected.flight != routedFlight || retryRoute || newRouteSession) {')
+a=s.index('    if (manualRouteActive && (selected.flight != routedFlight')
 branch=s[a:s.index('\n\n    next.available =',a)]
 code=r'''
 #include <Arduino.h>
@@ -18,12 +18,15 @@ struct Selected {String flight="DLH072";bool hasPosition=true,hasAltitude=false,
 RouteResult currentRoute;String routedFlight,lastRouteError;
 uint32_t lastRouteAttempt=77;
 uint32_t millis(){return 100;}
-bool cancelled=false,mutate=false,retryRoute=false,newRouteSession=false;
+bool cancelled=false,mutate=false,retryRoute=false,newRouteSession=false,manualRouteActive=false;
 bool networkOperationCancelled(){return cancelled;}
 double siteLatitude=50,siteLongitude=7;
 struct {uint32_t feedTimestamp=123;} result;
 enum class NetworkPhase {Route};struct NetworkPhaseScope {NetworkPhaseScope(NetworkPhase){}};
+using Aircraft=Selected;
+'''+s[s.index('RouteContext routeContextForAircraft('):s.index('\n}\n',s.index('RouteContext routeContextForAircraft('))+3]+r'''
 struct Client {
+ bool primaryResultReady(const String&)const{return false;}
  int calls=0;String error;
  RouteResult lookup(const String&,const RouteContext& context,uint32_t){
   ++calls;assert(context.latitude==51 && context.longitude==6);
@@ -44,6 +47,10 @@ int main(){
  mutate=false;cancelled=false;assert(process());
  assert(routedFlight==String("DLH072") && currentRoute.status==String("current"));
  assert(lastRouteAttempt==100);
+ manualRouteActive=true;selected.flight="BAW9";currentRoute.status="current";
+ auto pausedCalls=routeClient.calls;assert(process());
+ assert(currentRoute.status==String("pending") && routedFlight==String("BAW9") && routeClient.calls==pausedCalls);
+ manualRouteActive=false;
  selected.flight="TEST1";const int calls=routeClient.calls;assert(process());
  assert(routeClient.calls==calls && currentRoute.status==String("unavailable"));
  std::cout<<"Actual flight-loop publication: newer config/cache state survives cancelled IO; valid and test routes commit correctly\n";

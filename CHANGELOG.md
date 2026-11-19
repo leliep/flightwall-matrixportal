@@ -1,5 +1,23 @@
 # Changelog
 
+## 3.6.1-dual-target.56 – 2026-11-19
+
+- adsb.im über HTTP und mit eigener FlightWall-Clientkennung inklusive Projektkontakt;
+  vorhandene HTTPS-Konfigurationen bleiben gespeichert und werden nur beim Abruf angepasst
+- Nicht blockierende Sammlung von bis zu acht Callsigns über mindestens 30 Sekunden,
+  mindestens 30 Sekunden POST-Abstand; aktuelle Positionen, eindeutige Antwortzuordnung,
+  keine Cacheeinträge für ausstehende Anfragen und Ablauf nicht abgeholter Ergebnisse
+- Manueller Routentest verwendet dieselbe Begrenzung; ADS-B, Radar und Web laufen
+  während des Wartens weiter; neu ausgewählte Flugzeuge behalten keine fremde Route
+- Originale HTTP-Fehlerantworten von Hauptdienst und ADSBDB auf der Testseite,
+  begrenzt auf 8192 Bytes im PSRAM, HTML-maskiert mit Kürzungs-/Speicherfehlerhinweis
+- Vorab Codes aller drei Geräte geprüft und Konfigurationen/Lookups gesichert;
+  KEL/BXO/EIME/BZZ/NHD mit Koordinaten ([OurAirports](https://ourairports.com/data/)) und
+  CMS/HKH/JNL/GNJ/IRL ([FAA](https://www.faa.gov/air_traffic/publications/atpubs/cnt_html/chap3_section_3.html))
+  im Grundbestand ergänzt; JAK bleibt offen
+- Direkte HTTP-Vergleichsabfrage mit der neuen Kennung von adsb.im mit 200 akzeptiert;
+  keine Installation auf Controllern in diesem Arbeitsschritt
+
 ## 3.6.1-dual-target.55 – 2026-11-18
 
 - Matrixoption „IP-Adresse beim Start anzeigen“, standardmäßig eingeschaltet

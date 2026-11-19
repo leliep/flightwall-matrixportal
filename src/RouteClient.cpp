@@ -7,6 +7,7 @@
 #include <HTTPClient.h>
 #include <Preferences.h>
 #include <WiFiClientSecure.h>
+#include <WiFiClient.h>
 #include <esp_heap_caps.h>
 
 #include <algorithm>
@@ -57,6 +58,50 @@ void captureRouteTestJson(RouteTestResponse &response, const JsonDocument &docum
   if (!response.captureFailed)
     response.captureFailed = !response.json.assign(json.c_str(), json.length());
 }
+
+// HTTPClient de-chunks the body into this bounded sink. Stop reading after the
+// limit instead of allocating or draining an unbounded error response.
+void captureRouteTestHttpError(RouteTestResponse &response, HTTPClient &http) {
+  PsramBuffer body;
+  class Sink : public Stream {
+   public:
+    Sink(PsramBuffer &body, bool &truncated) : body_(body), truncated_(truncated) {}
+    int available() override { return 0; }
+    int read() override { return -1; }
+    int peek() override { return -1; }
+    void flush() override {}
+    size_t write(uint8_t value) override { return write(&value, 1); }
+    size_t write(const uint8_t *data, size_t length) override {
+      const size_t remaining = RouteTestResponse::jsonLimit - body_.length();
+      const size_t keep = std::min(length, remaining);
+      if (length > keep) truncated_ = true;
+      if (keep && !body_.write(data, keep)) return 0;
+      return keep;
+    }
+   private:
+    PsramBuffer &body_;
+    bool &truncated_;
+  } sink(body, response.truncated);
+  int written;
+  { NetworkIoScope io; written = http.writeToStream(&sink); }
+  if (networkOperationCancelled()) return;
+  response.rawBody = true;
+  response.captureFailed = body.failed() || (written < 0 && !response.truncated);
+  if (!response.captureFailed)
+    response.captureFailed = !response.json.assign(body.c_str(), body.length());
+}
+
+bool isManagedPrimaryUrl(const String &url) {
+  return url == "https://adsb.im/api/0/routeset" ||
+         url == "http://adsb.im/api/0/routeset" ||
+         url == "https://adsb.im/api/0/routeset/" ||
+         url == "http://adsb.im/api/0/routeset/";
+}
+
+constexpr char routeUserAgent[] =
+    "FlightWall-MatrixPortal/3.6.1-dual-target.56 "
+    "(+https://github.com/leliep/flightwall-matrixportal/issues)";
+constexpr uint32_t primaryBatchWindowMs = 30000;
 
 String cacheKey(size_t slot) {
   char key[5];
@@ -424,12 +469,52 @@ void extractCodes(JsonObjectConst row, RouteResult& route) {
     route.routeCodes += route.destination;
   }
 }
+RouteResult decodePrimaryRoute(const JsonDocument &document,
+                               const String &callsign,
+                               const RouteContext &context,
+                               RouteTestResponse *test, bool requireCallsign = false) {
+  RouteResult result;
+  result.source = "adsb.im";
+  JsonArrayConst rows;
+  if (document.is<JsonArrayConst>()) rows = document.as<JsonArrayConst>();
+  else if (document["routes"].is<JsonArrayConst>())
+    rows = document["routes"].as<JsonArrayConst>();
+  else if (document["planes"].is<JsonArrayConst>())
+    rows = document["planes"].as<JsonArrayConst>();
+  for (JsonObjectConst row : rows) {
+    const String returned = upperTrimmed(row["callsign"] | "");
+    if (returned.isEmpty() ? (requireCallsign || rows.size() != 1) :
+        !routeCallsignMatches(callsign.c_str(), returned.c_str())) continue;
+    extractCodes(row, result);
+    if (test) {
+      test->returnedCallsign = returned;
+      test->routeCodes = result.routeCodes;
+    }
+    result.airlineCode = upperTrimmed(row["airline_code"] | "");
+    if (result.airlineCode == "UNKNOWN") result.airlineCode = "";
+    break;
+  }
+  fillNames(result);
+  result.status = result.found() ? "current" : "not_found";
+  String reason;
+  if (result.found() && !routePlausible(result, context, reason))
+    rejectRoute(result, reason);
+  else
+    assessRouteConfidence(result, context.hasPosition, false);
+  return result;
+}
+
+
 }  // namespace
 
 void RouteClient::configure(bool enabled, const String& url,
                             bool adsbDbFallbackEnabled) {
+  const bool managed = isManagedPrimaryUrl(url);
+  const String effective = managed ? String("http://adsb.im/api/0/routeset") : url;
+  if (!(url_ == effective) || enabled_ != enabled) clearPrimaryQueue();
   enabled_ = enabled;
-  url_ = url;
+  url_ = effective;
+  managedPrimary_ = managed;
   adsbDbFallbackEnabled_ = adsbDbFallbackEnabled;
 }
 
@@ -577,6 +662,9 @@ bool RouteClient::removeCacheEntry(const String& rawCallsign) {
     entry = {};
     removed = true;
   }
+  for (PrimaryEntry &entry : primaryQueue_) {
+    if (entry.callsign == callsign && !entry.manual) entry = {};
+  }
 
   Preferences preferences;
   if (!preferences.begin("routecache", false)) return removed;
@@ -598,6 +686,7 @@ bool RouteClient::removeCacheEntry(const String& rawCallsign) {
 }
 
 void RouteClient::clearCache() {
+  clearPrimaryQueue();
   for (MemoryCacheEntry& entry : memoryCache_) entry = {};
   nextMemorySlot_ = 0;
   Preferences preferences;
@@ -675,8 +764,126 @@ void RouteClient::writeCache(const String& callsign, const RouteResult& route,
   preferences.end();
 }
 
-RouteResult RouteClient::fetchPrimary(const String& callsign,
-                                      const RouteContext& context) {
+void RouteClient::clearPrimaryQueue() {
+  for (PrimaryEntry &entry : primaryQueue_) entry = {};
+  primaryWindowActive_ = false;
+  manualPrimaryWaiting_ = false;
+  // Retain the last POST time across configuration/cache/test actions.
+}
+
+void RouteClient::cancelTest() {
+  for (PrimaryEntry &entry : primaryQueue_)
+    if (entry.manual) entry = {};
+  manualPrimaryWaiting_ = false;
+  clearTestResponses();
+}
+
+void RouteClient::refreshPending(const String &callsign,
+                                  const RouteContext &context) {
+  for (PrimaryEntry &entry : primaryQueue_)
+    if (entry.callsign == callsign && !entry.ready && !entry.manual)
+      entry.context = context;
+}
+
+bool RouteClient::primaryResultReady(const String &callsign) const {
+  for (const PrimaryEntry &entry : primaryQueue_)
+    if (entry.callsign == callsign && entry.ready && !entry.manual &&
+        uint32_t(millis() - entry.completedMs) < 60000U) return true;
+  return false;
+}
+
+void RouteClient::processPending() {
+  if (!enabled_ || !managedPrimary_ || !primaryWindowActive_) return;
+  const uint32_t now = millis();
+  if (uint32_t(now - primaryWindowStarted_) < primaryBatchWindowMs ||
+      (primaryPosted_ && uint32_t(now - primaryLastPost_) < primaryBatchWindowMs)) return;
+  PrimaryEntry *first = nullptr;
+  for (PrimaryEntry &entry : primaryQueue_) {
+    if (entry.callsign.isEmpty() || entry.ready) continue;
+    if (!first || entry.manual) first = &entry;
+  }
+  if (!first) { primaryWindowActive_ = false; return; }
+  // Copy before I/O: web/cache actions may clear queue entries while unlocked.
+  const String callsign = first->callsign;
+  const RouteContext context = first->context;
+  const bool manual = first->manual;
+  const bool previousCapture = captureTestResponses_;
+  captureTestResponses_ = manual;
+  primaryLastPost_ = now;
+  primaryPosted_ = true;
+  RouteResult result = requestPrimary(callsign, context, true);
+  captureTestResponses_ = previousCapture;
+  if (networkOperationCancelled()) { clearPrimaryQueue(); return; }
+  if (manual) {
+    testResponses_[0].status = result.status;
+    testResponses_[0].error = result.error;
+  }
+  // requestPrimary fills every row on success; transport/JSON failures apply
+  // to the whole batch. Completed rows remain bounded until consumed/evicted.
+  for (PrimaryEntry &entry : primaryQueue_) {
+    if (entry.callsign.isEmpty() || entry.ready) continue;
+    const PsramTextTransaction transaction;
+    entry.result = result;
+    entry.storageFailed = !transaction.succeeded();
+    entry.completedMs = millis();
+    entry.ready = true;
+  }
+  primaryWindowActive_ = false;
+}
+
+RouteResult RouteClient::fetchPrimary(const String &callsign,
+                                      const RouteContext &context) {
+  if (!managedPrimary_) return requestPrimary(callsign, context, false);
+  PrimaryEntry *target = nullptr;
+  for (PrimaryEntry &entry : primaryQueue_) {
+    if (entry.callsign == callsign) { target = &entry; break; }
+  }
+  if (target && target->ready && !target->manual &&
+      uint32_t(millis() - target->completedMs) >= 60000U) {
+    *target = {};
+    target = nullptr;
+  }
+  if (target && target->ready && (!target->manual || captureTestResponses_)) {
+    RouteResult result;
+    if (target->storageFailed) result.error = "Routen-Batch: PSRAM allocation failed";
+    else result = target->result;
+    *target = {};
+    String reason;
+    if (result.found() && !routePlausible(result, context, reason)) rejectRoute(result, reason);
+    return result;
+  }
+  if (!target) {
+    for (PrimaryEntry &entry : primaryQueue_)
+      if (entry.callsign.isEmpty()) { target = &entry; break; }
+    if (!target) for (PrimaryEntry &entry : primaryQueue_)
+      if (entry.ready && !entry.manual) { target = &entry; break; }
+    if (target) {
+      bool pendingAlready = false;
+      for (const PrimaryEntry &entry : primaryQueue_)
+        if (!entry.callsign.isEmpty() && !entry.ready) pendingAlready = true;
+      *target = {};
+      target->callsign = callsign;
+      if (target->callsign.isEmpty()) {
+        RouteResult failed;
+        failed.error = "Routen-Batch: PSRAM allocation failed";
+        return failed;
+      }
+      target->manual = captureTestResponses_;
+      if (!primaryWindowActive_ || !pendingAlready) {
+        primaryWindowStarted_ = millis();
+        primaryWindowActive_ = true;
+      }
+    }
+  }
+  if (target && !target->ready) target->context = context;
+  RouteResult result;
+  result.source = "adsb.im";
+  result.status = "pending";
+  return result;
+}
+
+RouteResult RouteClient::requestPrimary(const String& callsign,
+                                      const RouteContext& context, bool batch) {
   RouteResult result;
   result.source = primarySourceName(url_);
   RouteTestResponse *test = captureTestResponses_ ? &testResponses_[0] : nullptr;
@@ -684,6 +891,7 @@ RouteResult RouteClient::fetchPrimary(const String& callsign,
   auto &diagnostic = diagnostics_.primary;
   diagnostic.begin(result.source.c_str(), callsign.c_str(), millis(), routeMemorySnapshot());
   RouteCleanupCapture cleanup(diagnostics_, diagnostic, routeMemorySnapshot);
+  WiFiClient plainClient;
   WiFiClientSecure client;
   // The ESP32 has no trusted wall clock before ADS-B data arrives. HTTPS still
   // encrypts transport, but certificate verification is therefore disabled.
@@ -691,7 +899,9 @@ RouteResult RouteClient::fetchPrimary(const String& callsign,
   HTTPClient http;
   http.setConnectTimeout(5000);
   http.setTimeout(8000);
-  if (!http.begin(client, url_)) {
+  const bool usesTls = url_.startsWith("https://");
+  const bool begun = usesTls ? http.begin(client, url_) : http.begin(plainClient, url_);
+  if (!begun) {
     result.error = "Ungültige Routen-Adresse";
     diagnostic.after = routeMemorySnapshot();
     diagnostic.durationMs = millis() - diagnostic.startedMs;
@@ -700,25 +910,34 @@ RouteResult RouteClient::fetchPrimary(const String& callsign,
   }
 
   JsonDocument request(&temporaryJsonAllocator());
-  JsonObject plane = request["planes"].add<JsonObject>();
-  plane["callsign"] = callsign.c_str();
-  plane["lat"] = context.hasPosition ? context.latitude : 0.0;
-  plane["lng"] = context.hasPosition ? context.longitude : 0.0;
+  auto appendPlane = [&](const char *flight, const RouteContext &position) {
+    JsonObject plane = request["planes"].add<JsonObject>();
+    plane["callsign"] = flight;
+    plane["lat"] = position.hasPosition ? position.latitude : 0.0;
+    plane["lng"] = position.hasPosition ? position.longitude : 0.0;
+  };
+  if (batch) {
+    for (const PrimaryEntry &entry : primaryQueue_)
+      if (!entry.callsign.isEmpty() && !entry.ready)
+        appendPlane(entry.callsign.c_str(), entry.context);
+  } else appendPlane(callsign.c_str(), context);
   PsramBuffer body;
   serializeJson(request, body);
   if (request.overflowed() || body.failed()) {
     result.error="Routen-JSON: PSRAM allocation failed";
     return result;
   }
+  http.setUserAgent(routeUserAgent);
   http.addHeader("Content-Type", "application/json");
   http.addHeader("Accept", "application/json");
   const int status = captureRouteHttp(diagnostic, client,
-      [&]() { NetworkIoScope io; return http.POST(reinterpret_cast<uint8_t*>(body.data()), body.length()); }, routeMemorySnapshot, []() { return millis(); });
+      [&]() { NetworkIoScope io; return http.POST(reinterpret_cast<uint8_t*>(body.data()), body.length()); }, routeMemorySnapshot, []() { return millis(); }, usesTls);
   if (networkOperationCancelled()) return result;
   if (test) test->httpCode = status;
   diagnostics_.rememberFailure(diagnostic);
   if (status != HTTP_CODE_OK) {
     result.error = "Routen-HTTP " + String(status);
+    if (test && status > 0) captureRouteTestHttpError(*test, http);
     { NetworkIoScope io; http.end(); }
     return result;
   }
@@ -735,38 +954,23 @@ RouteResult RouteClient::fetchPrimary(const String& callsign,
   }
   if (test) captureRouteTestJson(*test, document);
 
-  JsonArrayConst rows;
-  if (document.is<JsonArrayConst>()) rows = document.as<JsonArrayConst>();
-  else if (document["routes"].is<JsonArrayConst>())
-    rows = document["routes"].as<JsonArrayConst>();
-  else if (document["planes"].is<JsonArrayConst>())
-    rows = document["planes"].as<JsonArrayConst>();
-  for (JsonObjectConst row : rows) {
-    const String returned = upperTrimmed(row["callsign"] | "");
-    if (test && test->returnedCallsign.isEmpty()) {
-      test->returnedCallsign = returned;
-      RouteResult candidate;
-      extractCodes(row, candidate);
-      test->routeCodes = candidate.routeCodes;
+  if (batch) {
+    for (PrimaryEntry &entry : primaryQueue_) {
+      if (entry.callsign.isEmpty() || entry.ready) continue;
+      RouteResult decoded = decodePrimaryRoute(document, String(entry.callsign),
+                                                entry.context, nullptr, true);
+      const PsramTextTransaction transaction;
+      entry.result = decoded;
+      if (!transaction.succeeded()) {
+        entry.result = StoredRouteResult{};
+        entry.storageFailed = true;
+      }
+      entry.completedMs = millis();
+      entry.ready = true;
     }
-    if (!returned.isEmpty() &&
-        !routeCallsignMatches(callsign.c_str(), returned.c_str())) continue;
-    extractCodes(row, result);
-    if (test) {
-      test->returnedCallsign = returned;
-      test->routeCodes = result.routeCodes;
-    }
-    result.airlineCode = upperTrimmed(row["airline_code"] | "");
-    if (result.airlineCode == "UNKNOWN") result.airlineCode = "";
-    break;
   }
-  fillNames(result);
-  result.status = result.found() ? "current" : "not_found";
-  String reason;
-  if (result.found() && !routePlausible(result, context, reason))
-    rejectRoute(result, reason);
-  else
-    assessRouteConfidence(result, context.hasPosition, false);
+  result = decodePrimaryRoute(document, callsign, context, test, batch);
+  result.source = primarySourceName(url_);
   return result;
 }
 
@@ -799,11 +1003,13 @@ RouteResult RouteClient::fetchAdsbDb(const String& callsign,
   diagnostics_.rememberFailure(diagnostic);
   if (status == HTTP_CODE_NOT_FOUND) {
     result.status = "not_found";
+    if (test) captureRouteTestHttpError(*test, http);
     { NetworkIoScope io; http.end(); }
     return result;
   }
   if (status != HTTP_CODE_OK) {
     result.error = "ADSBDB-HTTP " + String(status);
+    if (test && status > 0) captureRouteTestHttpError(*test, http);
     { NetworkIoScope io; http.end(); }
     return result;
   }
@@ -878,11 +1084,11 @@ RouteResult RouteClient::fetch(const String& callsign,
                                const RouteContext& context) {
   RouteResult primary = fetchPrimary(callsign, context);
   if (networkOperationCancelled()) return {};
-  if (captureTestResponses_) {
+  if (captureTestResponses_ && primary.status != "pending") {
     testResponses_[0].status = primary.status;
     testResponses_[0].error = primary.error;
   }
-  if (primary.found() || !adsbDbFallbackEnabled_) return primary;
+  if (primary.status == "pending" || primary.found() || !adsbDbFallbackEnabled_) return primary;
 
   RouteResult fallback = fetchAdsbDb(callsign, context);
   if (networkOperationCancelled()) return {};
@@ -904,14 +1110,15 @@ RouteResult RouteClient::lookup(const String& callsign,
     lastError_ = "";
     return {};
   }
-  RouteResult cached = readMemoryCache(callsign, context, now);
+  const bool ready = primaryResultReady(callsign);
+  RouteResult cached = ready ? RouteResult{} : readMemoryCache(callsign, context, now);
   if (cached.status != "unavailable") {
     if (cached.status != "rejected") {
       lastError_ = "";
       return cached;
     }
   }
-  cached = readCache(callsign, context, now);
+  cached = ready ? RouteResult{} : readCache(callsign, context, now);
   if (cached.status != "unavailable") {
     if (cached.status != "rejected") {
       rememberInMemory(callsign, cached, now, false);
@@ -923,7 +1130,7 @@ RouteResult RouteClient::lookup(const String& callsign,
   RouteResult result = fetch(callsign, context);
   if (networkOperationCancelled()) return {};
   lastError_ = result.error;
-  if (result.error.isEmpty()) {
+  if (result.error.isEmpty() && result.status != "pending") {
     // ADSBDB is a runtime fallback only. Keep its data in RAM and do not copy
     // it into the controller's persistent route database.
     const bool persist = !result.source.startsWith("adsbdb");
@@ -934,7 +1141,12 @@ RouteResult RouteClient::lookup(const String& callsign,
 
 RouteResult RouteClient::test(const String& callsign,
                               const RouteContext& context) {
-  clearTestResponses();
+  if (!manualPrimaryWaiting_) {
+    clearTestResponses();
+    // A manual test bypasses even an already completed queued response.
+    for (PrimaryEntry &entry : primaryQueue_)
+      if (entry.callsign == callsign) entry = {};
+  }
   if (callsign.isEmpty()) {
     lastError_ = "Test-Callsign fehlt";
     RouteResult result;
@@ -944,6 +1156,7 @@ RouteResult RouteClient::test(const String& callsign,
   captureTestResponses_ = true;
   RouteResult result = fetch(callsign, context);
   captureTestResponses_ = false;
+  manualPrimaryWaiting_ = result.status == "pending";
   lastError_ = result.error;
   return result;
 }

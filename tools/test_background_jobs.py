@@ -6,6 +6,7 @@ root=Path(__file__).resolve().parents[1];s=(root/'src/main.cpp').read_text()
 def function(signature):
  a=s.index(signature);return s[a:s.index('\n}\n',a)+3]
 a=s.index('enum class ManualJobKind');jobs=s[a:s.index('} manualNetworkJob;',a)+len('} manualNetworkJob;')]
+scheduler=s[s.index('      if (wifiConnected && !otaPreparing && !otaInProgress && !otaRebootAt && !manualRebootAt) {'):s.index('\n      {',s.index('      if (wifiConnected && !otaPreparing && !otaInProgress && !otaRebootAt && !manualRebootAt) {'))]
 code=r'''
 #include "TemporaryPsram.hpp"
 #include "NetworkIo.hpp"
@@ -43,12 +44,20 @@ struct Server {
  void sendContent(const char *text,size_t n){body.assign(text,n);}
 } webServer;
 '''+jobs+function('void sendPsramResponse(')+function('String htmlEscape(String value)')+r'''
-void runRouteTestJob(){
+bool collectOnly=false;
+bool runRouteTestJob(){
+ if(collectOnly)return false;
  {NetworkIoScope io;entered=true;while(!finish)std::this_thread::sleep_for(std::chrono::milliseconds(1));}
  manualNetworkJob.page="<!doctype html><html><body>rejected: LGW-LYS</body></html>";
- manualNetworkJob.status=502;
+ manualNetworkJob.status=502;return true;
 }
 '''+''.join(function(f) for f in ['bool prepareManualNetworkJob(', 'void redirectToManualNetworkJob(', 'void handleManualNetworkJobResult(', 'void runManualNetworkJob(', 'void handleAdsbTest('])+r'''
+bool wifiConnected=true,otaPreparing=false,otaInProgress=false,pollRequested=false;
+uint32_t otaRebootAt=0,lastPoll=0;constexpr uint32_t POLL_INTERVAL_MS=500;
+void networkCycle(uint32_t now){
+'''+scheduler+r'''
+}
+
 int main(){
  configureNetworkIo({release,acquire,nullptr});
  assert(prepareManualNetworkJob(ManualJobKind::Route));assert(manualNetworkJob.queued);
@@ -56,11 +65,15 @@ int main(){
  webServer.id="1";
  state.lock();handleManualNetworkJobResult();state.unlock();assert(webServer.status==202);
  assert(!prepareManualNetworkJob(ManualJobKind::Adsb));assert(webServer.status==409);
+ collectOnly=true;runManualNetworkJob();
+ assert(manualNetworkJob.queued && manualNetworkJob.running && !manualNetworkJob.done);
+ assert(manualNetworkJob.revision==applicationRevision);
+ collectOnly=false;
  std::thread worker([]{state.lock();runManualNetworkJob();state.unlock();});
  auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(2);
  while(!entered && std::chrono::steady_clock::now()<deadline)std::this_thread::yield();
  assert(entered);assert(state.try_lock_for(std::chrono::milliseconds(250)));
- assert(manualNetworkJob.running && !manualNetworkJob.queued);
+ assert(manualNetworkJob.running && manualNetworkJob.queued);
  handleManualNetworkJobResult();assert(webServer.status==202 && webServer.body.find("setTimeout")!=std::string::npos);
  assert(!prepareManualNetworkJob(ManualJobKind::Adsb));assert(webServer.status==409);
  finish=true;state.unlock();worker.join();
@@ -76,6 +89,11 @@ int main(){
  assert(manualNetworkJob.done && !manualNetworkJob.queued && manualRebootAt==500);
  webServer.id=String(manualNetworkJob.id);handleManualNetworkJobResult();
  assert(webServer.status==200 && webServer.body.find("after restart")!=std::string::npos);
+ manualNetworkJob={};manualRebootAt=0;requireRestart=false;
+ assert(prepareManualNetworkJob(ManualJobKind::Route));collectOnly=true;
+ auto before=adsbCalls;networkCycle(1000);
+ assert(manualNetworkJob.running && manualNetworkJob.queued && adsbCalls==before+1);
+ networkCycle(1500);assert(adsbCalls==before+2); // waiting test never starves ADS-B
  manualNetworkJob={};assert(temporaryPsramStats().allocatedBytes==0);
  std::cout<<"Background jobs: bounded slot, running/queued conflict, concurrent polling, result HTTP status, expiry, replacement, wrap and PSRAM cleanup passed\n";
 }
