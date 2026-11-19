@@ -15,6 +15,8 @@
   KEL/BXO/EIME/BZZ/NHD mit Koordinaten ([OurAirports](https://ourairports.com/data/)) und
   CMS/HKH/JNL/GNJ/IRL ([FAA](https://www.faa.gov/air_traffic/publications/atpubs/cnt_html/chap3_section_3.html))
   im Grundbestand ergänzt; JAK bleibt offen
+- Vor OTA zusätzlich URE mit Koordinaten (OurAirports), BRX und BOM (FAA) ergänzt;
+  bestehende Lookup-Ergänzungen bleiben unverändert
 - Direkte HTTP-Vergleichsabfrage mit der neuen Kennung von adsb.im mit 200 akzeptiert;
   keine Installation auf Controllern in diesem Arbeitsschritt
 

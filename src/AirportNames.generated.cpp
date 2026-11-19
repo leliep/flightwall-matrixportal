@@ -490,6 +490,7 @@ const AirportName names[] = {
   {"TZL", "Tuzla"},
   {"TZX", "Trabzon"},
   {"UIO", "Quito"},
+  {"URE", "Kuressaare"},
   {"VAR", "Varna"},
   {"VAS", "Sivas"},
   {"VBS", "Brescia"},
