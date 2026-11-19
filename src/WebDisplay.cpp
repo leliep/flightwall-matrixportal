@@ -21,7 +21,7 @@ footer{display:flex;justify-content:space-between;gap:16px;margin-top:16px;color
 </style></head><body><main><div class="top"><div class="brand"><span class="wing">✈</span><span>FlightWall</span></div><div class="live"><span class="pulse" id="pulse"></span><span id="status">verbinde…</span></div></div><div class="siteName" id="siteName" hidden></div><div id="content"><section class="hero empty">Warte auf Flugzeugdaten…</section></div><section class="radarPanel" id="radarPanel" hidden><div class="radarTitle"><strong>Radar</strong><span class="radarMeta" id="radarMeta">–</span></div><canvas class="radarCanvas" id="radarCanvas" width="128" height="32"></canvas></section><footer><span id="updated">–</span><span><a href="/status">Status</a> · <a href="/config">Konfiguration</a></span></footer></main>
 <script>
 const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let radarState=null;
+let radarState=null,radarSweepEpoch=null,radarSweepSettings='',radarSweepNextDelay=250;
 function num(v,d=0){return Number.isFinite(v)?Number(v).toFixed(d).replace('.',','):'–'}
 function countdown(v){if(!Number.isFinite(v))return '';const s=Math.max(0,Math.round(v));return s<60?s+' s':Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
 function look(a){if(!Number.isFinite(a))return 'Richtung unbekannt';const x=Math.abs(a);if(x<=30)return 'vorne';if(x<=100)return a>0?'rechts':'links';if(x<=150)return a>0?'rechte Schulter':'linke Schulter';return 'hinten'}
@@ -29,11 +29,56 @@ function arrow(a){if(!Number.isFinite(a))return '•';const x=((a+180)%360+360)%
 function trend(f){if(f.vertical_motion==='steigt')return '<span class="trend up">▲</span>';if(f.vertical_motion==='sinkt')return '<span class="trend down">▼</span>';return ''}
 function metric(label,value,unit,extra=''){return `<article class="card"><div class="label">${label}</div><div class="value">${value}<span class="unit">${unit}</span>${extra}</div></article>`}
 function radarColor(flags){if(flags&4)return '#ff6475';if(flags&1)return '#ffd166';if(flags&2)return '#bd7aff';if(flags&8)return '#ff9b54';return '#39d5df'}
-function drawRadar(s){const panel=$('radarPanel');if(!s||!s.web_radar||!s.radar){panel.hidden=true;return}panel.hidden=false;const c=$('radarCanvas'),g=c.getContext('2d'),r=s.radar.radius_km,heading=s.radar.view_heading,points=Array.isArray(s.radar.points)?s.radar.points:[];g.fillStyle='#010406';g.fillRect(0,0,128,32);if(s.radar_trails_enabled&&s.radar_trails_available!==false){const elapsed=performance.now()-(s.radarReceivedAt??performance.now());for(const p of points){g.fillStyle=radarColor(Number(p[2])||0);for(const dot of (Array.isArray(p[3])?p[3]:[])){const remaining=Number(dot[2])-elapsed;if(!(remaining>0))continue;g.globalAlpha=remaining>30000?0.43:0.15;g.fillRect(dot[0],dot[1],1,1)}}g.globalAlpha=1}g.fillStyle='#276576';for(let i=0;i<32;i++){const a=2*Math.PI*i/32;g.fillRect(64+Math.round(Math.cos(a)*15),15+Math.round(Math.sin(a)*15),1,1)}g.fillStyle='#4ee096';[[64,15],[63,15],[65,15],[64,14],[64,16]].forEach(p=>g.fillRect(p[0],p[1],1,1));const blink=Math.floor(Date.now()/500)%2===0;for(let pass=0;pass<2;pass++)for(const p of points){const d=Number(p[0]),b=Number(p[1]),flags=Number(p[2])||0,selected=!!(flags&1);if(selected!==(pass===1)||((flags&4)&&!blink)||!Number.isFinite(d)||!Number.isFinite(b)||!(r>0))continue;const a=(b-heading)*Math.PI/180,x=64+Math.round(Math.sin(a)*d*15/r),y=15-Math.round(Math.cos(a)*d*15/r);if(x<0||x>127||y<0||y>31)continue;g.fillStyle=radarColor(flags);g.fillRect(x,y,1,1);if(selected){g.fillRect(x-1,y,1,1);g.fillRect(x+1,y,1,1);g.fillRect(x,y-1,1,1);g.fillRect(x,y+1,1,1)}}$('radarMeta').textContent='Radius '+num(r,1)+' km · '+points.length+' '+(points.length===1?'Ziel':'Ziele')+(s.radar_trails_enabled&&s.radar_trails_available===false?' · Spuren nicht verfügbar':'')}
+function radarSweepPosition(s,now){
+  const raw=Number(s.radar_sweep_interval_seconds??5),interval=Number.isFinite(raw)?Math.max(0,Math.min(10,Math.floor(raw))):5;
+  const line=s.radar_sweep_style==='line',settings=interval+':'+line;
+  if(radarSweepEpoch===null||radarSweepSettings!==settings){radarSweepEpoch=now;radarSweepSettings=settings}
+  radarSweepNextDelay=250;
+  if(!interval)return null;
+  const elapsed=Math.floor(Math.max(0,now-radarSweepEpoch))%(interval*1000);
+  if(elapsed>=800){radarSweepNextDelay=Math.min(250,interval*1000-elapsed);return null}
+  radarSweepNextDelay=25;
+  const step=Math.min(32,Math.floor((elapsed*32+387)/775)),angle=-Math.PI/2+2*Math.PI*step/32;
+  return {x:64+Math.round(Math.cos(angle)*15),y:15+Math.round(Math.sin(angle)*15),line};
+}
+function drawRadarBeam(g,x,y){
+  let x0=64,y0=15,dx=Math.abs(x-x0),dy=-Math.abs(y-y0),sx=x0<x?1:-1,sy=y0<y?1:-1,error=dx+dy;
+  for(;;){g.fillRect(x0,y0,1,1);if(x0===x&&y0===y)break;const twice=2*error;if(twice>=dy){error+=dy;x0+=sx}if(twice<=dx){error+=dx;y0+=sy}}
+}
+function drawRadarRing(g){g.fillStyle='#276576';for(let i=0;i<32;i++){const a=2*Math.PI*i/32;g.fillRect(64+Math.round(Math.cos(a)*15),15+Math.round(Math.sin(a)*15),1,1)}}
+function drawRadar(s){
+  const panel=$('radarPanel');
+  if(!s||!s.web_radar||!s.radar){panel.hidden=true;radarSweepEpoch=null;radarSweepNextDelay=250;return}
+  panel.hidden=false;
+  const c=$('radarCanvas'),g=c.getContext('2d'),r=s.radar.radius_km,heading=s.radar.view_heading,points=Array.isArray(s.radar.points)?s.radar.points:[],now=performance.now(),sweep=radarSweepPosition(s,now);
+  g.globalAlpha=1;g.fillStyle='#010406';g.fillRect(0,0,128,32);
+  // Beam endpoints remain visible; trails, own position and live targets win.
+  if(s.radar_sweep_style==='line')drawRadarRing(g);
+  if(sweep?.line){g.fillStyle='#0b552b';drawRadarBeam(g,sweep.x,sweep.y)}
+  if(s.radar_trails_enabled&&s.radar_trails_available!==false){
+    const elapsed=now-(s.radarReceivedAt??now);
+    for(const p of points){g.fillStyle=radarColor(Number(p[2])||0);for(const dot of (Array.isArray(p[3])?p[3]:[])){const remaining=Number(dot[2])-elapsed;if(!(remaining>0))continue;g.globalAlpha=remaining>30000?0.43:0.15;g.fillRect(dot[0],dot[1],1,1)}}
+    g.globalAlpha=1;
+  }
+  if(s.radar_sweep_style!=='line')drawRadarRing(g);
+  if(sweep&&!sweep.line){g.fillStyle='#f3f8fc';g.fillRect(sweep.x,sweep.y,1,1)}
+  g.fillStyle='#4ee096';[[64,15],[63,15],[65,15],[64,14],[64,16]].forEach(p=>g.fillRect(p[0],p[1],1,1));
+  const blink=Math.floor(Date.now()/500)%2===0;
+  for(let pass=0;pass<2;pass++)for(const p of points){
+    const d=Number(p[0]),b=Number(p[1]),flags=Number(p[2])||0,selected=!!(flags&1);
+    if(selected!==(pass===1)||((flags&4)&&!blink)||!Number.isFinite(d)||!Number.isFinite(b)||!(r>0))continue;
+    const a=(b-heading)*Math.PI/180,x=64+Math.round(Math.sin(a)*d*15/r),y=15-Math.round(Math.cos(a)*d*15/r);
+    if(x<0||x>127||y<0||y>31)continue;
+    g.fillStyle=radarColor(flags);g.fillRect(x,y,1,1);
+    if(selected){g.fillRect(x-1,y,1,1);g.fillRect(x+1,y,1,1);g.fillRect(x,y-1,1,1);g.fillRect(x,y+1,1,1)}
+  }
+  $('radarMeta').textContent='Radius '+num(r,1)+' km · '+points.length+' '+(points.length===1?'Ziel':'Ziele')+(s.radar_trails_enabled&&s.radar_trails_available===false?' · Spuren nicht verfügbar':'');
+}
+
 function renderSiteName(s){const label=$('siteName');label.textContent=s.site_name||'';label.hidden=!s.site_name}
 function render(s){renderSiteName(s);const f=s.flight;if(!f.available){$('content').innerHTML='<section class="hero empty">Im Moment ist kein Flugzeug im Anzeigeradius.</section>';return}const departing=f.motion==='departing',codes=(f.route_codes||[f.origin,f.destination].filter(Boolean).join('-')||'–').split('-').map(esc).join('<span>→</span>'),names=esc(f.route_names||[f.origin_name,f.destination_name].filter(Boolean).join(' › ')||'Route unbekannt'),typeDescription=f.aircraft_type_description&&f.aircraft_type_description.trim().toUpperCase()!==(f.aircraft_type||'').trim().toUpperCase()?`<div class="typeDescription">${esc(f.aircraft_type_description)}</div>`:'',alert=f.emergency?`<div class="alert">${esc(f.squawk)} · ${esc(f.emergency_meaning)}${f.emergency_count>1?` · ${f.emergency_index}/${f.emergency_count}`:''}</div>`:'';$('content').innerHTML=`${alert}<section class="hero"><div class="eyebrow">${f.emergency?'Transponder-Notfall':'Aktuelles Flugzeug'}</div><div class="flightline"><div class="callsign">${esc(f.flight||'–')}</div><div class="type">${esc(f.aircraft_type||'–')}</div></div>${typeDescription}<div class="airline">${esc(f.airline||'Airline unbekannt')}${f.special_type?`<span class="special">${esc(f.special_type)}</span>`:''}</div><div class="route"><div class="routeCodes">${codes}</div><div class="routeNames">${names}</div></div></section><section class="grid">${metric('Entfernung',num(f.distance_km,1),'km')}${metric('Höhe',num(f.altitude_ft),'ft',trend(f))}${metric('Geschwindigkeit',num(f.speed_kmh),'km/h')}${metric('CPA',num(f.cpa_km,1),'km')}</section><section class="lower"><article class="card direction"><div class="compass"><span class="needle">${arrow(f.relative_bearing)}</span></div><div><div class="label">Blickrichtung</div><div class="look">${esc(look(f.relative_bearing))}</div><div class="bearing">${num(f.relative_bearing,0)}° relativ · ${esc(f.direction||'–')}</div></div></article><article class="card"><div class="label">Flugverlauf</div><div class="value">${esc(f.vertical_motion||'unbekannt')}</div><div class="cpaState ${departing?'departing':''}">${departing?'Entfernt sich':Number.isFinite(f.cpa_seconds)?'CPA in '+countdown(f.cpa_seconds):Number.isFinite(f.cpa_minutes)?'CPA in '+num(f.cpa_minutes)+' min':'Nähert sich'}</div><div class="reason">${esc(f.selection_reason||'')}</div></article></section>`}
 async function update(){try{const r=await fetch('/api/display',{cache:'no-store'});if(!r.ok)throw 0;const s=await r.json();s.radarReceivedAt=performance.now();radarState=s;render(s);drawRadar(s);$('status').textContent=s.error||'Live · ADS-B OK';$('pulse').style.background=s.error?'var(--red)':'var(--green)';$('updated').textContent='Aktualisiert vor '+(s.age_seconds??0)+' s'}catch(e){$('status').textContent='Verbindung unterbrochen';$('pulse').style.background='var(--red)'}}
-setInterval(update,2000);setInterval(()=>drawRadar(radarState),250);update();
+setInterval(update,2000);function animateRadar(){drawRadar(radarState);setTimeout(animateRadar,radarSweepNextDelay)}animateRadar();update();
 </script></body></html>)HTML";
 }  // namespace
 

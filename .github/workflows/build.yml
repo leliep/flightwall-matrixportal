@@ -16,6 +16,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - name: Install PlatformIO
         run: pip install platformio
       - name: Prepare build-only secrets
@@ -28,11 +31,14 @@ jobs:
           python3 tools/test_cpa_page.py
           python3 tools/test_matrix_layout.py
           python3 tools/test_boot_screen.py
+          node tools/test_web_radar.mjs
+          node tools/test_site_name.mjs
       - name: Build MatrixPortal firmware
         run: pio run -e adafruit_matrixportal_esp32s3
       - name: Test temporary PSRAM buffers and TLS cleanup
         run: |
           python3 tools/test_temporary_psram.py
+          python3 tools/test_radar_sweep.py
           python3 tools/test_route_test_responses.py
           python3 tools/test_route_retry.py
           python3 tools/test_route_validation.py

@@ -264,6 +264,7 @@ const AirportName names[] = {
   {"KIR", "Kerry"},
   {"KIX", "Osaka-Kansai"},
   {"KJK", "Kortrijk-Wevelgem"},
+  {"KLR", "Kalmar"},
   {"KLU", "Klagenfurt"},
   {"KLX", "Kalamata"},
   {"KOA", "Kona"},

@@ -35,3 +35,27 @@ state.web_radar=false;draw();assert(elements.radarPanel.hidden);
 state.web_radar=true;state.radar_trails_enabled=true;state.radar.points=[[5,90,1]];
 draw();assert.equal(elements.radarPanel.hidden,false); // legacy points without trails
 console.log('Web radar tests passed: fading, expiry without new data, disabled state, layer order, legacy payload');
+
+// Sweep timing and layering use the actual browser implementation.
+const lastPixel=(x,y)=>draws.filter(p=>p.x===x&&p.y===y&&p.w===1&&p.h===1).at(-1);
+state.radar.radius_km=15;state.radar.points=[];state.radar_sweep_style='line';state.radar_sweep_interval_seconds=5;now=0;draw();
+assert.equal(lastPixel(64,0).color,'#0b552b');
+now=194;draw();assert.equal(lastPixel(79,15).color,'#0b552b');
+now=388;draw();assert.equal(lastPixel(64,30).color,'#0b552b');
+now=581;draw();assert.equal(lastPixel(49,15).color,'#0b552b');
+now=775;draw();assert.equal(lastPixel(64,0).color,'#0b552b');
+now=800;draw();assert(!draws.some(p=>p.color==='#0b552b'));
+now=5000;draw();assert.equal(lastPixel(64,0).color,'#0b552b');
+// Trails and live targets cannot be covered by the beam.
+state.radar.points=[[10,90,1,[[72,15,60000]]]];state.radarReceivedAt=5194;now=5194;draw();
+assert.equal(lastPixel(74,15).color,'#ffd166');assert.equal(lastPixel(72,15).color,'#ffd166');
+assert(draws.findIndex(p=>p.x===72&&p.y===15&&p.color==='#0b552b')<draws.findIndex(p=>p.x===72&&p.y===15&&p.color==='#ffd166'));
+state.radar_sweep_interval_seconds=0;draw();assert(!draws.some(p=>p.color==='#0b552b'||p.color==='#f3f8fc'));
+state.radar_sweep_style='dot';state.radar_sweep_interval_seconds=1;state.radar.points=[];now=6000;draw();
+assert.equal(lastPixel(64,0).color,'#f3f8fc');assert(!draws.some(p=>p.color==='#0b552b'));
+now=6775;draw();assert.equal(lastPixel(64,0).color,'#f3f8fc');
+now=6800;draw();assert(!draws.some(p=>p.color==='#f3f8fc'));
+now=7000;draw();assert.equal(lastPixel(64,0).color,'#f3f8fc');
+state.web_radar=false;draw();state.web_radar=true;now=7100;draw();assert.equal(lastPixel(64,0).color,'#f3f8fc');
+assert.equal(vm.runInContext('radarSweepNextDelay',sandbox),25);
+console.log('Web sweep tests passed: dot/beam, clockwise endpoints, period/off, restart, trail/target priority');

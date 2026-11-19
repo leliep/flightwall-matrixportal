@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.6.1-dual-target.57 – 2026-11-19
+
+- Gemeinsame Radar-Konfiguration: umlaufender Punkt oder ein Pixel breiter grüner
+  Strich vom Zentrum bis zum Radiuskreis, Punkt bleibt Voreinstellung
+- Matrix mit 128/125 Pixeln und Headless-Webradar; Strahl unter Spuren und Zielen,
+  0,8 Sekunden pro Umlauf, Start/Ende bei 12 Uhr; Intervall 0–10 Sekunden für beide Varianten
+- Stil in NVS, Konfigurationssicherung/-wiederherstellung und Status-/Display-API;
+  alte Sicherungen ohne Stilfeld erhalten die vorhandene Einstellung
+- Webanimation lokal mit schneller Darstellung nur während des Umlaufs; keine
+  weiteren Controllerabfragen oder zusätzlichen Bild-/Spurpuffer
+- Codes aller drei Controller geprüft, Konfigurationen/Lookups gesichert; KLR mit
+  Koordinaten (OurAirports), NJU und KRH (FAA) ergänzt; JAK bleibt offen
+
 ## 3.6.1-dual-target.56 – 2026-11-19
 
 - adsb.im über HTTP und mit eigener FlightWall-Clientkennung inklusive Projektkontakt;

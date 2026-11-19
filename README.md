@@ -60,7 +60,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.56` |
+| Firmware | `3.6.1-dual-target.57` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel), optional 125 nutzbare Spalten, und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -600,10 +600,26 @@ den normalen Auswahlradius. Seitliche Ziele außerhalb des Kreises werden mit
 demselben Entfernungsmaßstab bis zum Matrixrand dargestellt, ohne dadurch die
 normale Flugzeugauswahl zu verändern. Ist die Wetterseite deaktiviert, bleibt
 das Radar auch ohne ausgewähltes Flugzeug als Leerlaufanzeige sichtbar. Ein
-heller Punkt umläuft den Radius ausgehend von 12 Uhr im Uhrzeigersinn. Das
-Intervall ist von 1 bis 10 Sekunden konfigurierbar; `0` schaltet den
-Umlaufpunkt aus. Der Standardwert beträgt 5 Sekunden. Ein einzelner Umlauf
-dauert etwa 0,8 Sekunden und endet sichtbar wieder am 12-Uhr-Startpixel.
+heller Punkt umläuft den Radius ausgehend von 12 Uhr im Uhrzeigersinn.
+Unter **Radar → Radar-Umlauf** ist ab `.57` wahlweise **Punkt** (Voreinstellung)
+oder **Strich** verfügbar. Der Strich ist ein dezent grüner, ein Pixel breiter
+Radarstrahl vom Standortzentrum bis zum Radiuskreis. Flugzeugpunkte und
+Radarspuren werden darüber gezeichnet. Das funktioniert auf der Matrix mit
+128 oder 125 nutzbaren Pixeln und im Headless-Webradar.
+
+Das ebenfalls unter **Radar** angeordnete Umlaufintervall ist für beide Varianten
+von 1 bis 10 Sekunden konfigurierbar; `0` schaltet Punkt beziehungsweise Strich
+aus. Der Standardwert beträgt 5 Sekunden. Ein einzelner Umlauf dauert weiterhin
+etwa 0,8 Sekunden und endet sichtbar wieder bei 12 Uhr. Der Browser animiert
+diesen Umlauf lokal, ohne zusätzliche Controllerabfragen; außerhalb des Umlaufs
+wird seltener neu gezeichnet. Die Darstellung benötigt keinen neuen Bild- oder
+Spurpuffer auf dem Controller.
+
+Stil und Intervall bleiben nach Updates erhalten und werden als
+`radar_sweep_style` (`dot`/`line`) und `radar_sweep_interval_seconds` gesichert.
+Ältere Sicherungen ohne Stilfeld behalten eine vorhandene Auswahl bei;
+frisch eingerichtete Controller verwenden den Punkt. Status- und Display-API
+liefern beide Werte. Die Matrix-Webanzeige erhält weiterhin kein zusätzliches Radar.
 
 Radarspuren zeigen auf Matrix und Headless-Webradar die beobachteten Positionen
 der letzten 60 Sekunden als einzelne, mit dem Alter dunkler werdende Punkte.
