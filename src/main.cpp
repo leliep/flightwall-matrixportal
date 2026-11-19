@@ -63,8 +63,8 @@ int16_t matrixLayoutWidth() {
 #endif
 }
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.57";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-19 selectable radar dot or beam";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.58";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-19 configurable radar sweep duration";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -688,6 +688,7 @@ String customPageText;
 uint8_t customScrollSpeed = 1;
 uint8_t radarSweepIntervalSeconds = DEFAULT_RADAR_SWEEP_INTERVAL_SECONDS;
 std::atomic<bool> radarSweepLine{false};
+std::atomic<uint16_t> radarSweepDurationMs{RadarSweep::PeriodMs};
 bool pageEnabled[] = {true, true, true, true, true, true, true, true};
 uint8_t pageOrder[] = {0, 1, 2, 3, 4, 5, 6, 7};
 uint32_t pageDurationMs[] = {
@@ -2074,7 +2075,6 @@ int16_t radarCenterX() { return matrixLayoutWidth() / 2; }
 constexpr int16_t RADAR_CENTER_Y = 15;
 constexpr int16_t RADAR_RADIUS_PIXELS = 15;
 constexpr uint8_t RADAR_RADIUS_DOT_COUNT = RadarSweep::DotCount;
-constexpr uint32_t RADAR_SWEEP_PERIOD_MS = RadarSweep::PeriodMs;
 constexpr uint32_t RADAR_SWEEP_DRAW_INTERVAL_MS = RadarSweep::DrawIntervalMs;
 constexpr uint32_t RADAR_SWEEP_SESSION_GAP_MS = 750;
 // The furthest matrix corner is about 4.4 configured radii away when the
@@ -2128,6 +2128,7 @@ void drawRadarRing() {
 
 void drawRadarPage() {
   const bool lineSweep = radarSweepLine.load(std::memory_order_relaxed);
+  const uint16_t sweepDuration = radarSweepDurationMs.load(std::memory_order_relaxed);
   int16_t sweepX = 0, sweepY = 0;
   bool showSweep = false;
   const uint32_t now = millis();
@@ -2136,15 +2137,14 @@ void drawRadarPage() {
         now - radarSweepLastDraw > RADAR_SWEEP_SESSION_GAP_MS)
       radarSweepStarted = now;
     radarSweepLastDraw = now;
-    const uint32_t sweepCycleMs =
-        static_cast<uint32_t>(radarSweepIntervalSeconds) * 1000U;
+    const uint32_t sweepCycleMs = RadarSweep::cycleMs(radarSweepIntervalSeconds, sweepDuration);
     const uint32_t sweepElapsed =
         (now - radarSweepStarted) % sweepCycleMs;
-    if (sweepElapsed < RADAR_SWEEP_PERIOD_MS) {
-      const uint8_t sweepDot = RadarSweep::step(sweepElapsed);
+    if (sweepElapsed < sweepDuration) {
+      const uint8_t sweepDot = RadarSweep::step(sweepElapsed, sweepDuration);
       // Start at 12 o'clock and advance clockwise exactly once per interval.
       const float sweepAngle = -PI / 2.0F +
-          2.0F * PI * sweepDot / RADAR_RADIUS_DOT_COUNT;
+          2.0F * PI * sweepDot / RadarSweep::sampleCount(sweepDuration);
       sweepX = radarCenterX() + static_cast<int16_t>(
           roundf(cosf(sweepAngle) * RADAR_RADIUS_PIXELS));
       sweepY = RADAR_CENTER_Y + static_cast<int16_t>(
@@ -3979,6 +3979,7 @@ PsramBuffer configurationJson() {
   settings["view_heading"] = viewHeading;
   settings["radar_trails_enabled"] = radarTrailsEnabled;
   settings["radar_sweep_interval_seconds"] = radarSweepIntervalSeconds;
+  settings["radar_sweep_duration_ms"] = radarSweepDurationMs.load(std::memory_order_relaxed);
   settings["radar_sweep_style"] = RadarSweep::styleName(radarSweepLine.load(std::memory_order_relaxed));
   settings["routes_enabled"] = routesEnabled;
   settings["adsbdb_fallback"] = adsbDbFallbackEnabled;
@@ -4098,6 +4099,7 @@ void handleConfigurationRestore() {
   putBool("radarTrails", "radar_trails_enabled");
   if (!s["radar_sweep_interval_seconds"].isNull()) preferences.putUChar("radarSweepSec", constrain(s["radar_sweep_interval_seconds"].as<int>(), 0, 10));
   if (hasSweepStyle) preferences.putBool("radarSweepLine", restoredSweepLine);
+  if (!s["radar_sweep_duration_ms"].isNull()) preferences.putUShort("radarSweepMs", RadarSweep::duration(s["radar_sweep_duration_ms"].as<int>()));
   putBool("routesOn", "routes_enabled"); putBool("routeFallback", "adsbdb_fallback");
   putBool("hideSport", "hide_sport_aircraft"); putBool("altFilter", "altitude_filter");
   if (!s["maximum_altitude_ft"].isNull()) preferences.putInt("maxAltFt", constrain(s["maximum_altitude_ft"].as<int>(), 1000, 100000));
@@ -4313,6 +4315,8 @@ void translateWebPageToEnglish(Text &html) {
     {"Freitext-Scrollgeschwindigkeit", "Custom text scroll speed"}, {">schnell<", ">fast<"},
     {">mittel<", ">medium<"}, {">langsam<", ">slow<"},
     {"Radarspuren (60 Sekunden)", "Radar trails (60 seconds)"},
+    {"Dauer eines Umlaufs (Sekunden)", "Sweep duration (seconds)"},
+    {"0 beim Intervall schaltet den Umlauf aus. Ist die Dauer länger als das Intervall, läuft der Umlauf ohne Pause.", "An interval of 0 disables the sweep. If duration exceeds the interval, the sweep runs continuously."},
     {"Radar-Umlaufintervall", "Radar sweep interval"}, {"Radar-Umlauf", "Radar sweep"},
     {">Punkt<", ">Dot<"}, {">Strich<", ">Beam<"}, {">Aus<", ">Off<"},
     {"Ein Umlauf dauert etwa 0,8 Sekunden. 0 schaltet ihn aus.", "One sweep takes about 0.8 seconds. 0 disables it."},
@@ -4813,7 +4817,10 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
             selected(radarSweepIntervalSeconds == seconds) + ">" +
             String(seconds) + " s</option>";
   }
-  html += F("</select></label><p class='muted'>Ein Umlauf dauert etwa 0,8 Sekunden. 0 schaltet ihn aus.</p>");
+  html += F("</select></label><label>Dauer eines Umlaufs (Sekunden)<input type='number' name='radarSweepDuration' min='0.8' max='4' step='0.1' value='");
+  const uint16_t sweepDuration = radarSweepDurationMs.load(std::memory_order_relaxed);
+  html += String(sweepDuration / 1000) + "." + String((sweepDuration % 1000) / 100);
+  html += F("'></label><p class='muted'>0 beim Intervall schaltet den Umlauf aus. Ist die Dauer länger als das Intervall, läuft der Umlauf ohne Pause.</p>");
   if (!radarTrailStorage)
     html += "<p class='pill warn'>" + String(uiText(
         "Radarspuren nicht verfügbar: externer Speicher konnte nicht reserviert werden.",
@@ -5601,6 +5608,10 @@ void applyWebSettings() {
 #endif
     if (webServer.hasArg("radarSweepInterval"))
       radarSweepIntervalSeconds = constrain(webServer.arg("radarSweepInterval").toInt(), 0, 10);
+    uint16_t requestedSweepDuration = 0;
+    if (webServer.hasArg("radarSweepDuration") &&
+        RadarSweep::parseSeconds(webServer.arg("radarSweepDuration").c_str(), requestedSweepDuration))
+      radarSweepDurationMs.store(requestedSweepDuration, std::memory_order_relaxed);
     bool requestedSweepLine = false;
     if (webServer.hasArg("radarSweepStyle") &&
         RadarSweep::parseStyle(webServer.arg("radarSweepStyle").c_str(), requestedSweepLine))
@@ -5740,6 +5751,7 @@ void applyWebSettings() {
     preferences.putBool("radarTrails", radarTrailsEnabled);
     preferences.putUChar("radarSweepSec", radarSweepIntervalSeconds);
     preferences.putBool("radarSweepLine", radarSweepLine.load(std::memory_order_relaxed));
+    preferences.putUShort("radarSweepMs", radarSweepDurationMs.load(std::memory_order_relaxed));
     preferences.putBool("routesOn", routesEnabled);
     preferences.putBool("routeFallback", adsbDbFallbackEnabled);
     preferences.putBool("hideSport", hideSportAircraft);
@@ -6237,6 +6249,7 @@ void handleDisplayApi() {
          ",\"custom_text\":\"" + jsonEscape(customPageText) + "\"" +
          ",\"custom_scroll_speed\":\"" + customScrollSpeedName() + "\"" +
          ",\"radar_sweep_style\":\"" + RadarSweep::styleName(radarSweepLine.load(std::memory_order_relaxed)) + "\"" +
+         ",\"radar_sweep_duration_ms\":" + String(radarSweepDurationMs.load(std::memory_order_relaxed)) +
          ",\"radar_sweep_interval_seconds\":" +
              String(radarSweepIntervalSeconds) +
          ",\"page_enabled\":[";
@@ -6549,6 +6562,8 @@ void handleStatusApi() {
   json += ",\"radar_sweep_style\":\"";
   json += RadarSweep::styleName(radarSweepLine.load(std::memory_order_relaxed));
   json += "\"";
+  json += ",\"radar_sweep_duration_ms\":";
+  json += String(radarSweepDurationMs.load(std::memory_order_relaxed));
   json += ",\"radar_sweep_interval_seconds\":";
   json += String(radarSweepIntervalSeconds);
   json += ",\"effective_radius_km\":";
@@ -8113,6 +8128,7 @@ void setup() {
   adsbDbFallbackEnabled = preferences.getBool("routeFallback", true);
   radarTrailsEnabled = preferences.getBool("radarTrails", true);
   radarSweepLine.store(preferences.getBool("radarSweepLine", false), std::memory_order_relaxed);
+  radarSweepDurationMs.store(RadarSweep::duration(preferences.getUShort("radarSweepMs", RadarSweep::PeriodMs)), std::memory_order_relaxed);
   hideSportAircraft = preferences.getBool("hideSport", true);
   altitudeFilterEnabled = preferences.getBool("altFilter", false);
   maximumAltitudeFt = preferences.getInt(
@@ -8233,10 +8249,10 @@ uint32_t displayDrawIntervalMs() {
     if (!environmentIdleDisplayEnabled && pageEnabled[7]) {
       if (!radarSweepIntervalSeconds) return 500;
       if (!radarSweepStarted) return 25;
-      const uint32_t cycleMs =
-          static_cast<uint32_t>(radarSweepIntervalSeconds) * 1000U;
+      const uint16_t sweepDuration = radarSweepDurationMs.load(std::memory_order_relaxed);
+      const uint32_t cycleMs = RadarSweep::cycleMs(radarSweepIntervalSeconds, sweepDuration);
       const uint32_t elapsed = (millis() - radarSweepStarted) % cycleMs;
-      if (elapsed < RADAR_SWEEP_PERIOD_MS)
+      if (elapsed < sweepDuration)
         return RADAR_SWEEP_DRAW_INTERVAL_MS;
       return min(250U, cycleMs - elapsed);
     }
@@ -8250,10 +8266,10 @@ uint32_t displayDrawIntervalMs() {
     if (page == 7) {
       if (!radarSweepIntervalSeconds) return 250;
       if (!radarSweepStarted) return 25;
-      const uint32_t cycleMs =
-          static_cast<uint32_t>(radarSweepIntervalSeconds) * 1000U;
+      const uint16_t sweepDuration = radarSweepDurationMs.load(std::memory_order_relaxed);
+      const uint32_t cycleMs = RadarSweep::cycleMs(radarSweepIntervalSeconds, sweepDuration);
       const uint32_t elapsed = (millis() - radarSweepStarted) % cycleMs;
-      if (elapsed < RADAR_SWEEP_PERIOD_MS)
+      if (elapsed < sweepDuration)
         return RADAR_SWEEP_DRAW_INTERVAL_MS;
       return min(250U, cycleMs - elapsed);
     }

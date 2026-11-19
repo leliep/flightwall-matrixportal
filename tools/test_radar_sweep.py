@@ -13,7 +13,7 @@ a=s.index('  html += F("<label>Radar-Umlauf<select');b=s.index('  if (!radarTrai
 assert s.rfind('#endif',0,a)>s.rfind('#if FLIGHTWALL_HAS_MATRIX',0,a)
 export='\n'.join(line for line in s.splitlines() if line.strip().startswith('settings["radar_sweep_'))
 a=s.index('  bool restoredSweepLine = false;');validate=s[a:s.index('  settingsWritePreparing = true;',a)]
-restore='\n'.join(line for line in s.splitlines() if line.startswith('  if (!s["radar_sweep_interval_seconds"]') or line.startswith('  if (hasSweepStyle) preferences.'))
+restore='\n'.join(line for line in s.splitlines() if line.startswith('  if (!s["radar_sweep_interval_seconds"]') or line.startswith('  if (hasSweepStyle) preferences.') or line.startswith('  if (!s["radar_sweep_duration_ms"]'))
 a=s.index('    if (webServer.hasArg("radarSweepInterval"))');saveform=s[a:s.index('    radarTrailsEnabled =',a)]
 write='\n'.join(line for line in s.splitlines() if line.startswith('    preferences.put') and 'radarSweep' in line)
 assert s.index('settings["radar_sweep_style"]')<s.index('#if FLIGHTWALL_HAS_MATRIX',s.index('PsramBuffer configurationJson()'))
@@ -35,12 +35,12 @@ template<class T,class L,class H> T constrain(T n,L lo,H hi){return std::max(sta
 constexpr float PI=3.14159265358979323846F;
 constexpr int16_t MATRIX_WIDTH=128,RADAR_CENTER_Y=15,RADAR_RADIUS_PIXELS=15;
 constexpr uint8_t RADAR_RADIUS_DOT_COUNT=32;
-constexpr uint32_t RADAR_SWEEP_PERIOD_MS=800,RADAR_SWEEP_SESSION_GAP_MS=750,IDLE_BLINK_HALF_PERIOD_MS=500;
+constexpr uint32_t RADAR_SWEEP_SESSION_GAP_MS=750,IDLE_BLINK_HALF_PERIOD_MS=500;
 constexpr uint8_t RADAR_POINT_SELECTED=1,RADAR_POINT_SPECIAL=2,RADAR_POINT_EMERGENCY=4,RADAR_POINT_GROUND=8;
 uint16_t red=0xf800,yellow=0xffe0,violet=0xf81f,orange=0xfd20,cyan=0x07ff,blue=0x001f,white=0xffff,green=0x07e0,idleErrorPixel=0x1234;
 int width=128;int16_t matrixLayoutWidth(){return width;}
 float displayRadiusKm=15,viewHeading=0;
-uint8_t radarSweepIntervalSeconds=5;std::atomic<bool>radarSweepLine{false};
+uint8_t radarSweepIntervalSeconds=5;std::atomic<bool>radarSweepLine{false};std::atomic<uint16_t>radarSweepDurationMs{800};
 uint32_t radarSweepStarted=0,radarSweepLastDraw=0,clockMs=1000;
 uint32_t millis(){return clockMs;}
 int transitionPercent=100;bool displayedRadarTrailsEnabled=true;
@@ -62,7 +62,7 @@ RadarPoint radarPoints[64];size_t radarPointCount=0;
 '''+''.join(function(f) for f in ['uint16_t radarPointColor(const RadarPoint &point)','int16_t radarCenterX()', 'void drawRadarRing()','bool radarPointCoordinates(float distanceKm, float bearing,\n                           int16_t &x, int16_t &y, int16_t width = MATRIX_WIDTH)','void drawRadarPage()'])+r'''
 struct Prefs{
  std::map<std::string,bool>bools;std::map<std::string,int>ints;
- void putBool(const char*k,bool v){bools[k]=v;}void putUChar(const char*k,int v){ints[k]=v;}
+ void putBool(const char*k,bool v){bools[k]=v;}void putUChar(const char*k,int v){ints[k]=v;}void putUShort(const char*k,int v){ints[k]=v;}
  bool getBool(const char*k,bool def){return bools.count(k)?bools[k]:def;}
 }preferences;
 struct Server{
@@ -89,6 +89,13 @@ JsonDocument backup(){JsonDocument doc;JsonObject settings=doc.to<JsonObject>();
 }
 void draw(uint32_t now){clockMs=now;matrix.clear();drawRadarPage();}
 int main(){
+ uint16_t durationValue=800;
+ assert(RadarSweep::duration(-1)==800 && RadarSweep::duration(9000)==4000 && RadarSweep::duration(1550)==1600);
+ assert(RadarSweep::parseSeconds("4.0",durationValue) && durationValue==4000);
+ assert(RadarSweep::parseSeconds("0.8",durationValue) && durationValue==800);
+ for(const char*bad:{"", "0", "0.7", "4.1", "nan", "inf", "bad", "2x"})assert(!RadarSweep::parseSeconds(bad,durationValue));
+ assert(RadarSweep::cycleMs(2,4000)==4000 && RadarSweep::cycleMs(5,4000)==5000 && RadarSweep::cycleMs(0,4000)==0);
+ assert(RadarSweep::sampleCount(4000)==160 && RadarSweep::step(3975,4000)==160);
  assert(RadarSweep::step(UINT32_MAX)==32);
  assert(RadarSweep::step(0)==0 && RadarSweep::step(194)==8 && RadarSweep::step(388)==16 && RadarSweep::step(581)==24 && RadarSweep::step(775)==32);
  bool style=false;assert(!RadarSweep::parseStyle("invalid",style));assert(!RadarSweep::parseStyle(nullptr,style));
@@ -115,19 +122,37 @@ int main(){
   // The original unsigned clock arithmetic remains valid over millis rollover.
   radarSweepStarted=UINT32_MAX-100;radarSweepLastDraw=radarSweepStarted;draw(93);assert(matrix.lines==1);
  }
+ for(bool asLine:{false,true})for(uint16_t duration:{800,1500,4000}){
+  radarSweepDurationMs=duration;radarSweepLine=asLine;radarSweepIntervalSeconds=2;
+  radarSweepStarted=radarSweepLastDraw=0;radarPointCount=0;
+  const uint32_t cycle=RadarSweep::cycleMs(2,duration);
+  for(uint32_t t=0;t<=cycle;t+=25){
+   draw(10000+t);
+   if(t<duration || t==cycle){
+    if(asLine)assert(matrix.lines==1);
+    if(t==0 || t==duration-25 || t==cycle)assert(matrix.pixels[0][width/2]==(asLine?matrix.color565(0,85,0):white));
+   }else assert(matrix.lines==0 && matrix.pixels[0][width/2]!=white);
+   if(duration==4000 && t==2000)assert(matrix.pixels[30][width/2-1]==(asLine?matrix.color565(0,85,0):white) || matrix.pixels[30][width/2]==(asLine?matrix.color565(0,85,0):white) || matrix.pixels[30][width/2+1]==(asLine?matrix.color565(0,85,0):white));
+  }
+ }
+ radarSweepDurationMs=800;
  radarSweepLine=false;
  assert(std::string(renderForm().c_str()).find("value='dot' selected")!=std::string::npos);
  radarSweepLine=true;
  assert(std::string(renderForm().c_str()).find("value='line' selected")!=std::string::npos);
- webServer.args={{"radarSweepStyle","line"},{"radarSweepInterval","7"}};save();
+ webServer.args={{"radarSweepStyle","line"},{"radarSweepInterval","7"},{"radarSweepDuration","4.0"}};save();
  assert(radarSweepLine && radarSweepIntervalSeconds==7 && preferences.bools["radarSweepLine"] && preferences.ints["radarSweepSec"]==7);
- auto doc=backup();assert(std::string(doc["radar_sweep_style"].as<const char*>())=="line" && doc["radar_sweep_interval_seconds"]==7);
- JsonDocument empty;restore(empty.as<JsonObjectConst>());assert(preferences.bools["radarSweepLine"]); // legacy backup preserves style
+ assert(radarSweepDurationMs==4000 && preferences.ints["radarSweepMs"]==4000);
+ auto doc=backup();assert(doc["radar_sweep_duration_ms"]==4000);assert(std::string(doc["radar_sweep_style"].as<const char*>())=="line" && doc["radar_sweep_interval_seconds"]==7);
+ JsonDocument empty;restore(empty.as<JsonObjectConst>());assert(preferences.bools["radarSweepLine"] && preferences.ints["radarSweepMs"]==4000); // legacy backup preserves style/duration
  JsonDocument invalid;invalid["radar_sweep_style"]="invalid";restore(invalid.as<JsonObjectConst>());assert(webServer.status==400 && preferences.bools["radarSweepLine"]);
  invalid["radar_sweep_style"]=42;restore(invalid.as<JsonObjectConst>());assert(webServer.status==400);
+ doc["radar_sweep_duration_ms"]=4000;
  doc["radar_sweep_style"]="dot";doc["radar_sweep_interval_seconds"]=0;restore(doc.as<JsonObjectConst>());
  assert(webServer.status==200 && !preferences.bools["radarSweepLine"] && preferences.ints["radarSweepSec"]==0);
- webServer.args.clear();save();assert(radarSweepLine); // missing form key also preserves style
+ assert(preferences.ints["radarSweepMs"]==4000);
+ webServer.args={{"radarSweepDuration","bad"}};save();assert(radarSweepDurationMs==4000);
+ webServer.args.clear();save();assert(radarSweepLine && radarSweepDurationMs==4000); // missing form key also preserves style
  std::cout<<"Radar sweep: dot/beam, cardinal endpoints, off/timing/rollover, 125/128, target/trail priority, shared form/save/backup/restore passed\n";
 }
 '''

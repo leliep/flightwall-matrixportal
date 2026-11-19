@@ -60,7 +60,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.57` |
+| Firmware | `3.6.1-dual-target.58` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel), optional 125 nutzbare Spalten, und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -609,17 +609,24 @@ Radarspuren werden darüber gezeichnet. Das funktioniert auf der Matrix mit
 
 Das ebenfalls unter **Radar** angeordnete Umlaufintervall ist für beide Varianten
 von 1 bis 10 Sekunden konfigurierbar; `0` schaltet Punkt beziehungsweise Strich
-aus. Der Standardwert beträgt 5 Sekunden. Ein einzelner Umlauf dauert weiterhin
-etwa 0,8 Sekunden und endet sichtbar wieder bei 12 Uhr. Der Browser animiert
-diesen Umlauf lokal, ohne zusätzliche Controllerabfragen; außerhalb des Umlaufs
+aus. Der Standardwert beträgt 5 Sekunden. Unter **Dauer eines Umlaufs** ist ab
+`.58` zusätzlich die Geschwindigkeit einstellbar: **0,8 bis 4,0 Sekunden** in
+0,1-Sekunden-Schritten, Standard 0,8 Sekunden. Jeder Umlauf endet sichtbar
+wieder bei 12 Uhr. Das Intervall bezeichnet weiterhin den Startabstand. Ist die
+Dauer länger als das Intervall, gilt die Dauer als Mindestabstand: Ein Umlauf
+wird vollständig beendet und der nächste beginnt ohne Pause. Beispiel: Bei
+2 Sekunden Intervall und 4 Sekunden Dauer läuft alle 4 Sekunden ein vollständiger
+Umlauf. Langsame Umläufe erhalten mehr Winkelpositionen bei gleicher Bildfrequenz.
+Der Browser animiert diesen Umlauf lokal, ohne zusätzliche Controllerabfragen; außerhalb des Umlaufs
 wird seltener neu gezeichnet. Die Darstellung benötigt keinen neuen Bild- oder
 Spurpuffer auf dem Controller.
 
-Stil und Intervall bleiben nach Updates erhalten und werden als
-`radar_sweep_style` (`dot`/`line`) und `radar_sweep_interval_seconds` gesichert.
-Ältere Sicherungen ohne Stilfeld behalten eine vorhandene Auswahl bei;
-frisch eingerichtete Controller verwenden den Punkt. Status- und Display-API
-liefern beide Werte. Die Matrix-Webanzeige erhält weiterhin kein zusätzliches Radar.
+Stil, Intervall und Dauer bleiben nach Updates erhalten und werden als
+`radar_sweep_style` (`dot`/`line`), `radar_sweep_interval_seconds` und
+`radar_sweep_duration_ms` (800–4000 Millisekunden) gesichert. Ältere Sicherungen
+ohne das jeweilige neue Feld behalten eine vorhandene Auswahl beziehungsweise
+Dauer bei; frisch eingerichtete Controller verwenden den Punkt. Status- und Display-API
+liefern alle drei Werte. Die Matrix-Webanzeige erhält weiterhin kein zusätzliches Radar.
 
 Radarspuren zeigen auf Matrix und Headless-Webradar die beobachteten Positionen
 der letzten 60 Sekunden als einzelne, mit dem Alter dunkler werdende Punkte.

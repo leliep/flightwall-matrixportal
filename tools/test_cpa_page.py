@@ -22,6 +22,8 @@ assert processor.index('detectSpecialTypes(aircraft);') < processor.index('aircr
 stub=r'''
 #include <Arduino.h>
 #include "AircraftTypeNames.hpp"
+#include "RadarSweep.hpp"
+#include <atomic>
 #include <cassert>
 #include <iostream>
 #include <string>
@@ -53,7 +55,8 @@ bool aircraftIsInsideDisplayRadius() { return true; }
 uint8_t currentPageSlot=0,pageOrder[8]={2,0,1,3,4,5,6,7},customScrollSpeed=1;
 constexpr uint8_t PAGE_COUNT=8;
 uint8_t radarSweepIntervalSeconds=5;uint32_t radarSweepStarted=0;
-constexpr uint32_t RADAR_SWEEP_PERIOD_MS=800,RADAR_SWEEP_DRAW_INTERVAL_MS=25;
+std::atomic<uint16_t>radarSweepDurationMs{800};
+constexpr uint32_t RADAR_SWEEP_DRAW_INTERVAL_MS=25;
 '''
 main=r'''
 int main() {
@@ -132,6 +135,11 @@ int main() {
  pageOrder[0]=6;assert(displayDrawIntervalMs()==50);
  pageOrder[0]=4;customScrollSpeed=2;assert(displayDrawIntervalMs()==25);
  pageOrder[0]=0;assert(displayDrawIntervalMs()==250);
+ pageOrder[0]=7;radarSweepDurationMs=4000;radarSweepIntervalSeconds=2;radarSweepStarted=1000;
+ now=3000;assert(displayDrawIntervalMs()==25);now=4975;assert(displayDrawIntervalMs()==25);
+ now=5000;assert(displayDrawIntervalMs()==25); // effective cycle 4 s, no reset after 2 s
+ radarSweepIntervalSeconds=5;now=5200;assert(displayDrawIntervalMs()==250);
+ radarSweepIntervalSeconds=0;assert(displayDrawIntervalMs()==250);
  std::cout<<"CPA/airport tests passed: source descriptions, Robinson fallback, normal/multi-hop airport return cycles, duration and 50-ms scheduling\n";
 }
 '''

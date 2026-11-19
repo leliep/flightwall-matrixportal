@@ -59,3 +59,17 @@ now=7000;draw();assert.equal(lastPixel(64,0).color,'#f3f8fc');
 state.web_radar=false;draw();state.web_radar=true;now=7100;draw();assert.equal(lastPixel(64,0).color,'#f3f8fc');
 assert.equal(vm.runInContext('radarSweepNextDelay',sandbox),25);
 console.log('Web sweep tests passed: dot/beam, clockwise endpoints, period/off, restart, trail/target priority');
+
+// Slower sweeps retain endpoint visibility and finish even with a shorter interval.
+for(const line of [false,true])for(const duration of [800,1500,4000]){
+  state.radar_sweep_style=line?'line':'dot';state.radar_sweep_interval_seconds=2;state.radar_sweep_duration_ms=duration;state.radar.points=[];
+  state.web_radar=false;draw();state.web_radar=true;now=10000;draw();
+  const color=line?'#0b552b':'#f3f8fc',cycle=Math.max(2000,duration);
+  assert.equal(lastPixel(64,0).color,color);
+  now=10000+duration-25;draw();assert.equal(lastPixel(64,0).color,color);
+  if(duration<cycle){now=10000+duration;draw();assert(!draws.some(p=>p.color===color))}
+  else {now=12000;draw();assert(draws.some(p=>p.color===color&&p.y===30&&Math.abs(p.x-64)<=1))}
+  now=10000+cycle;draw();assert.equal(lastPixel(64,0).color,color);
+  state.radar_sweep_interval_seconds=0;draw();assert(!draws.some(p=>p.color===color));
+}
+console.log('Web sweep duration passed: 0.8/1.5/4s, independent interval, complete continuous sweep and off');

@@ -31,14 +31,15 @@ function metric(label,value,unit,extra=''){return `<article class="card"><div cl
 function radarColor(flags){if(flags&4)return '#ff6475';if(flags&1)return '#ffd166';if(flags&2)return '#bd7aff';if(flags&8)return '#ff9b54';return '#39d5df'}
 function radarSweepPosition(s,now){
   const raw=Number(s.radar_sweep_interval_seconds??5),interval=Number.isFinite(raw)?Math.max(0,Math.min(10,Math.floor(raw))):5;
-  const line=s.radar_sweep_style==='line',settings=interval+':'+line;
+  const requested=Number(s.radar_sweep_duration_ms??800),duration=Number.isFinite(requested)?Math.round(Math.max(800,Math.min(4000,requested))/100)*100:800;
+  const line=s.radar_sweep_style==='line',settings=interval+':'+line+':'+duration;
   if(radarSweepEpoch===null||radarSweepSettings!==settings){radarSweepEpoch=now;radarSweepSettings=settings}
   radarSweepNextDelay=250;
   if(!interval)return null;
-  const elapsed=Math.floor(Math.max(0,now-radarSweepEpoch))%(interval*1000);
-  if(elapsed>=800){radarSweepNextDelay=Math.min(250,interval*1000-elapsed);return null}
+  const cycle=Math.max(interval*1000,duration),elapsed=Math.floor(Math.max(0,now-radarSweepEpoch))%cycle;
+  if(elapsed>=duration){radarSweepNextDelay=Math.min(250,cycle-elapsed);return null}
   radarSweepNextDelay=25;
-  const step=Math.min(32,Math.floor((elapsed*32+387)/775)),angle=-Math.PI/2+2*Math.PI*step/32;
+  const count=duration/25,endpoint=duration-25,step=Math.min(count,Math.floor((elapsed*count+Math.floor(endpoint/2))/endpoint)),angle=-Math.PI/2+2*Math.PI*step/count;
   return {x:64+Math.round(Math.cos(angle)*15),y:15+Math.round(Math.sin(angle)*15),line};
 }
 function drawRadarBeam(g,x,y){

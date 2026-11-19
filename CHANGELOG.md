@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.6.1-dual-target.58 – 2026-11-19
+
+- Separate Umlaufdauer für Punkt und Strich: 0,8–4,0 Sekunden in 0,1-Sekunden-Schritten,
+  Standard unverändert 0,8 Sekunden; gemeinsame Konfiguration für Matrix und Headless
+- Langsame Umläufe bleiben vollständig, auch bei kürzerem Startintervall; effektiver
+  Startabstand mindestens die Umlaufdauer, Intervall 0 schaltet weiterhin aus
+- Mehr Winkelpositionen für langsame Umläufe bei gleicher Bildfrequenz; Start/Ende
+  bei 12 Uhr, 125-/128-Pixel-Layout und Ebenenprioritäten erhalten
+- NVS, Sicherung/Wiederherstellung und Status-/Display-API mit radar_sweep_duration_ms;
+  alte Sicherungen ohne Dauerfeld erhalten den vorhandenen Wert
+- Codes aller drei Controller geprüft und bestehende Konfigurationen/Lookups gesichert;
+  keine neuen Codes außerhalb des bereits gesicherten Grundbestands; JAK bleibt offen
+
 ## 3.6.1-dual-target.57 – 2026-11-19
 
 - Gemeinsame Radar-Konfiguration: umlaufender Punkt oder ein Pixel breiter grüner
