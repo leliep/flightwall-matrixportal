@@ -2,6 +2,9 @@
 
 ## 3.6.1-dual-target.58 – 2026-11-19
 
+- Vor OTA am 20.11.2026 zusätzlich SXB (Straßburg) mit Koordinaten aus OurAirports
+  ergänzt; bestehende Konfigurationen und Lookup-Ergänzungen bleiben erhalten
+
 - Separate Umlaufdauer für Punkt und Strich: 0,8–4,0 Sekunden in 0,1-Sekunden-Schritten,
   Standard unverändert 0,8 Sekunden; gemeinsame Konfiguration für Matrix und Headless
 - Langsame Umläufe bleiben vollständig, auch bei kürzerem Startintervall; effektiver

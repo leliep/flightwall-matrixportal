@@ -455,6 +455,7 @@ const AirportName names[] = {
   {"SVG", "Stavanger"},
   {"SVO", "Moskau-Scheremetjewo"},
   {"SVQ", "Sevilla"},
+  {"SXB", "Straßburg"},
   {"SYD", "Sydney"},
   {"SZF", "Samsun"},
   {"SZG", "Salzburg"},
