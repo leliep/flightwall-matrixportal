@@ -60,7 +60,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.58` |
+| Firmware | `3.6.1-dual-target.59` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel), optional 125 nutzbare Spalten, und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -757,6 +757,11 @@ seriellen Monitor oder Router angezeigte IP-Adresse verwendet werden.
 Werden mehrere Controller derselben Variante gleichzeitig betrieben, verwenden
 sie denselben mDNS-Namen. In diesem Fall sollten die numerischen IP-Adressen oder
 feste DHCP-Zuordnungen im Router verwendet werden.
+
+Die FlightWall-Anzeige unter `/display` verwendet auf Tablet und Desktop ab 721 Pixel
+Breite kleinere vertikale Abstände und benötigt dadurch ungefähr 10 % weniger Höhe.
+Schriftgrößen und Radar-Seitenverhältnis bleiben erhalten. Auf schmalen Smartphones
+bleiben die Karten untereinander angeordnet und die Seite scrollbar.
 
 Die Konfigurationsseite ist für iPhone, Tablet und Desktop optimiert. Kurze
 Werte und zusammengehörige Optionen werden in einem kompakten, responsiven

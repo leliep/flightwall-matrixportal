@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.6.1-dual-target.59 – 2026-11-20
+
+- Webdisplay beider Varianten auf Tablet und Desktop durch kleinere vertikale
+  Abstände ungefähr 10 % kompakter; Schriftgrößen und Radar-Proportionen erhalten
+- Schmale Smartphone-Ansicht weiterhin untereinander angeordnet und scrollbar;
+  keine neue Konfiguration und keine Änderung an Matrixdarstellung oder Lookups
+
+
 ## 3.6.1-dual-target.58 – 2026-11-19
 
 - Vor OTA am 20.11.2026 zusätzlich SXB (Straßburg) mit Koordinaten aus OurAirports
