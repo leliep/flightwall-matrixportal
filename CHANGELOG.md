@@ -2,6 +2,9 @@
 
 ## 3.6.1-dual-target.59 – 2026-11-20
 
+- Vor OTA am 21.11.2026 AMD, ARW, LIR und SPM mit Koordinaten (OurAirports)
+  sowie FLD, HRN und QAF (FAA) ergänzt; bestehende Lookup-Ergänzungen unverändert
+
 - Webdisplay beider Varianten auf Tablet und Desktop durch kleinere vertikale
   Abstände ungefähr 10 % kompakter; Schriftgrößen und Radar-Proportionen erhalten
 - Schmale Smartphone-Ansicht weiterhin untereinander angeordnet und scrollbar;

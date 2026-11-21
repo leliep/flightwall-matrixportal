@@ -94,6 +94,11 @@
     "longitude": 37.226869,
     "elevation_ft": 1276
   },
+  "AMD": {
+    "elevation_ft": 189,
+    "latitude": 23.0772,
+    "longitude": 72.634697
+  },
   "AMM": {
     "latitude": 31.722601,
     "longitude": 35.993198,
@@ -133,6 +138,11 @@
     "latitude": 59.64849,
     "longitude": 17.928829,
     "elevation_ft": 137
+  },
+  "ARW": {
+    "elevation_ft": 352,
+    "latitude": 46.176136,
+    "longitude": 21.264322
   },
   "ASB": {
     "latitude": 37.986801,
@@ -1454,6 +1464,11 @@
     "longitude": 9.27674,
     "elevation_ft": 353
   },
+  "LIR": {
+    "elevation_ft": 270,
+    "latitude": 10.5933,
+    "longitude": -85.544403
+  },
   "LIS": {
     "latitude": 38.7813,
     "longitude": -9.13592,
@@ -2193,6 +2208,11 @@
     "latitude": 28.626499,
     "longitude": -17.7556,
     "elevation_ft": 107
+  },
+  "SPM": {
+    "elevation_ft": 1197,
+    "latitude": 49.976507,
+    "longitude": 6.698413
   },
   "SPU": {
     "latitude": 43.538898,

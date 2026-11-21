@@ -64,7 +64,7 @@ int16_t matrixLayoutWidth() {
 }
 constexpr uint8_t BIT_DEPTH = 3;
 constexpr char APP_VERSION[] = "3.6.1-dual-target.59";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-20 compact web display";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-21 compact web display and lookup update";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
