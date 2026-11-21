@@ -31,6 +31,8 @@ jobs:
           python3 tools/test_cpa_page.py
           python3 tools/test_matrix_layout.py
           python3 tools/test_boot_screen.py
+          python3 tools/test_manual_selection.py
+          node tools/test_web_selection.mjs
           node tools/test_web_radar.mjs
           node tools/test_site_name.mjs
       - name: Build MatrixPortal firmware

@@ -14,16 +14,17 @@ main{width:min(1040px,100%);margin:auto}.top{display:flex;align-items:center;jus
 .route{margin-top:32px;padding-top:28px;border-top:1px solid var(--line);text-align:center}.routeCodes{font-size:clamp(30px,6vw,54px);font-weight:850;line-height:1.15;overflow-wrap:anywhere}.routeCodes span{color:var(--cyan);padding:0 .16em}.routeNames{color:var(--muted);margin-top:9px;font-size:clamp(13px,2vw,17px);overflow-wrap:anywhere}
 .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-top:14px}.card{background:linear-gradient(145deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:18px;padding:18px;min-width:0}.label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.11em;font-weight:750}.value{font-size:clamp(24px,4vw,38px);font-weight:850;margin-top:8px;white-space:nowrap}.unit{font-size:.5em;color:var(--muted);margin-left:4px}.trend{font-size:.65em;margin-left:7px}.up{color:var(--green)}.down{color:var(--orange)}
 .lower{display:grid;grid-template-columns:1.2fr .8fr;gap:13px;margin-top:13px}.direction{display:flex;align-items:center;gap:20px}.compass{flex:0 0 88px;width:88px;height:88px;border-radius:50%;border:1px solid #426172;background:radial-gradient(circle,#193444,#09141c 70%);display:grid;place-items:center;position:relative}.compass:before,.compass:after{content:"";position:absolute;background:#42617255}.compass:before{width:1px;height:100%}.compass:after{height:1px;width:100%}.needle{position:relative;z-index:1;font-size:42px;color:var(--yellow);line-height:1}.look{font-size:clamp(25px,5vw,42px);font-weight:850}.bearing{color:var(--muted);margin-top:4px}.cpaState{color:var(--green);font-weight:700;margin-top:7px}.reason{color:var(--muted);font-size:13px;line-height:1.35;margin-top:9px}.departing{color:var(--orange)}
-.radarPanel{max-width:560px;margin:14px auto 0;padding:12px;background:linear-gradient(145deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:18px;box-shadow:0 18px 50px #0006}.radarPanel[hidden]{display:none}.radarTitle{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 2px 9px}.radarTitle strong{font-size:13px;text-transform:uppercase;letter-spacing:.12em}.radarMeta{color:var(--muted);font-size:12px}.radarCanvas{display:block;width:100%;height:auto;aspect-ratio:4/1;background:#010406;border:1px solid #233945;border-radius:9px;image-rendering:pixelated;image-rendering:crisp-edges}
+.radarPanel{max-width:560px;margin:14px auto 0;padding:12px;background:linear-gradient(145deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:18px;box-shadow:0 18px 50px #0006}.radarPanel[hidden]{display:none}.radarControls{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px;font-size:12px;color:var(--muted);flex-wrap:wrap}.radarControls button{font:inherit;color:var(--text);background:#193444;border:1px solid #426172;border-radius:8px;padding:7px 10px;cursor:pointer}.radarControls button[hidden]{display:none}.radarCanvas{cursor:crosshair;touch-action:pan-y}.radarTitle{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 2px 9px}.radarTitle strong{font-size:13px;text-transform:uppercase;letter-spacing:.12em}.radarMeta{color:var(--muted);font-size:12px}.radarCanvas{display:block;width:100%;height:auto;aspect-ratio:4/1;background:#010406;border:1px solid #233945;border-radius:9px;image-rendering:pixelated;image-rendering:crisp-edges}
 .siteName{color:var(--muted);font-size:13px;line-height:1.4;margin:-5px 0 14px;overflow-wrap:anywhere}.siteName[hidden]{display:none}
 footer{display:flex;justify-content:space-between;gap:16px;margin-top:16px;color:var(--muted);font-size:13px}a{color:#76dce5;text-decoration:none}a:hover{text-decoration:underline}.empty{padding:60px 20px;text-align:center;color:var(--muted)}
 /* Keep desktop/tablet displays about 10% shorter without shrinking text.
    Narrow phones retain their stacked, scrollable layout below. */
 @media(min-width:721px){body{padding-top:max(16px,env(safe-area-inset-top));padding-bottom:max(18px,env(safe-area-inset-bottom))}.top{margin-bottom:14px}.hero{padding-block:clamp(18px,3.6vw,32px)}.typeDescription{margin-top:12px}.airline{margin-top:12px}.route{margin-top:24px;padding-top:20px}.routeNames{margin-top:7px}.grid{margin-top:12px}.card{padding-block:14px}.value{margin-top:6px}.lower{margin-top:11px}.cpaState{margin-top:6px}.reason{margin-top:7px}.radarPanel{margin-top:10px;padding-block:10px}.radarTitle{margin-bottom:7px}.siteName{margin-bottom:11px}footer{margin-top:12px}}
 @media(max-width:720px){body{padding-left:12px;padding-right:12px}.top{margin-bottom:12px}.hero{border-radius:20px;padding:22px}.flightline{align-items:start}.callsign{font-size:clamp(45px,17vw,72px)}.type{font-size:20px}.route{margin-top:25px;padding-top:22px}.grid{grid-template-columns:repeat(2,1fr)}.card{padding:15px;border-radius:15px}.value{font-size:clamp(25px,8vw,34px)}.lower{grid-template-columns:1fr}.compass{width:72px;height:72px;flex-basis:72px}.needle{font-size:35px}footer{flex-direction:column-reverse;gap:7px}}
-</style></head><body><main><div class="top"><div class="brand"><span class="wing">✈</span><span>FlightWall</span></div><div class="live"><span class="pulse" id="pulse"></span><span id="status">verbinde…</span></div></div><div class="siteName" id="siteName" hidden></div><div id="content"><section class="hero empty">Warte auf Flugzeugdaten…</section></div><section class="radarPanel" id="radarPanel" hidden><div class="radarTitle"><strong>Radar</strong><span class="radarMeta" id="radarMeta">–</span></div><canvas class="radarCanvas" id="radarCanvas" width="128" height="32"></canvas></section><footer><span id="updated">–</span><span><a href="/status">Status</a> · <a href="/config">Konfiguration</a></span></footer></main>
+</style></head><body><main><div class="top"><div class="brand"><span class="wing">✈</span><span>FlightWall</span></div><div class="live"><span class="pulse" id="pulse"></span><span id="status">verbinde…</span></div></div><div class="siteName" id="siteName" hidden></div><div id="content"><section class="hero empty">Warte auf Flugzeugdaten…</section></div><section class="radarPanel" id="radarPanel" hidden><div class="radarTitle"><strong>Radar</strong><span class="radarMeta" id="radarMeta">–</span></div><canvas class="radarCanvas" id="radarCanvas" width="128" height="32" aria-label="Radar: Flugzeug anklicken oder antippen"></canvas><div class="radarControls"><span id="radarSelectionHint" role="status" aria-live="polite">Flugzeug anklicken oder antippen</span><button id="radarAutomatic" type="button" hidden>Automatik fortsetzen</button></div></section><footer><span id="updated">–</span><span><a href="/status">Status</a> · <a href="/config">Konfiguration</a></span></footer></main>
 <script>
 const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let radarSelectionBusy=false;
 let radarState=null,radarSweepEpoch=null,radarSweepSettings='',radarSweepNextDelay=250;
 function num(v,d=0){return Number.isFinite(v)?Number(v).toFixed(d).replace('.',','):'–'}
 function countdown(v){if(!Number.isFinite(v))return '';const s=Math.max(0,Math.round(v));return s<60?s+' s':Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
@@ -74,15 +75,50 @@ function drawRadar(s){
     const a=(b-heading)*Math.PI/180,x=64+Math.round(Math.sin(a)*d*15/r),y=15-Math.round(Math.cos(a)*d*15/r);
     if(x<0||x>127||y<0||y>31)continue;
     g.fillStyle=radarColor(flags);g.fillRect(x,y,1,1);
+    if(s.manual_selection?.active&&p[4]===s.manual_selection.id){
+      g.fillStyle='#f4f8fb';for(const dx of [-3,3])for(const dy of [-3,3])g.fillRect(x+dx,y+dy,1,1);
+      g.fillStyle=radarColor(flags);
+    }
     if(selected){g.fillRect(x-1,y,1,1);g.fillRect(x+1,y,1,1);g.fillRect(x,y-1,1,1);g.fillRect(x,y+1,1,1)}
   }
   $('radarMeta').textContent='Radius '+num(r,1)+' km · '+points.length+' '+(points.length===1?'Ziel':'Ziele')+(s.radar_trails_enabled&&s.radar_trails_available===false?' · Spuren nicht verfügbar':'');
 }
 
+function renderManualSelection(s){
+  const hint=$('radarSelectionHint'),button=$('radarAutomatic');if(!hint||!button)return;
+  const remaining=Math.max(0,Math.ceil((s.manual_selection?.remaining_seconds||0)-(performance.now()-(s.radarReceivedAt??performance.now()))/1000));
+  const active=!!s.manual_selection?.active&&remaining>0;button.hidden=!active;button.disabled=radarSelectionBusy;
+  hint.textContent=active?'Manuelle Auswahl · noch '+remaining+' s'+(s.flight?.emergency?' · Notfall hat Vorrang':''):'Flugzeug anklicken oder antippen';
+}
+function radarHit(s,clientX,clientY,rect){
+  if(!s?.web_radar||!s.radar||performance.now()-(s.radarReceivedAt??0)>15000||!(s.radar.radius_km>0)||!rect.width||!rect.height)return null;
+  let nearest=null,best=12*12;
+  for(const p of s.radar.points||[]){
+    if(!/^[a-fA-F0-9]{16}$/.test(p[4]||'')||!Number.isFinite(p[0])||!Number.isFinite(p[1]))continue;
+    if((p[2]&4)&&Math.floor(Date.now()/500)%2!==0)continue;
+    const a=(p[1]-s.radar.view_heading)*Math.PI/180,x=64+Math.round(Math.sin(a)*p[0]*15/s.radar.radius_km),y=15-Math.round(Math.cos(a)*p[0]*15/s.radar.radius_km);
+    if(x<0||x>127||y<0||y>31)continue;
+    const distance=(clientX-rect.left-(x+.5)*rect.width/128)**2+(clientY-rect.top-(y+.5)*rect.height/32)**2;
+    if(distance<best){best=distance;nearest=p[4]}
+  }
+  return nearest;
+}
+async function selectRadarAircraft(id){
+  if(radarSelectionBusy)return;radarSelectionBusy=true;
+  try{
+    const r=await fetch('/api/radar-selection',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'id='+encodeURIComponent(id)});
+    if(!r.ok)throw Error();await update();
+  }catch(e){const hint=$('radarSelectionHint');if(hint)hint.textContent='Auswahl nicht möglich. Bitte erneut versuchen.'}
+  finally{radarSelectionBusy=false;const button=$('radarAutomatic');if(button)button.disabled=false}
+}
 function renderSiteName(s){const label=$('siteName');label.textContent=s.site_name||'';label.hidden=!s.site_name}
-function render(s){renderSiteName(s);const f=s.flight;if(!f.available){$('content').innerHTML='<section class="hero empty">Im Moment ist kein Flugzeug im Anzeigeradius.</section>';return}const departing=f.motion==='departing',codes=(f.route_codes||[f.origin,f.destination].filter(Boolean).join('-')||'–').split('-').map(esc).join('<span>→</span>'),names=esc(f.route_names||[f.origin_name,f.destination_name].filter(Boolean).join(' › ')||'Route unbekannt'),typeDescription=f.aircraft_type_description&&f.aircraft_type_description.trim().toUpperCase()!==(f.aircraft_type||'').trim().toUpperCase()?`<div class="typeDescription">${esc(f.aircraft_type_description)}</div>`:'',alert=f.emergency?`<div class="alert">${esc(f.squawk)} · ${esc(f.emergency_meaning)}${f.emergency_count>1?` · ${f.emergency_index}/${f.emergency_count}`:''}</div>`:'';$('content').innerHTML=`${alert}<section class="hero"><div class="eyebrow">${f.emergency?'Transponder-Notfall':'Aktuelles Flugzeug'}</div><div class="flightline"><div class="callsign">${esc(f.flight||'–')}</div><div class="type">${esc(f.aircraft_type||'–')}</div></div>${typeDescription}<div class="airline">${esc(f.airline||'Airline unbekannt')}${f.special_type?`<span class="special">${esc(f.special_type)}</span>`:''}</div><div class="route"><div class="routeCodes">${codes}</div><div class="routeNames">${names}</div></div></section><section class="grid">${metric('Entfernung',num(f.distance_km,1),'km')}${metric('Höhe',num(f.altitude_ft),'ft',trend(f))}${metric('Geschwindigkeit',num(f.speed_kmh),'km/h')}${metric('CPA',num(f.cpa_km,1),'km')}</section><section class="lower"><article class="card direction"><div class="compass"><span class="needle">${arrow(f.relative_bearing)}</span></div><div><div class="label">Blickrichtung</div><div class="look">${esc(look(f.relative_bearing))}</div><div class="bearing">${num(f.relative_bearing,0)}° relativ · ${esc(f.direction||'–')}</div></div></article><article class="card"><div class="label">Flugverlauf</div><div class="value">${esc(f.vertical_motion||'unbekannt')}</div><div class="cpaState ${departing?'departing':''}">${departing?'Entfernt sich':Number.isFinite(f.cpa_seconds)?'CPA in '+countdown(f.cpa_seconds):Number.isFinite(f.cpa_minutes)?'CPA in '+num(f.cpa_minutes)+' min':'Nähert sich'}</div><div class="reason">${esc(f.selection_reason||'')}</div></article></section>`}
+function render(s){renderSiteName(s);renderManualSelection(s);const f=s.flight;if(!f.available){$('content').innerHTML='<section class="hero empty">Im Moment ist kein Flugzeug im Anzeigeradius.</section>';return}const departing=f.motion==='departing',codes=(f.route_codes||[f.origin,f.destination].filter(Boolean).join('-')||'–').split('-').map(esc).join('<span>→</span>'),names=esc(f.route_names||[f.origin_name,f.destination_name].filter(Boolean).join(' › ')||'Route unbekannt'),typeDescription=f.aircraft_type_description&&f.aircraft_type_description.trim().toUpperCase()!==(f.aircraft_type||'').trim().toUpperCase()?`<div class="typeDescription">${esc(f.aircraft_type_description)}</div>`:'',alert=f.emergency?`<div class="alert">${esc(f.squawk)} · ${esc(f.emergency_meaning)}${f.emergency_count>1?` · ${f.emergency_index}/${f.emergency_count}`:''}</div>`:'';$('content').innerHTML=`${alert}<section class="hero"><div class="eyebrow">${f.emergency?'Transponder-Notfall':'Aktuelles Flugzeug'}</div><div class="flightline"><div class="callsign">${esc(f.flight||'–')}</div><div class="type">${esc(f.aircraft_type||'–')}</div></div>${typeDescription}<div class="airline">${esc(f.airline||'Airline unbekannt')}${f.special_type?`<span class="special">${esc(f.special_type)}</span>`:''}</div><div class="route"><div class="routeCodes">${codes}</div><div class="routeNames">${names}</div></div></section><section class="grid">${metric('Entfernung',num(f.distance_km,1),'km')}${metric('Höhe',num(f.altitude_ft),'ft',trend(f))}${metric('Geschwindigkeit',num(f.speed_kmh),'km/h')}${metric('CPA',num(f.cpa_km,1),'km')}</section><section class="lower"><article class="card direction"><div class="compass"><span class="needle">${arrow(f.relative_bearing)}</span></div><div><div class="label">Blickrichtung</div><div class="look">${esc(look(f.relative_bearing))}</div><div class="bearing">${num(f.relative_bearing,0)}° relativ · ${esc(f.direction||'–')}</div></div></article><article class="card"><div class="label">Flugverlauf</div><div class="value">${esc(f.vertical_motion||'unbekannt')}</div><div class="cpaState ${departing?'departing':''}">${departing?'Entfernt sich':Number.isFinite(f.cpa_seconds)?'CPA in '+countdown(f.cpa_seconds):Number.isFinite(f.cpa_minutes)?'CPA in '+num(f.cpa_minutes)+' min':'Nähert sich'}</div><div class="reason">${esc(f.selection_reason||'')}</div></article></section>`}
 async function update(){try{const r=await fetch('/api/display',{cache:'no-store'});if(!r.ok)throw 0;const s=await r.json();s.radarReceivedAt=performance.now();radarState=s;render(s);drawRadar(s);$('status').textContent=s.error||'Live · ADS-B OK';$('pulse').style.background=s.error?'var(--red)':'var(--green)';$('updated').textContent='Aktualisiert vor '+(s.age_seconds??0)+' s'}catch(e){$('status').textContent='Verbindung unterbrochen';$('pulse').style.background='var(--red)'}}
-setInterval(update,2000);function animateRadar(){drawRadar(radarState);setTimeout(animateRadar,radarSweepNextDelay)}animateRadar();update();
+setInterval(update,2000);
+$('radarCanvas').addEventListener('click',event=>{const id=radarHit(radarState,event.clientX,event.clientY,$('radarCanvas').getBoundingClientRect());if(id)selectRadarAircraft(id)});
+$('radarAutomatic').addEventListener('click',()=>selectRadarAircraft(''));
+setInterval(()=>{if(radarState)renderManualSelection(radarState)},1000);
+function animateRadar(){drawRadar(radarState);setTimeout(animateRadar,radarSweepNextDelay)}animateRadar();update();
 </script></body></html>)HTML";
 }  // namespace
 
@@ -92,6 +128,12 @@ String webDisplayPage(bool english) {
   if (!english) return html;
   struct Translation { const char *de; const char *en; };
   static const Translation translations[] = {
+    {"Radar: Flugzeug anklicken oder antippen", "Radar: click or tap an aircraft"},
+    {"Flugzeug anklicken oder antippen", "Click or tap an aircraft"},
+    {"Automatik fortsetzen", "Resume automatic selection"},
+    {"Manuelle Auswahl · noch ", "Manual selection · remaining "},
+    {" · Notfall hat Vorrang", " · emergency takes priority"},
+    {"Auswahl nicht möglich. Bitte erneut versuchen.", "Selection unavailable. Please try again."},
     {"verbinde…", "connecting…"}, {"Warte auf Flugzeugdaten…", "Waiting for aircraft data…"},
     {"Konfiguration", "Configuration"},
     {"Richtung unbekannt", "Direction unknown"}, {"rechte Schulter", "right rear"},

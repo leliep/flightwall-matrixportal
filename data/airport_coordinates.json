@@ -19,6 +19,11 @@
     "longitude": -2.19778,
     "elevation_ft": 215
   },
+  "ACC": {
+    "latitude": 5.605189800262451,
+    "longitude": -0.16678600013256073,
+    "elevation_ft": 205
+  },
   "ACE": {
     "latitude": 28.945499,
     "longitude": -13.6052,
@@ -1609,6 +1614,11 @@
     "longitude": -80.289751,
     "elevation_ft": 8
   },
+  "MIG": {
+    "latitude": 31.428101,
+    "longitude": 104.740997,
+    "elevation_ft": 7874
+  },
   "MIR": {
     "latitude": 35.758099,
     "longitude": 10.7547,
@@ -1953,6 +1963,11 @@
     "latitude": 42.431079,
     "longitude": 14.182981,
     "elevation_ft": 48
+  },
+  "PTY": {
+    "latitude": 9.07136,
+    "longitude": -79.383499,
+    "elevation_ft": 135
   },
   "PUJ": {
     "latitude": 18.567093,

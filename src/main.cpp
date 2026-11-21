@@ -1,4 +1,5 @@
 #include "TemporaryPsram.hpp"
+#include "ManualAircraftSelection.hpp"
 // Version generated: 2026-10-03 12:17:49 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
@@ -63,8 +64,8 @@ int16_t matrixLayoutWidth() {
 #endif
 }
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.59";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-21 compact web display and lookup update";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.60";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-21 manual radar aircraft selection";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -224,6 +225,7 @@ struct RadarPoint {
   float distanceKm = 0.0F;
   float bearing = 0.0F;
   uint8_t flags = 0;
+  uint64_t identity = 0;
 };
 
 constexpr uint8_t RADAR_POINT_SELECTED = 0x01;
@@ -295,6 +297,7 @@ class ApplicationStateLock {
 uint32_t applicationRevision = 0;
 uint32_t operationRevision = 0;
 bool pollRequested = false;
+ManualAircraftSelection manualAircraftSelection;
 bool outboundIoActive = false;
 void noteWebMutation() { ++applicationRevision; pollRequested = true; }
 void pulseWebActivity() {
@@ -2089,13 +2092,8 @@ float radarCoverageRadiusKm() {
 
 
 bool radarDataCollectionEnabled() {
-#if FLIGHTWALL_HAS_MATRIX
-  return pageEnabled[7];
-#else
-  // The headless controller supplies the web radar independently of the
-  // matrix-page settings retained in the shared configuration format.
+  // Both variants expose the interactive web radar, independent of matrix pages.
   return true;
-#endif
 }
 
 
@@ -3579,9 +3577,13 @@ bool fetchLocalFlight() {
       networkFlight.emergencyCount > 1 && emergencySelectionStarted &&
       now - emergencySelectionStarted >= EMERGENCY_ROTATION_MS;
   const String previousEmergencyHex = selectedEmergencyHex;
-  if (selectAircraft(result.candidates, config, selected,
+  bool hasSelection = selectAircraft(result.candidates, config, selected,
                      selectedEmergencyHex, advanceEmergency,
-                     emergencyCount, emergencyIndex)) {
+                     emergencyCount, emergencyIndex);
+  const Aircraft *manual = manualAircraftSelection.resolve(result.candidates, now,
+      hasSelection && selected.emergency, aircraftIdentity);
+  if (manual) { selected = *manual; hasSelection = true; }
+  if (hasSelection) {
     if (selected.emergency) {
       if (emergencyCount <= 1 || !emergencySelectionStarted ||
           selectedEmergencyHex != previousEmergencyHex)
@@ -3695,6 +3697,7 @@ bool fetchLocalFlight() {
                                : NAN;
     next.selectionReason = aircraftSelectionReason(
         selected, result.candidates, config, emergencyCount, emergencyIndex);
+    if (manual) next.selectionReason = uiText("Manuelle Radar-Auswahl", "Manual radar selection");
     if (selected.emergency || !selected.specialTypes.empty())
       markSpecialChronicleDisplayed(selected, next);
     updateDailyJournal(selected, next);
@@ -3778,6 +3781,7 @@ bool fetchLocalFlight() {
             }
           }
         }
+        point.identity = aircraftIdentity(candidate);
         point.distanceKm = candidate.distanceKm;
         point.bearing = candidate.bearing;
         point.flags = isSelected ? RADAR_POINT_SELECTED : 0;
@@ -6216,32 +6220,55 @@ void handleWebDisplay() {
 }
 
 
+void handleRadarSelection() {
+  webServer.sendHeader("Cache-Control", "no-store");
+  if (!webServer.hasArg("id")) {
+    webServer.send(400, "application/json", "{\"ok\":false}"); return;
+  }
+  const String id = webServer.arg("id");
+  if (!id.length()) {
+    manualAircraftSelection.clear(); noteWebMutation();
+    webServer.send(200, "application/json", "{\"ok\":true}"); return;
+  }
+  bool valid = id.length() == 16;
+  for (size_t i = 0; i < id.length(); ++i) valid = valid && isxdigit(static_cast<unsigned char>(id[i]));
+  const uint64_t identity = valid ? strtoull(id.c_str(), nullptr, 16) : 0;
+  if (!identity) { webServer.send(400, "application/json", "{\"ok\":false}"); return; }
+  bool found = false;
+  if (xSemaphoreTake(flightMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+    if (networkLastSuccessfulPoll && uint32_t(millis() - networkLastSuccessfulPoll) <= 15000U)
+      for (size_t i = 0; i < networkRadarPointCount; ++i)
+        if (networkRadarPoints[i].identity == identity) { found = true; break; }
+    xSemaphoreGive(flightMutex);
+  }
+  if (!found) { webServer.send(409, "application/json", "{\"ok\":false}"); return; }
+  manualAircraftSelection.select(identity, millis()); noteWebMutation();
+  webServer.send(200, "application/json", "{\"ok\":true}");
+}
+
+
 void handleDisplayApi() {
   FlightData shown;
-#if !FLIGHTWALL_HAS_MATRIX
   static RadarPoint webRadarPoints[RADAR_POINT_LIMIT];
   size_t webRadarPointCount = 0;
-#endif
   String error;
   uint32_t updated = 0;
   if (xSemaphoreTake(flightMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
     shown = networkFlight;
-#if !FLIGHTWALL_HAS_MATRIX
     webRadarPointCount = min(networkRadarPointCount, RADAR_POINT_LIMIT);
     for (size_t index = 0; index < webRadarPointCount; ++index)
       webRadarPoints[index] = networkRadarPoints[index];
-    if (radarTrailStorage) radarTrailStorage->publish(webRadarPointCount);
-#endif
+    if (radarTrailStorage) radarTrailStorage->publishWeb(webRadarPointCount);
     error = networkLastError;
     updated = networkLastSuccessfulPoll;
     xSemaphoreGive(flightMutex);
   }
   PsramBuffer json;
-  json.reserve(FLIGHTWALL_HAS_MATRIX ? 4200 : 24000);
+  json.reserve(25000);
   json = PsramBuffer("{\"language\":\"") + String(uiEnglish ? "en" : "de") +
          "\",\"device_variant\":\"" + jsonEscape(DEVICE_VARIANT) +
          "\",\"web_radar\":" +
-             String(FLIGHTWALL_HAS_MATRIX ? "false" : "true") +
+             String("true") +
          ",\"age_seconds\":" +
          (updated ? String((millis() - updated) / 1000) : "null") +
          ",\"error\":\"" + jsonEscape(error) + "\"" +
@@ -6272,7 +6299,6 @@ void handleDisplayApi() {
           ",\"radar\":{\"radius_km\":" + String(displayRadiusKm, 1) +
           ",\"view_heading\":" + String(viewHeading, 1) +
           ",\"points\":[";
-#if !FLIGHTWALL_HAS_MATRIX
   for (size_t index = 0; index < webRadarPointCount; ++index) {
     if (index) json += ',';
     json += '[';
@@ -6281,7 +6307,7 @@ void handleDisplayApi() {
             String(webRadarPoints[index].flags);
     json += ",[";
     bool firstDot = true;
-    const auto *trail = radarTrailStorage ? &radarTrailStorage->consumer[index] : nullptr;
+    const auto *trail = radarTrailStorage ? &radarTrailStorage->webConsumer[index] : nullptr;
     if (radarTrailsEnabled && trail) for (uint8_t j = 0; j < trail->trailCount; ++j) {
       const auto &dot = trail->trail[j];
       const uint32_t age = millis() - dot.time;
@@ -6291,10 +6317,17 @@ void handleDisplayApi() {
       json += '[' + String(dot.x) + ',' + String(dot.y) + ',' +
               String(RadarTrails::LifetimeMs - age) + ']';
     }
-    json += "]]";
+    char identity[17];
+    snprintf(identity, sizeof(identity), "%016llx", static_cast<unsigned long long>(webRadarPoints[index].identity));
+    json += "],\"" + String(identity) + "\"]";
   }
-#endif
-  json += "]},\"flight\":{";
+  const uint32_t remaining = manualAircraftSelection.remainingMs(millis());
+  char manualIdentity[17];
+  snprintf(manualIdentity, sizeof(manualIdentity), "%016llx",
+      static_cast<unsigned long long>(manualAircraftSelection.identity(millis())));
+  json += "]},\"manual_selection\":{\"active\":" + String(remaining ? "true" : "false") +
+      ",\"remaining_seconds\":" + String((remaining + 999) / 1000) +
+      ",\"id\":\"" + String(manualIdentity) + "\"},\"flight\":{";
   json += PsramBuffer("\"available\":") + String(shown.available ? "true" : "false") +
           ",\"emergency\":" + String(shown.emergency ? "true" : "false") +
           ",\"has_position\":" + String(shown.hasPosition ? "true" : "false") +
@@ -7676,6 +7709,7 @@ void startWebServer() {
       handleWebDisplay();
     });
     webServer.on("/api/display", HTTP_GET, handleDisplayApi);
+    webServer.on("/api/radar-selection", HTTP_POST, handleRadarSelection);
     webServer.on("/api/status", HTTP_GET, handleStatusApi);
     webServer.on("/api/status-fragment", HTTP_GET, handleStatusFragment);
     webServer.on("/api/wifi-scan", HTTP_POST, []() {
@@ -7952,6 +7986,7 @@ void networkTask(void *) {
         NetworkPhaseScope phase(NetworkPhase::Wifi);
         connectWiFi(10000);
       }
+      if (manualAircraftSelection.expire(now)) pollRequested = true;
       if (wifiConnected && !otaPreparing && !otaInProgress && !otaRebootAt && !manualRebootAt) {
         if (manualNetworkJob.queued && manualNetworkJob.kind != ManualJobKind::Mqtt &&
             (!manualNetworkJob.running || uint32_t(now - manualNetworkJob.lastStepMs) >= 250U)) {

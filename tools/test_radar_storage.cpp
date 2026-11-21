@@ -42,6 +42,13 @@ int main() {
       assert(snapshot.trail[j].time == 1000 + j * 5000U);
     }
   }
+  storage->publishWeb(RadarTrails::Capacity + 100);
+  storage->network[0].trail[0].x = 99;
+  storage->publish(1);
+  assert(storage->consumer[0].trail[0].x == 99);
+  assert(storage->webConsumer[0].trail[0].x == 0);
+  storage->network[0].trail[0].x = 0;
+  storage->publish(1);
   storage->network[0].trail[0].x = 127;
   storage->network[0].trailCount = 0;
   assert(storage->consumer[0].trailCount == RadarTrails::Samples - 1);

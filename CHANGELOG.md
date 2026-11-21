@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.6.1-dual-target.60 – 2026-11-21
+
+- Anklickbares Webradar auf Matrix- und Headless-Controller, unabhängig von Matrixseiten
+- Temporäre Auswahl per stabiler Flugzeugkennung für 60 Sekunden, erneute Auswahl
+  erneuert die Frist; sichtbare Markierung, Restzeit und Rückkehr zur Automatik
+- Fehlende Ziele beenden die Auswahl, Transpondernotfälle behalten Vorrang;
+  ungültige oder veraltete Radar-Klicks werden abgewiesen, keine NVS-Änderung
+- Getrennter PSRAM-Schnappschuss für Webradar-Spuren bei gleichzeitigem Matrixbetrieb
+- ACC, MIG und PTY mit Koordinaten aus OurAirports nach Code-Prüfung ergänzt
+
+
 ## 3.6.1-dual-target.59 – 2026-11-20
 
 - Vor OTA am 21.11.2026 AMD, ARW, LIR und SPM mit Koordinaten (OurAirports)

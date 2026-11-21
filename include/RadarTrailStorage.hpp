@@ -18,9 +18,15 @@ struct RadarTrailStorage {
   RadarTrails tracker;
   RadarTrailSnapshot network[RadarTrails::Capacity];
   RadarTrailSnapshot consumer[RadarTrails::Capacity];
+  RadarTrailSnapshot webConsumer[RadarTrails::Capacity];
 
-  // Caller holds flightMutex. The matrix consumer is used only on the display
-  // core; the headless consumer only in the network task's web handler.
+  void publishWeb(size_t count) {
+    if (count > RadarTrails::Capacity) count = RadarTrails::Capacity;
+    for (size_t i = 0; i < count; ++i) webConsumer[i] = network[i];
+  }
+
+  // Caller holds flightMutex. Each consumer has an independent snapshot:
+  // display core uses consumer, web task uses webConsumer.
   void publish(size_t count) {
     if (count > RadarTrails::Capacity) count = RadarTrails::Capacity;
     for (size_t i = 0; i < count; ++i) consumer[i] = network[i];

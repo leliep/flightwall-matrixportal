@@ -60,7 +60,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.59` |
+| Firmware | `3.6.1-dual-target.60` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel), optional 125 nutzbare Spalten, und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -127,7 +127,7 @@ Wesentliche Funktionen:
   64 gleichzeitig sichtbaren Flugzeugpunkten; bei deaktivierter Wetterseite
   auch im Leerlauf sichtbar
 - responsive Webanzeige für iPhone, Tablet und Desktop; auf der
-  Headless-Variante einschließlich kompaktem Live-Radar
+  Matrix- und Headless-Variante einschließlich anklickbarem Live-Radar
 - deutsch/englisch umschaltbare Matrix- und Weboberfläche
 - BME280-Klimawerte, Schimmelrisiko und optionale MQTT-Wetterdaten
 - BH1750-Helligkeitsautomatik mit sieben stabilen Helligkeitsstufen
@@ -605,7 +605,7 @@ Unter **Radar → Radar-Umlauf** ist ab `.57` wahlweise **Punkt** (Voreinstellun
 oder **Strich** verfügbar. Der Strich ist ein dezent grüner, ein Pixel breiter
 Radarstrahl vom Standortzentrum bis zum Radiuskreis. Flugzeugpunkte und
 Radarspuren werden darüber gezeichnet. Das funktioniert auf der Matrix mit
-128 oder 125 nutzbaren Pixeln und im Headless-Webradar.
+128 oder 125 nutzbaren Pixeln und im Webradar beider Varianten.
 
 Das ebenfalls unter **Radar** angeordnete Umlaufintervall ist für beide Varianten
 von 1 bis 10 Sekunden konfigurierbar; `0` schaltet Punkt beziehungsweise Strich
@@ -628,7 +628,7 @@ ohne das jeweilige neue Feld behalten eine vorhandene Auswahl beziehungsweise
 Dauer bei; frisch eingerichtete Controller verwenden den Punkt. Status- und Display-API
 liefern alle drei Werte. Die Matrix-Webanzeige erhält weiterhin kein zusätzliches Radar.
 
-Radarspuren zeigen auf Matrix und Headless-Webradar die beobachteten Positionen
+Radarspuren zeigen auf Matrix und Webradar beider Varianten die beobachteten Positionen
 der letzten 60 Sekunden als einzelne, mit dem Alter dunkler werdende Punkte.
 Sie sind standardmäßig aktiv und unter **Radar → Radarspuren (60 Sekunden)**
 abschaltbar. Bei kleinster Matrixhelligkeit bleiben die Spuren auf der kleinsten
@@ -654,7 +654,7 @@ Kann der externe Speicher beim Start nicht reserviert werden, bleibt das
 Live-Radar verfügbar und nur die Spuren werden für diese Laufzeit ausgelassen.
 Es gibt bewusst keinen Rückfall auf großen internen Verlaufsspeicher, der das
 TLS-Speicherproblem wieder auslösen würde. Die gespeicherte Spuren-Einstellung
-bleibt unverändert. Konfiguration, Status und Headless-Webradar zeigen die
+bleibt unverändert. Konfiguration, Status und Webradar beider Varianten zeigen die
 fehlende Verfügbarkeit an. `/api/status` und `/api/display` liefern zusätzlich
 `radar_trails_available`; `/api/status` zeigt `radar_trails_storage_bytes` und
 `free_psram_bytes`. `radar_trails_enabled` beschreibt weiterhin die gespeicherte
@@ -771,6 +771,23 @@ Display, Wetterseite, Standort, Blickrichtung, ADS-B-Quelle, Filter,
 Routendienst, MQTT, Seitenreihenfolge, Freitext, Helligkeit und Nachtruhe.
 Statuskarten werden regelmäßig aktualisiert, ohne geöffnete Bereiche zu
 schließen oder ungespeicherte Formulareingaben zu überschreiben.
+
+### Flugzeug im Webradar auswählen
+
+Das Radar unter `/display` ist bei beiden Hardwarevarianten sichtbar, unabhängig
+von den aktivierten Matrixseiten. Ein Klick oder Tippen auf einen Flugzeugpunkt
+fordert dieses Flugzeug zur Anzeige an. Die Auswahl wird mit dem nächsten
+ADS-B-Abgleich übernommen und gilt auch für die LED-Matrix. Weiße Eckmarken im
+Radar kennzeichnen das manuell gewählte Flugzeug; unter dem Radar stehen die
+Restzeit und **Automatik fortsetzen**.
+
+Nach 60 Sekunden ohne erneute Flugzeugauswahl übernimmt die normale Automatik.
+Ein weiterer Klick – auch auf dasselbe Flugzeug – startet die Frist neu.
+Automatische Browserabfragen und die Radaranimation verlängern sie nicht.
+Fehlt das Ziel im nächsten erfolgreichen ADS-B-Abruf, endet die Auswahl vorzeitig.
+Transpondernotfälle haben Vorrang; währenddessen läuft die Frist weiter.
+Die Auswahl gilt für alle Browser desselben Controllers, wird nur im RAM gehalten
+und verändert weder Konfiguration noch Lookup-Ergänzungen.
 
 ### Status und Diagnose
 
