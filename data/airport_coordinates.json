@@ -1409,6 +1409,11 @@
     "longitude": -1.66057,
     "elevation_ft": 681
   },
+  "LBC": {
+    "latitude": 53.805401,
+    "longitude": 10.7192,
+    "elevation_ft": 53
+  },
   "LBG": {
     "latitude": 48.962276,
     "longitude": 2.436539,

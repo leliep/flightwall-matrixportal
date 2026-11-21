@@ -287,6 +287,7 @@ const AirportName names[] = {
   {"LAS", "Las Vegas"},
   {"LAX", "Los Angeles"},
   {"LBA", "Leeds Bradford"},
+  {"LBC", "Lübeck"},
   {"LBG", "Paris-Le Bourget"},
   {"LCA", "Larnaka"},
   {"LCJ", "Łódź"},

@@ -2,6 +2,8 @@
 
 ## 3.6.1-dual-target.60 – 2026-11-21
 
+- Vor OTA zusätzlich LBC (Lübeck) mit Koordinaten aus OurAirports aufgenommen
+
 - Anklickbares Webradar auf Matrix- und Headless-Controller, unabhängig von Matrixseiten
 - Temporäre Auswahl per stabiler Flugzeugkennung für 60 Sekunden, erneute Auswahl
   erneuert die Frist; sichtbare Markierung, Restzeit und Rückkehr zur Automatik
