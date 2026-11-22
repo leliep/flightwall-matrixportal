@@ -49,6 +49,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 - [Matrixanzeige und Radar](#matrixanzeige)
 - [Wetterseite und Schimmelrisiko](#wetterseite)
 - [Weboberfläche](#weboberfläche)
+- [Liste der Konfigurationsoptionen](#liste-der-konfigurationsoptionen)
 - [Installation per USB](#installation-per-usb)
 - [OTA-Updates](#ota-updates)
 - [Übersetzungstabellen](#übersetzungstabellen-pflegen)
@@ -740,7 +741,8 @@ Nach erfolgreicher WLAN-Verbindung antwortet der Server auf Port 80:
 | `/status` | `http://matrixportal.local/status` | `http://flightwall-server.local/status` | automatisch aktualisierter Status und Diagnose |
 | `/config` | `http://matrixportal.local/config` | `http://flightwall-server.local/config` | Konfiguration ohne automatische Seitenaktualisierung |
 | `/display` | `http://matrixportal.local/display` | `http://flightwall-server.local/display` | responsive FlightWall-Anzeige |
-| `/api/display` | verfügbar | verfügbar | aktuelle Displaydaten als JSON |
+| `/api/display` | verfügbar | verfügbar | aktuelle Displaydaten einschließlich Webradar und manueller Auswahl als JSON |
+| `/api/site-airports?lat=…&lon=…` | verfügbar | verfügbar | Flughafen-Vorlagen innerhalb von 150 km um die angegebenen Koordinaten |
 | `/api/status` | verfügbar | verfügbar | vollständige Statusdaten einschließlich RGB-LED als JSON |
 | `/unknown-codes.json` | verfügbar | verfügbar | unbekannte Airport-/Airline-Codes herunterladen |
 | `/configuration.json` | verfügbar | verfügbar | vollständige Konfiguration herunterladen |
@@ -836,20 +838,138 @@ Die Konfigurationsseite wird dagegen nicht automatisch neu geladen.
 *Standort, Blickrichtung und Filter sowie ADS-B-, Routen- und Notfalltests.
 Das Routentest-Feld wird beim Seitenaufruf mit dem aktuellen Callsign vorbelegt.*
 
-### Wichtige Konfigurationsgruppen
+### Liste der Konfigurationsoptionen
 
-| Bereich | Wesentliche Einstellungen |
-|---|---|
-| WLAN und Sprache | SSID, Passwort, Netzwerkscan, Deutsch/Englisch |
-| Standort und Auswahl | Optionale Standortbezeichnung, Koordinaten, Höhe über NHN, Blickrichtung, Radius, Blickwinkel für `weit` |
-| ADS-B | zwei lokale URLs, externe adsb.fi-Quelle, bevorzugte Quelle und Failover |
-| Filter | Kleinflugzeuge ausblenden, Maximalhöhe in ft |
-| Routen | adsb.im, ADSBDB-Fallback, Verbindungstest und Cacheverwaltung |
-| Matrixdarstellung | 128/125 nutzbare Pixel, Seiten aktivieren, Reihenfolge, Dauer, Übergänge, Freitext und Radar-Umlauf |
-| Wetter | BME280-Ruheanzeige, MQTT-Broker, Zugangsdaten, Topics und MQTT-Hintergrundtest |
-| Helligkeit | BH1750-Automatik, manuelle Stufe und Lux-Schwellen |
-| Betrieb | Nachtruhe, RGB-LED-Helligkeit, Tests und Neustart |
-| Sicherung | vollständige JSON-Sicherung und Wiederherstellung |
+Stand: **`.62`**. Die Tabellen beschreiben die Bedienung unter `/config`.
+**Beide** bedeutet Matrix- und Headless-Variante, **Matrix** nur den
+Matrixcontroller. Angegebene Grenzen und Schrittweiten entsprechen dem Formular.
+
+Änderungen werden mit **Einstellungen speichern** dauerhaft übernommen.
+**Änderungen übernehmen** im Standorteditor aktualisiert zunächst nur das Formular.
+Radius, Filter, Radar- und Netzwerkeinstellungen gelten für den Controller;
+**nur Bezeichnung, Koordinaten, Höhe und Blickrichtung gehören zum Standortprofil**.
+Ungültige Standort-Zahlenfelder werden markiert und verhindern das Speichern.
+Auch `0°` Blickrichtung und `0 m` Höhe sind gültig; ein leeres Zahlenfeld ist kein Nullwert.
+
+#### Standort und Flugzeugauswahl
+
+| Option | Auswahl / Eingabe | Variante |
+|---|---|---|
+| Standortprofil | Pulldown mit bis zu 16 eigenen Profilen; vorhandener Standort wird übernommen | Beide |
+| Flughafen-Vorlage | Flughäfen aus verfügbaren Lookup-Daten innerhalb von 150 km, nach Entfernung sortiert; legt ein eigenes Profil an | Beide |
+| Standort bearbeiten | Neuer Standort, Änderungen übernehmen, Standort löschen; mindestens ein Profil bleibt erhalten | Beide |
+| Standortbezeichnung | Optional, bis zu 48 Unicode-Zeichen | Beide |
+| Breitengrad | −90 bis +90°, Schritt 0,000001° | Beide |
+| Längengrad | −180 bis +180°, Schritt 0,000001° | Beide |
+| Standorthöhe über NHN | −500 bis 9000 m, Schritt 1 m; Flughafenhöhe für den tatsächlichen Aufstellort prüfen | Beide |
+| Blickrichtung | 0–359°, Schritt 1°; 0° = Norden, 90° = Osten | Beide |
+| Anzeigeradius | 1–100 km, Schritt 0,5 km; Specials können im doppelten Radius ausgewählt werden | Beide |
+| Blickwinkel für „weit“ | 10–45°, Schritt 1°; Grenze des vertikalen Elevationswinkels | Beide |
+| Sport- und Kleinflugzeuge ausblenden | Ein / aus; erkannte Specials werden dadurch nicht ausgeschlossen | Beide |
+| Maximalhöhe | 1000–100000 ft, Schritt 500 ft; wirkt bei aktivem Höhenfilter | Beide |
+| Flugzeuge oberhalb der Maximalhöhe ausblenden | Höhenfilter ein / aus; Transpondernotfälle haben weiterhin Vorrang | Beide |
+
+#### ADS-B und Routendaten
+
+| Option | Auswahl / Eingabe | Variante |
+|---|---|---|
+| Aktive ADS-B-Quelle | Lokale Quelle 1, lokale Quelle 2 oder adsb.fi | Beide |
+| ADS-B-Adresse Quelle 1 / 2 | HTTP-/HTTPS-Adresse, jeweils bis zu 180 Zeichen; Quelle 2 darf leer bleiben | Beide |
+| Automatisches Failover | Bei Fehlern andere konfigurierte Quelle versuchen; bevorzugte Quelle jede Minute erneut prüfen | Beide |
+| Routen über adsb.im ergänzen | Ein / aus | Beide |
+| ADSBDB bei fehlender Route verwenden | Ein / aus | Beide |
+| Routen-Dienst | HTTP-/HTTPS-Adresse, bis zu 180 Zeichen; adsb.im-Adressen werden beim Abruf gemäß Dienstvorgaben behandelt | Beide |
+| Test-Callsign | Bis zu 10 alphanumerische Zeichen; beim Seitenaufruf aktuelles Callsign, sonst `DLH123` | Beide |
+
+#### Radar
+
+| Option | Auswahl / Eingabe | Variante |
+|---|---|---|
+| Radarspuren | Ein / aus; beobachtete Positionen der letzten 60 Sekunden | Beide |
+| Radar-Umlauf | Punkt oder Strich | Beide |
+| Umlaufintervall | Aus (`0`) oder 1–10 Sekunden zwischen Umlaufstarts | Beide |
+| Dauer eines Umlaufs | 0,8–4,0 Sekunden, Schritt 0,1 Sekunden; bei längerer Dauer als dem Intervall läuft der Umlauf ohne Pause | Beide |
+
+Das Webradar bleibt unabhängig von aktivierten Matrixseiten verfügbar.
+Ein Klick oder Tippen auf einen Flugzeugpunkt wählt ihn vorübergehend für
+60 Sekunden aus. Erneute Auswahl startet die Frist neu; **Automatik fortsetzen**
+beendet sie. Dies ist eine vorübergehende Bedienaktion, keine gespeicherte Option.
+
+#### Sprache, WLAN und Firmwarezugang
+
+| Option | Auswahl / Eingabe | Variante |
+|---|---|---|
+| Sprache | Deutsch oder Englisch | Beide |
+| WLAN-Name | SSID mit 1–32 Bytes; Netzwerkscan zur Auswahl verfügbar | Beide |
+| Neues WLAN-Passwort | 8–63 Zeichen; leer lässt das gespeicherte Passwort unverändert | Beide |
+| Offenes WLAN | Verbindung ohne WLAN-Passwort ausdrücklich aktivieren | Beide |
+| Neues OTA-Passwort | 8–63 Zeichen; leer lässt das gespeicherte Passwort unverändert | Beide |
+| OTA deaktivieren | Deaktiviert den passwortgeschützten Updatezugang | Beide |
+
+WLAN- und OTA-Zugangsänderungen werden durch einen automatischen Neustart aktiv.
+Ein normaler Wechsel von Standort, Radius oder Höhenfilter benötigt keinen Neustart.
+
+#### Wetter und MQTT
+
+| Option | Auswahl / Eingabe | Variante |
+|---|---|---|
+| Wetterdaten ohne Flugzeug anzeigen | BME280-Wetterseite im Leerlauf ein / aus | Matrix |
+| MQTT-Wetter aktivieren | MQTT-Wetterdaten verwenden; lokale Wetter-Ruheanzeige nur beim Matrixcontroller | Beide |
+| Mosquitto-Server | Hostname oder IP-Adresse, bis zu 96 Zeichen; MQTT ohne TLS | Beide |
+| MQTT-Port | 1–65535 | Beide |
+| MQTT-Benutzer | Bis zu 64 Zeichen | Beide |
+| MQTT-Passwort | Bis zu 96 Zeichen; leer erhält das gespeicherte Passwort | Beide |
+| Topic Windrichtung | Bis zu 128 Zeichen; Richtung in Grad oder unterstütztes Kompasskürzel | Beide |
+| Topic Windgeschwindigkeit | Bis zu 128 Zeichen; Wert in km/h | Beide |
+| Topic Windböen | Bis zu 128 Zeichen; Wert in km/h | Beide |
+| Topic Regen heute | Bis zu 128 Zeichen; Eingang in cm, Anzeige in mm | Beide |
+
+BME280 und BH1750 werden automatisch erkannt; ihre I²C-Adressen werden nicht
+über die Konfiguration eingegeben. Sensoren und MQTT sind optional.
+
+#### Matrixdarstellung, Helligkeit und Nachtruhe
+
+| Option | Auswahl / Eingabe | Variante |
+|---|---|---|
+| Display eingeschaltet | Matrixausgabe ein / aus | Matrix |
+| Status-LED | Aus, schwach oder normal | Beide |
+| Nachtruhe / Nachtabsenkung | Ein / aus; Anfang und Ende als Uhrzeit, auch über Mitternacht; gleiche Zeiten deaktivieren die Absenkung | Beide |
+| IP-Adresse beim Start anzeigen | Ein / aus; standardmäßig ein, Version und Standort bleiben Teil der Startanzeige | Matrix |
+| Defekte rechte Spalten ausblenden | 125 statt 128 nutzbare Pixel; Inhalte werden entsprechend angeordnet | Matrix |
+| Sanfte Übergänge | Ein / aus | Matrix |
+| Anzeigeseiten | Jede der acht normalen Matrixseiten einzeln aktivieren oder deaktivieren | Matrix |
+| Seitendauer | Je Seite 2–60 Sekunden; Lauftextseiten können für einen vollständigen Vor-/Rücklauf länger sichtbar bleiben | Matrix |
+| Seitenreihenfolge | Auswahl der Seite für jede Position der Rotation | Matrix |
+| Freitext | Bis zu 128 Zeichen; ein leeres Feld überspringt die Seite | Matrix |
+| Freitext-Scrollgeschwindigkeit | Langsam, mittel oder schnell | Matrix |
+| BH1750-Automatik | Automatische Matrixhelligkeit ein / aus | Matrix |
+| Manuelle Helligkeitsstufe | 14, 29, 43, 57, 71, 86 oder 100 % | Matrix |
+| Schwelle dunkel | 1–500 Lux, Schritt 1 Lux | Matrix |
+| Schwelle hell | 50–50000 Lux, Schritt 10 Lux; muss über der Dunkelschwelle liegen | Matrix |
+
+Die Nachtruhe dimmt beim Headless-Controller die Status-LED; eine lokale
+LED-Matrix ist dort nicht vorhanden. Transpondernotfälle werden unabhängig von
+der normalen Seitenauswahl angezeigt. Die 125-Pixel-Option ändert die Webanzeige nicht.
+
+#### Tests, Pflege und Sicherung
+
+Diese Schaltflächen sind Bedienaktionen und keine zusätzlichen Anzeigeoptionen.
+
+| Aktion | Wirkung | Variante |
+|---|---|---|
+| WLANs suchen | Verfügbare Netze zur Auswahl anzeigen | Beide |
+| ADS-B-Verbindung testen | Abruf im Hintergrund; übernimmt zuvor die Formulareinstellungen | Beide |
+| Routendienst testen | Abfrage ohne Cache; zeigt auch verworfene Antworten und HTTP-Fehlertexte | Beide |
+| MQTT-Verbindung testen | Hintergrundtest mit Formularwerten, auch bei deaktivierter Wetteranzeige; speichert keine Einstellungen | Beide |
+| Notfallanzeige testen | 7500, 7600 oder 7700 mit 1–3 Testflugzeugen; höchstens zwei Minuten | Beide |
+| Test beenden | Laufenden Notfalltest beenden | Beide |
+| Displaytest | Matrix-Prüfbilder und Typensymbole starten oder beenden | Matrix |
+| Lookup-Ergänzungen verwalten | JSON-Ergänzungen herunterladen oder separat hochladen, ohne Firmwarebau und Neustart | Beide |
+| Konfiguration herunterladen | JSON-Sicherung einschließlich Standortprofilen und Zugangsdaten; geschützt aufbewahren | Beide |
+| Sicherung wiederherstellen | Einstellungen aus JSON übernehmen; anschließend automatischer Neustart | Beide |
+| Routen-Cache verwalten | Unter `/status` Einträge prüfen, erneut abfragen oder löschen; gesamten Cache leeren | Beide |
+| Firmware-Update | Passendes Firmwareimage unter `/update` installieren | Beide |
+| ESP neu starten | Neustart über die Statusseite | Beide |
 
 Bei den Standortkoordinaten lässt sich eine optionale **Standortbezeichnung**
 mit bis zu 48 Zeichen hinterlegen, etwa „Büro München“ oder „Dachstation 2“.
@@ -857,7 +977,8 @@ Sie erscheint dezent bei den Standortdaten auf `/status`, als Eingabefeld auf
 `/config` und unter dem Kopfbereich von `/display`, auch ohne aktuelles Flugzeug.
 Ein leeres Feld blendet die Beschriftung aus. Umlaute, Leerzeichen und Satzzeichen
 sind möglich; Steuerzeichen und ungültiges UTF-8 werden abgewiesen.
-Die Standortbezeichnung wird nicht auf der physischen Matrix eingeblendet. Der Text wird gespeichert,
+Auf den regulären Matrix-Flugzeugseiten erscheint die Standortbezeichnung nicht;
+die Startanzeige zeigt sie zusammen mit der Version und optional der IP-Adresse. Der Text wird gespeichert,
 bei OTA erhalten und als `site_name` mit der Konfiguration gesichert.
 Ältere Sicherungen ohne dieses Feld behalten eine vorhandene Bezeichnung bei;
 eine ausdrücklich leere Bezeichnung löscht sie.
