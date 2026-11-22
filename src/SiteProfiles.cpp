@@ -40,10 +40,45 @@ bool SiteProfiles::assign(JsonVariantConst profiles, JsonVariantConst active) {
   if (staged.overflowed() || measureJson(staged) > MaxBytes) return false;
   using std::swap; swap(data_, staged); return true;
 }
+namespace {
+// ArduinoJson parses short decimal literals via float even when double is enabled.
+// Add insignificant decimal zeroes outside strings so profile coordinates retain
+// their saved precision when the NVS block is read after OTA/restart.
+PsramBuffer preciseProfileNumbers(const char *json, size_t bytes) {
+  PsramBuffer output; output.reserve(bytes);
+  bool quoted = false, escaped = false;
+  for (size_t i = 0; i < bytes;) {
+    const char c = json[i];
+    if (quoted) {
+      output += c; ++i;
+      if (escaped) escaped = false;
+      else if (c == '\\') escaped = true;
+      else if (c == '"') quoted = false;
+    } else if (c == '"') { quoted = true; output += c; ++i; }
+    else if (c == '-' || (c >= '0' && c <= '9')) {
+      const size_t start = i; size_t exponent = bytes; bool decimal = false;
+      while (i < bytes) {
+        const char n = json[i];
+        if (!((n >= '0' && n <= '9') || n == '.' || n == 'e' || n == 'E' || n == '+' || n == '-')) break;
+        if (n == '.') decimal = true;
+        if ((n == 'e' || n == 'E') && exponent == bytes) exponent = i;
+        ++i;
+      }
+      const size_t endMantissa = exponent == bytes ? i : exponent;
+      output.append(json + start, endMantissa - start);
+      if (decimal || exponent != bytes) output += decimal ? "000000000000" : ".000000000000";
+      if (exponent != bytes) output.append(json + exponent, i - exponent);
+    } else { output += c; ++i; }
+  }
+  return output;
+}
+}
+
 bool SiteProfiles::decode(const char *json, size_t bytes) {
   if (!json || !bytes || bytes > MaxBytes) return false;
   JsonDocument staged(&temporaryJsonAllocator());
-  if (deserializeJson(staged, json, bytes) || staged.overflowed()) return false;
+  const PsramBuffer precise = preciseProfileNumbers(json, bytes);
+  if (precise.failed() || deserializeJson(staged, precise.c_str(), precise.length()) || staged.overflowed()) return false;
   return assign(staged["profiles"], staged["active"]);
 }
 bool SiteProfiles::legacy(const String &name, double lat, double lon, double elevation, double heading) {

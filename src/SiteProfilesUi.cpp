@@ -10,6 +10,11 @@ let model=JSON.parse(hidden.value),airports=JSON.parse(document.getElementById('
 const fields={name:form.elements.namedItem('siteName'),latitude:form.elements.namedItem('siteLat'),longitude:form.elements.namedItem('siteLon'),elevation_m:form.elements.namedItem('observerElevation'),view_heading:form.elements.namedItem('viewHeading')};
 // Keep the existing elevation input, but show all profile fields together.
 if(group&&fields.elevation_m)group.append(fields.elevation_m.closest('label'));
+for(const input of Object.values(fields)){
+ if(input.type==='number')input.required=true;
+ input.addEventListener('input',()=>{input.setCustomValidity('');input.removeAttribute('aria-invalid')});
+ input.addEventListener('invalid',()=>{input.setAttribute('aria-invalid','true');hint.textContent=text('Bitte die markierten Standortangaben ausfüllen oder korrigieren.','Please complete or correct the highlighted site fields.')});
+}
 function sync(){hidden.value=JSON.stringify(model)}
 function options(){
  choose.replaceChildren();const own=document.createElement('optgroup');own.label=text('Eigene Standorte','Saved sites');
@@ -20,7 +25,11 @@ function options(){
 }
 function fill(){const p=model.profiles[model.active];for(const [k,input] of Object.entries(fields))input.value=p[k];options()}
 function remember(){
- for(const input of Object.values(fields))if(!input.checkValidity()||input.type==='number'&&(input.value.trim()===''||!Number.isFinite(Number(input.value)))){input.reportValidity();return false}
+ for(const input of Object.values(fields)){
+  const missing=input.type==='number'&&(input.value.trim()===''||!Number.isFinite(Number(input.value)));
+  input.setCustomValidity(missing?text('Bitte einen gültigen Zahlenwert eingeben.','Please enter a valid number.'):'');
+  if(!input.checkValidity()){input.reportValidity();return false}
+ }
  model.profiles[model.active]=Object.fromEntries(Object.entries(fields).map(([k,input])=>[k,k==='name'?input.value:Number(input.value)]));sync();return true;
 }
 function pending(){hint.textContent=text('Änderungen werden erst mit „Einstellungen speichern“ aktiviert.','Changes take effect only after Save settings.')}

@@ -1,6 +1,7 @@
 #include "TemporaryPsram.hpp"
 #include "ManualAircraftSelection.hpp"
 #include "SiteProfiles.hpp"
+#include "NumericForm.hpp"
 // Version generated: 2026-10-03 12:17:49 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
@@ -65,8 +66,8 @@ int16_t matrixLayoutWidth() {
 #endif
 }
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.61";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-22 saved site profiles";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.62";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-22 numeric configuration form fix";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -4743,6 +4744,12 @@ void appendRouteDiagnosticsHtml(PsramBuffer &html) {
       "Measurements before/after HTTP and after TLS cleanup, not during the handshake. Cache hits do not start measurements. Failures are retained until reboot or the next failure.")) + "</p></details>";
 }
 
+String numberInputValue(double value, unsigned decimals) {
+  char text[48];
+  return numericInputText(text, sizeof(text), value, decimals) ? String(text) : String("");
+}
+
+
 PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = true) {
   const RouteMemorySnapshot statusMemory = routeMemorySnapshot();
   FlightData statusFlight;
@@ -4840,11 +4847,11 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
   html += F(">schwach</option><option value='2'");
   html += selected(statusLedBrightnessMode == 2);
   html += F(">normal</option></select></label><label class='third'>Anzeigeradius (km)<input type='number' name='radius' min='1' max='100' step='0.5' value='");
-  html += String(displayRadiusKm, 1);
+  html += numberInputValue(displayRadiusKm, 1);
   html += F("'></label><label class='third'>Standorthöhe über NHN (m)<input type='number' name='observerElevation' min='-500' max='9000' step='1' value='");
-  html += String(observerElevationM, 0);
+  html += numberInputValue(observerElevationM, 0);
   html += F("'></label><label class='third'>Unter diesem Blickwinkel \"weit\" (°)<input type='number' name='farElevation' min='10' max='45' step='1' value='");
-  html += String(farDirectionElevationDeg, 0);
+  html += numberInputValue(farDirectionElevationDeg, 0);
   html += F("'></label><label class='third check'><input type='checkbox' name='quietHours' value='1'");
   html += checked(quietHoursEnabled);
   html += F("> Nachtruhe aktiv</label><label class='third'>Display dunkel ab<input type='time' name='quietStart' value='");
@@ -4857,11 +4864,11 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
   html += F("</button><p class='muted'>Etwa 23 Sekunden: Matrix-Prüfbilder und alle Typensymbole mit Bedeutung.</p></fieldset>");
 #else
   html += F("<fieldset><legend>Standort und Auswahl</legend><div class='fieldGrid'><label class='third'>Anzeigeradius (km)<input type='number' name='radius' min='1' max='100' step='0.5' value='");
-  html += String(displayRadiusKm, 1);
+  html += numberInputValue(displayRadiusKm, 1);
   html += F("'></label><label class='third'>Standorthöhe über NHN (m)<input type='number' name='observerElevation' min='-500' max='9000' step='1' value='");
-  html += String(observerElevationM, 0);
+  html += numberInputValue(observerElevationM, 0);
   html += F("'></label><label class='third'>Unter diesem Blickwinkel \"weit\" (°)<input type='number' name='farElevation' min='10' max='45' step='1' value='");
-  html += String(farDirectionElevationDeg, 0);
+  html += numberInputValue(farDirectionElevationDeg, 0);
   html += F("'></label></div><p class='muted'>Diese Servervariante stellt die Flugdaten über die Weboberfläche und die JSON-APIs bereit; eine HUB75-Matrix wird nicht angesteuert.</p></fieldset>");
   html += F("<fieldset><legend>Status-LED</legend><div class='fieldGrid'><label class='third'>Helligkeit<select name='statusLedBrightness'><option value='0'");
   html += selected(statusLedBrightnessMode == 0);
@@ -4890,11 +4897,11 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
   html += F("'></label><label class='fieldWide'>ADS-B-Adresse Quelle 2<input type='url' name='adsbUrl2' maxlength='180' value='");
   html += htmlEscape(adsbUrl2);
   html += F("' placeholder='http://zweiter-empfaenger/data/aircraft.json'></label></div><p class='muted'>Bei aktivem Failover wird nach einem Fehler sofort eine andere konfigurierte Quelle verwendet; die bevorzugte Quelle wird jede Minute erneut geprüft. Quelle 2 darf unkonfiguriert bleiben. Der Radius von adsb.fi wird automatisch aus dem Anzeigeradius berechnet. Daten: <a href='https://adsb.fi/' target='_blank' rel='noopener'>adsb.fi</a>.</p><div class='fieldGrid'><label class='fieldWide'>Standortprofil<select id='siteProfileChoice' aria-label='Standortprofil'></select></label><div class='fieldWide buttonRow'><button type='button' id='siteProfileNew'>Neuer Standort</button><button type='button' id='siteProfileApply'>Änderungen übernehmen</button><button type='button' id='siteProfileDelete'>Standort löschen</button></div></div><input type='hidden' name='siteProfiles' id='siteProfilesData' value=\"%FW_SITE_PROFILES%\"><input type='hidden' id='siteAirportsData' value=\"%FW_SITE_AIRPORTS%\"><p id='siteProfileHint' class='muted' role='status'>Flughafen-Vorlagen aus den verfügbaren Lookup-Tabellen im Umkreis von 150 km. Höhe prüfen und Blickrichtung für den Aufstellort festlegen. Erst „Einstellungen speichern“ aktiviert Änderungen.</p><div class='fieldGrid' id='siteProfileFields'><label class='fieldWide muted'>Standortbezeichnung (optional)<input type='text' name='siteName' maxlength='48' value=\"%FW_SITE_NAME%\"></label><label class='third'>Breitengrad<input type='number' name='siteLat' min='-90' max='90' step='0.000001' value='");
-  html += String(siteLatitude, 6);
+  html += numberInputValue(siteLatitude, 6);
   html += F("'></label><label class='third'>Längengrad<input type='number' name='siteLon' min='-180' max='180' step='0.000001' value='");
-  html += String(siteLongitude, 6);
+  html += numberInputValue(siteLongitude, 6);
   html += F("'></label><label class='third'>Blickrichtung (Grad)<input type='number' name='viewHeading' min='0' max='359' step='1' value='");
-  html += String(viewHeading, 0);
+  html += numberInputValue(viewHeading, 0);
   html += F("'></label><label class='check'><input type='checkbox' name='hideSport' value='1'");
   html += checked(hideSportAircraft);
   html += F("> Sport- und Kleinflugzeuge ausblenden</label><label class='check'><input type='checkbox' name='altitudeFilter' value='1'");
@@ -5005,9 +5012,9 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
     html += ">" + String(BRIGHTNESS_LEVELS[i]) + "%</option>";
   }
   html += F("</select></label><label class='quarter'>Schwelle dunkel (Lux)<input type='number' name='lowLux' min='1' max='500' step='1' value='");
-  html += String(lowLuxThreshold, 0);
+  html += numberInputValue(lowLuxThreshold, 0);
   html += F("'></label><label class='quarter'>Schwelle hell (Lux)<input type='number' name='highLux' min='50' max='50000' step='10' value='");
-  html += String(highLuxThreshold, 0);
+  html += numberInputValue(highLuxThreshold, 0);
   html += F("'></label></div></fieldset>");
 #endif
     html += "<fieldset><legend>Lookup</legend><a href='/lookups'>" + String(uiText("Lookup-Ergänzungen verwalten", "Manage lookup extensions")) + "</a></fieldset>";
@@ -5134,8 +5141,8 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
               ? htmlEscape(statusFlight.selectionReason) : "-";
   html += F("</b><span>Radius normal / aktuell</span><b>");
   html += statusFlight.emergency
-              ? String(displayRadiusKm, 1) + " km / unbegrenzt"
-              : String(displayRadiusKm, 1) + " / " +
+              ? numberInputValue(displayRadiusKm, 1) + " km / unbegrenzt"
+              : numberInputValue(displayRadiusKm, 1) + " / " +
                     String(statusFlight.specialType.length()
                                ? displayRadiusKm * 2.0f : displayRadiusKm, 1) + " km";
   html += "</b></div></section><section class='statusCard wide'><h3>";
@@ -5297,13 +5304,13 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
   appendRouteDiagnosticsHtml(html);
   appendLookupStatusHtml(html);
   html += F("<section class='statusCard'><h3>Konfiguration</h3><div class='status'><span>Standort / Blickrichtung</span><b>");
-  html += String(siteLatitude, 6) + " / " + String(siteLongitude, 6) +
-          " / " + String(viewHeading, 0) + "°";
+  html += numberInputValue(siteLatitude, 6) + " / " + numberInputValue(siteLongitude, 6) +
+          " / " + numberInputValue(viewHeading, 0) + "°";
   html += F("</b>");
   if (siteName.length())
     html += F("<span class='statusNote muted' style='font-size:.85rem;font-weight:400'>%FW_SITE_NAME%</span>");
   html += F("<span>Anzeigeradius</span><b>");
-  html += String(displayRadiusKm, 1) + " km";
+  html += numberInputValue(displayRadiusKm, 1) + " km";
   html += F("</b><span>Höhenfilter</span><b>");
   html += altitudeFilterEnabled ? "bis " + String(maximumAltitudeFt) + " ft" : "aus";
   html += F("</b><span>Kleinflugzeugfilter</span><b>");
@@ -5436,8 +5443,8 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
       : String(statusLedStateName(statusLedState())) +
             (statusLedBrightnessMode == 1 ? " / schwach" : " / normal");
   html += F("</b><span>Blickgeometrie</span><b>");
-  html += String(observerElevationM, 0) + " m NHN / weit unter " +
-          String(farDirectionElevationDeg, 0) + "°";
+  html += numberInputValue(observerElevationM, 0) + " m NHN / weit unter " +
+          numberInputValue(farDirectionElevationDeg, 0) + "°";
   struct tm localClock;
   html += F("</b><span>Lokale Zeit</span><b>");
   if (readLocalClock(localClock)) {

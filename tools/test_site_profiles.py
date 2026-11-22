@@ -71,9 +71,14 @@ int main(){
  assert(siteProfiles().legacy(siteName,siteLatitude,siteLongitude,observerElevationM,viewHeading));
  assert(siteProfiles().profiles().size()==1&&siteProfiles().active()==0);
  assert(siteProfiles().selected()["latitude"].as<double>()==siteLatitude);
+ SiteProfiles scientific;
+ const char *scientificJson=R"({"profiles":[{"name":"Field 1.2e3","latitude":5.1601362e1,"longitude":6.141228e0,"elevation_m":0.0,"view_heading":0.0}],"active":0})";
+ assert(scientific.decode(scientificJson,std::strlen(scientificJson)));
+ assert(std::abs(scientific.selected()["longitude"].as<double>()-6.141228)<1e-12);
+ assert(!std::strcmp(scientific.selected()["name"].as<const char*>(),"Field 1.2e3"));
  auto encoded=siteProfiles().encode();SiteProfiles restored;assert(restored.decode(encoded.c_str(),encoded.length()));
- // Short decimal JSON numbers are parsed via float by ArduinoJson; require sub-metre fidelity.
- assert(std::abs(restored.selected()["latitude"].as<double>()-siteLatitude)<1e-5);
+ // Decode preserves short decimal coordinates across NVS/OTA round trips.
+ assert(std::abs(restored.selected()["latitude"].as<double>()-siteLatitude)<1e-12);
  JsonDocument doc;assert(!deserializeJson(doc,encoded.c_str()));
  auto extra=doc["profiles"].as<JsonArray>().add<JsonObject>();
  extra["name"]="<script> & Büro";extra["latitude"]=52.0;extra["longitude"]=7.0;extra["elevation_m"]=-10;extra["view_heading"]=359;doc["active"]=1;

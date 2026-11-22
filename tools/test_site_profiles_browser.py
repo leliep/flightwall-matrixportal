@@ -14,7 +14,7 @@ fields="<div id='siteProfileFields'>"
 for key,value in [('siteName','Original'),('siteLat','51.8'),('siteLon','6.1'),('viewHeading','290')]:
  fields+=f"<label>{key}<input name='{key}' value='{value}' type='{'text' if key=='siteName' else 'number'}' step='any'></label>"
 fields+="</div>"
-fixture="<!doctype html><html lang='de'><meta charset='utf-8'><style>*{box-sizing:border-box}body{margin:16px}input,select{max-width:100%}.buttonRow{display:flex;flex-wrap:wrap;gap:8px}label{display:block;margin-bottom:8px}</style><form id='config'><label>Height<input type='number' name='observerElevation' step='any' value='42'></label><input name='radius' value='30'>"+controls+fields+"<button id='submit'>Save</button></form>"
+fixture="<!doctype html><html lang='de'><meta charset='utf-8'><style>*{box-sizing:border-box}body{margin:16px}input,select{max-width:100%}.buttonRow{display:flex;flex-wrap:wrap;gap:8px}label{display:block;margin-bottom:8px}</style><form id='config'><label>Height<input type='number' name='observerElevation' step='any' value='42'></label><input name='radius' value='30'><input type='number' name='maximumAltitude' value='15000' min='1000' max='100000' step='500'>"+controls+fields+"<button id='submit'>Save</button></form>"
 stub='<script>window.fetch=async()=>({ok:true,json:async()=>'+json.dumps(airports)+'''});window.confirm=()=>true;</script>'''
 check=r'''<script>
 setTimeout(async()=>{try{
@@ -23,6 +23,17 @@ const change=value=>{choose.value=value;choose.dispatchEvent(new Event('change')
 const wait=()=>new Promise(r=>setTimeout(r,20));
 const assert=(ok,msg)=>{if(!ok)throw Error(msg)};
 assert(model().profiles.length===1&&field('siteName').value==='Original','initial migration');
+for(const n of [0,1,9]){
+ field('viewHeading').value=String(n);field('observerElevation').value=String(n);field('radius').value='35';field('maximumAltitude').value='20000';
+ const submit=new Event('submit',{cancelable:true});form.dispatchEvent(submit);
+ assert(!submit.defaultPrevented,'valid zero/single digit blocked');
+ assert(model().profiles[0].view_heading===n&&model().profiles[0].elevation_m===n,'numeric profile not updated');
+}
+field('viewHeading').value='';let rejected=new Event('submit',{cancelable:true});form.dispatchEvent(rejected);
+assert(rejected.defaultPrevented&&by('siteProfileHint').textContent.includes('Standortangaben'),'missing value without visible error');
+field('viewHeading').value='0';field('viewHeading').dispatchEvent(new Event('input'));let corrected=new Event('submit',{cancelable:true});form.dispatchEvent(corrected);assert(!corrected.defaultPrevented,'corrected zero remains blocked');
+field('viewHeading').value='290';field('observerElevation').value='42';field('radius').value='30';by('siteProfileApply').click();await wait();
+
 assert(by('siteProfileFields').contains(field('observerElevation')),'height grouped with profile');
 change('a:NRN');await wait();assert(field('siteName').value==='Weeze (NRN)'&&Number(field('siteLat').value)===51.6&&Number(field('observerElevation').value)===32&&Number(field('viewHeading').value)===290,'airport values and retained heading');
 by('siteProfileNew').click();field('siteName').value='<script> & Büro';field('siteLat').value='52.1';field('observerElevation').value='105';field('viewHeading').value='45';by('siteProfileApply').click();await wait();

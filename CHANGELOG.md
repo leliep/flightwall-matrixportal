@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.6.1-dual-target.62 – 2026-11-22
+
+- Zahlenfelder ohne führende Leerzeichen: Blickrichtung 0–9° und Standort-/
+  Helligkeitswerte unter 10 blockieren das gemeinsame Speichern nicht mehr
+- Profil-Zahlenfelder mit Pflichtprüfung und sichtbarer, zweisprachiger Meldung;
+  Korrekturen löschen alte Fehlerzustände, Anzeigeradius und Maximalhöhe wieder speicherbar
+- Profilblock beim Laden ohne Float-Rundung der gespeicherten Koordinaten;
+  keine Änderung gespeicherter Einstellungen, Standortprofile oder Lookup-Ergänzungen
+
+
 ## 3.6.1-dual-target.61 – 2026-11-22
 
 - Bis zu 16 Standortprofile für beide Varianten: Bezeichnung, Koordinaten,
