@@ -544,6 +544,11 @@ const AirportCoordinateRow coordinates[] = {
 };
 }  // namespace
 
+size_t airportCoordinateCount() { return sizeof(coordinates) / sizeof(coordinates[0]); }
+const char *airportCoordinateCodeAt(size_t index) {
+  return index < airportCoordinateCount() ? coordinates[index].code : "";
+}
+
 bool airportCoordinates(const String& code, AirportCoordinates& result) {
   if (lookupOverrideCoordinates(code, result)) return true;
   int low = 0;

@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.6.1-dual-target.61 – 2026-11-22
+
+- Bis zu 16 Standortprofile für beide Varianten: Bezeichnung, Koordinaten,
+  Höhe in Metern und Blickrichtung, mit Pulldown, Anlegen, Bearbeiten und Löschen
+- Flughafen-Vorlagen aus eingebauten und hochgeladenen Lookup-Daten im Umkreis
+  von 150 km; Auswahl legt ein eigenes Profil an, bestehende Profile bleiben erhalten
+- PSRAM-Datenhaltung, begrenzter NVS-Profilblock, vollständige Sicherung und
+  Wiederherstellung sowie Migration des bisherigen Standorts ohne Werteänderung
+- Alte Sicherungen erhalten andere Profile; ungültige Profildaten werden vor
+  Schreibzugriffen abgewiesen, Standortwechsel löscht manuelle Auswahl und Radarspuren
+- CEF und CNV nach Code-Prüfung anhand der FAA-Betreiberliste ergänzt
+
+
 ## 3.6.1-dual-target.60 – 2026-11-21
 
 - Vor OTA zusätzlich LBC (Lübeck) mit Koordinaten aus OurAirports aufgenommen

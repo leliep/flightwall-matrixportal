@@ -18,3 +18,5 @@ uint32_t lookupAllocationFailures();
 const String& lookupLastError();
 void* allocateLookupUpload();
 void releaseLookupUpload(void* data);
+
+String lookupAirportCodeAt(size_t index);

@@ -32,7 +32,7 @@ uint32_t applicationRevision=9,operationRevision=0;
 void noteWebMutation(){++applicationRevision;}
 String networkLastError;
 uint32_t manualRebootAt=0;bool requireRestart=false;
-void applyWebSettings(){if(requireRestart)manualRebootAt=500;}
+bool applyWebSettings(){if(requireRestart)manualRebootAt=500;return true;}
 int adsbCalls=0;
 bool fetchLocalFlight(){++adsbCalls;return true;}
 struct Server {

@@ -1,5 +1,6 @@
 #include "TemporaryPsram.hpp"
 #include "ManualAircraftSelection.hpp"
+#include "SiteProfiles.hpp"
 // Version generated: 2026-10-03 12:17:49 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
@@ -64,8 +65,8 @@ int16_t matrixLayoutWidth() {
 #endif
 }
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.60";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-21 manual radar aircraft selection and LBC";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.61";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-22 saved site profiles";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
@@ -539,6 +540,7 @@ uint32_t adsbFailoverSince = 0;
 uint32_t lastPreferredAdsbProbe = 0;
 String routeUrl = DEFAULT_ROUTE_URL;
 String siteName;
+SiteProfiles &siteProfiles() { static SiteProfiles profiles; return profiles; }
 std::atomic<bool> bootShowIp{true};
 bool bootScreenVisible = false;
 #if FLIGHTWALL_HAS_MATRIX
@@ -3940,6 +3942,119 @@ void sendPsramResponse(const char *type, const PsramBuffer &body,
 }
 
 
+PsramBuffer escapedProfileAttribute(const PsramBuffer &input) {
+  PsramBuffer escaped;
+  for (size_t i = 0; i < input.length(); ++i) {
+    switch (input.c_str()[i]) {
+      case '&': escaped += "&amp;"; break;
+      case '<': escaped += "&lt;"; break;
+      case '>': escaped += "&gt;"; break;
+      case '"': escaped += "&quot;"; break;
+      default: escaped += input.c_str()[i]; break;
+    }
+  }
+  return escaped;
+}
+
+void fillSitePageValues(PsramBuffer &page, const char *site, const char *callsign,
+                        const char *profiles = nullptr, const char *airports = nullptr) {
+  if (page.failed()) return;
+  struct Field { const char *token; const char *value; };
+  const Field fields[] = {{"%FW_SITE_NAME%", site}, {"%FW_ROUTE_TEST_CALLSIGN%", callsign},
+      {"%FW_SITE_PROFILES%", profiles}, {"%FW_SITE_AIRPORTS%", airports}};
+  PsramBuffer output;
+  size_t capacity = page.length();
+  for (const auto &field : fields) if (field.value) capacity += strlen(field.value);
+  output.reserve(capacity);
+  for (size_t i = 0; i < page.length();) {
+    bool replaced = false;
+    if (page.c_str()[i] == '%') for (const auto &field : fields) {
+      const size_t size = strlen(field.token);
+      if (field.value && i + size <= page.length() && !memcmp(page.c_str() + i, field.token, size)) {
+        output += field.value; i += size; replaced = true; break;
+      }
+    }
+    if (!replaced) output += page.c_str()[i++];
+  }
+  page = std::move(output);
+}
+
+bool applyActiveSiteProfile(JsonObjectConst profile, bool forceReset = false) {
+  if (profile.isNull()) return false;
+  const double lat = profile["latitude"], lon = profile["longitude"];
+  const double height = profile["elevation_m"], heading = profile["view_heading"];
+  const bool changed = forceReset || siteLatitude != lat || siteLongitude != lon ||
+      observerElevationM != static_cast<float>(height) || viewHeading != static_cast<float>(heading);
+  siteName = profile["name"].as<const char*>(); siteLatitude = lat; siteLongitude = lon;
+  observerElevationM = height; viewHeading = heading;
+  if (changed) {
+    manualAircraftSelection.clear();
+    if (radarTrailStorage) radarTrailStorage->tracker.clear();
+    if (xSemaphoreTake(flightMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+      networkFlight = {}; networkRadarPointCount = 0; networkLastSuccessfulPoll = 0;
+      xSemaphoreGive(flightMutex);
+    }
+    routedFlight = ""; currentRoute = {};
+    pollRequested = true;
+  }
+  return changed;
+}
+
+bool siteProfilesError(int status = 400) {
+  webServer.send(status, "text/plain; charset=utf-8", uiText(
+      "Ungültige Standortprofile oder Standortdaten (maximal 16 Profile).",
+      "Invalid site profiles or site data (maximum 16 profiles)."));
+  return false;
+}
+
+bool prepareSiteProfilesSubmission(SiteProfiles &staged) {
+  if (webServer.hasArg("siteProfiles")) {
+    const String json = webServer.arg("siteProfiles");
+    if (!staged.decode(json.c_str(), json.length())) return false;
+  } else if (!staged.copyFrom(siteProfiles())) return false;
+  // Visible fields remain authoritative for the active profile, including old
+  // clients and forms submitted without the profile editor's JavaScript.
+  const JsonObjectConst base = staged.selected();
+  const String baseName = base["name"].as<const char*>();
+  const double lat = base["latitude"], lon = base["longitude"];
+  const double height = base["elevation_m"], heading = base["view_heading"];
+  auto number = [&](const char *field, double fallback) {
+    if (!webServer.hasArg(field)) return fallback;
+    const String text = webServer.arg(field); char *end = nullptr;
+    const double result = strtod(text.c_str(), &end);
+    return end != text.c_str() && !*end ? result : NAN;
+  };
+  return staged.updateActive(webServer.hasArg("siteName") ? webServer.arg("siteName") : baseName,
+      number("siteLat", lat), number("siteLon", lon),
+      number("observerElevation", height), number("viewHeading", heading));
+}
+
+bool prepareSiteProfilesRestore(JsonObjectConst settings, SiteProfiles &staged) {
+  if (!settings["site_profiles"].isUnbound() || !settings["active_site_profile"].isUnbound())
+    return staged.assign(settings["site_profiles"], settings["active_site_profile"]);
+  // Legacy backups replace the active location, without discarding other profiles.
+  for (const char *key : {"site_latitude", "site_longitude", "observer_elevation_m", "view_heading"})
+    if (!settings[key].isUnbound() && !settings[key].is<double>()) return false;
+  if (!staged.copyFrom(siteProfiles())) return false;
+  return staged.updateActive(settings["site_name"].isUnbound() ? siteName : String(settings["site_name"].as<const char*>()),
+      settings["site_latitude"].isUnbound() ? siteLatitude : settings["site_latitude"].as<double>(),
+      settings["site_longitude"].isUnbound() ? siteLongitude : settings["site_longitude"].as<double>(),
+      settings["observer_elevation_m"].isUnbound() ? observerElevationM : settings["observer_elevation_m"].as<double>(),
+      settings["view_heading"].isUnbound() ? viewHeading : settings["view_heading"].as<double>());
+}
+
+void handleSiteAirports() {
+  const String lat = webServer.arg("lat"), lon = webServer.arg("lon");
+  char *end = nullptr; const double latitude = strtod(lat.c_str(), &end);
+  if (end == lat.c_str() || *end || !isfinite(latitude) || fabs(latitude) > 90) { siteProfilesError(); return; }
+  const double longitude = strtod(lon.c_str(), &end);
+  if (end == lon.c_str() || *end || !isfinite(longitude) || fabs(longitude) > 180) { siteProfilesError(); return; }
+  webServer.sendHeader("Cache-Control", "no-store");
+  const PsramBuffer json = nearbyAirportTemplates(latitude, longitude);
+  sendPsramResponse("application/json; charset=utf-8", json);
+}
+
+
 PsramBuffer configurationJson() {
   JsonDocument document(&temporaryJsonAllocator());
   document["format"] = "flightwall-config-v1";
@@ -3977,6 +4092,8 @@ PsramBuffer configurationJson() {
   settings["preferred_adsb_source"] = activeAdsbSource;
   settings["automatic_adsb_failover"] = automaticAdsbFailover;
   settings["route_url"] = routeUrl;
+  settings["site_profiles"] = siteProfiles().profiles();
+  settings["active_site_profile"] = siteProfiles().active();
   settings["site_name"] = siteName;
   settings["site_latitude"] = siteLatitude;
   settings["site_longitude"] = siteLongitude;
@@ -4052,6 +4169,10 @@ void handleConfigurationRestore() {
                           "Invalid site description (maximum 48 characters)."));
     return;
   }
+  SiteProfiles restoredProfiles;
+  if (!prepareSiteProfilesRestore(s, restoredProfiles)) { siteProfilesError(); return; }
+  const PsramBuffer restoredProfileBytes = restoredProfiles.encode();
+  if (restoredProfileBytes.failed()) { siteProfilesError(503); return; }
   bool restoredSweepLine = false;
   const bool hasSweepStyle = !s["radar_sweep_style"].isNull();
   if (hasSweepStyle && (!s["radar_sweep_style"].is<const char*>() ||
@@ -4068,6 +4189,10 @@ void handleConfigurationRestore() {
   }
   settingsWritePreparing = false;
   settingsWriteInProgress = true;
+  if (preferences.putBytes("siteProfiles", restoredProfileBytes.c_str(), restoredProfileBytes.length()) != restoredProfileBytes.length()) {
+    xSemaphoreGive(preferencesMutex); settingsWriteInProgress = false;
+    siteProfilesError(503); return;
+  }
   auto putString = [&](const char* key, const char* field) {
     if (!s[field].isNull()) preferences.putString(key, s[field].as<String>());
   };
@@ -4096,10 +4221,12 @@ void handleConfigurationRestore() {
   putString("adsbUrl", "adsb_url_1"); putString("adsbUrl2", "adsb_url_2");
   if (!s["preferred_adsb_source"].isNull()) preferences.putUChar("adsbActive", constrain(s["preferred_adsb_source"].as<int>(), 0, 2));
   putBool("adsbFailover", "automatic_adsb_failover"); putString("routeUrl", "route_url");
-  putString("siteName", "site_name");
-  if (!s["site_latitude"].isNull()) preferences.putDouble("siteLat", constrain(s["site_latitude"].as<double>(), -90.0, 90.0));
-  if (!s["site_longitude"].isNull()) preferences.putDouble("siteLon", constrain(s["site_longitude"].as<double>(), -180.0, 180.0));
-  if (!s["view_heading"].isNull()) preferences.putFloat("heading", constrain(s["view_heading"].as<float>(), 0.0f, 359.0f));
+  const JsonObjectConst restoredSite = restoredProfiles.selected();
+  preferences.putString("siteName", restoredSite["name"].as<const char*>());
+  preferences.putDouble("siteLat", restoredSite["latitude"].as<double>());
+  preferences.putDouble("siteLon", restoredSite["longitude"].as<double>());
+  preferences.putFloat("observerElevM", restoredSite["elevation_m"].as<float>());
+  preferences.putFloat("heading", restoredSite["view_heading"].as<float>());
   putBool("radarTrails", "radar_trails_enabled");
   if (!s["radar_sweep_interval_seconds"].isNull()) preferences.putUChar("radarSweepSec", constrain(s["radar_sweep_interval_seconds"].as<int>(), 0, 10));
   if (hasSweepStyle) preferences.putBool("radarSweepLine", restoredSweepLine);
@@ -4275,6 +4402,11 @@ void translateWebPageToEnglish(Text &html) {
     {"Wetterdaten anzeigen, wenn kein Flugzeug in der Nähe ist", "Show weather data when no aircraft is nearby"},
     {"Anzeigeradius", "Display radius"},
     {"Standorthöhe über NHN", "Site elevation above sea level"},
+    {"Standortprofil", "Site profile"},
+    {"Neuer Standort", "New site"},
+    {"Änderungen übernehmen", "Apply edits"},
+    {"Standort löschen", "Delete site"},
+    {"Flughafen-Vorlagen aus den verfügbaren Lookup-Tabellen im Umkreis von 150 km. Höhe prüfen und Blickrichtung für den Aufstellort festlegen. Erst „Einstellungen speichern“ aktiviert Änderungen.", "Airport templates from available lookup tables within 150 km. Check elevation and set the viewing direction for your installation. Only Save settings activates changes."},
     {"Standortbezeichnung (optional)", "Site description (optional)"},
     {"Unter diesem Blickwinkel \"weit\"", "Use \"far\" below this elevation angle"},
     {"Nachtruhe aktiv", "Night mode enabled"},
@@ -4757,7 +4889,7 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
   html += htmlEscape(adsbUrl1);
   html += F("'></label><label class='fieldWide'>ADS-B-Adresse Quelle 2<input type='url' name='adsbUrl2' maxlength='180' value='");
   html += htmlEscape(adsbUrl2);
-  html += F("' placeholder='http://zweiter-empfaenger/data/aircraft.json'></label></div><p class='muted'>Bei aktivem Failover wird nach einem Fehler sofort eine andere konfigurierte Quelle verwendet; die bevorzugte Quelle wird jede Minute erneut geprüft. Quelle 2 darf unkonfiguriert bleiben. Der Radius von adsb.fi wird automatisch aus dem Anzeigeradius berechnet. Daten: <a href='https://adsb.fi/' target='_blank' rel='noopener'>adsb.fi</a>.</p><div class='fieldGrid'><label class='fieldWide muted'>Standortbezeichnung (optional)<input type='text' name='siteName' maxlength='48' value=\"%FW_SITE_NAME%\"></label><label class='third'>Breitengrad<input type='number' name='siteLat' min='-90' max='90' step='0.000001' value='");
+  html += F("' placeholder='http://zweiter-empfaenger/data/aircraft.json'></label></div><p class='muted'>Bei aktivem Failover wird nach einem Fehler sofort eine andere konfigurierte Quelle verwendet; die bevorzugte Quelle wird jede Minute erneut geprüft. Quelle 2 darf unkonfiguriert bleiben. Der Radius von adsb.fi wird automatisch aus dem Anzeigeradius berechnet. Daten: <a href='https://adsb.fi/' target='_blank' rel='noopener'>adsb.fi</a>.</p><div class='fieldGrid'><label class='fieldWide'>Standortprofil<select id='siteProfileChoice' aria-label='Standortprofil'></select></label><div class='fieldWide buttonRow'><button type='button' id='siteProfileNew'>Neuer Standort</button><button type='button' id='siteProfileApply'>Änderungen übernehmen</button><button type='button' id='siteProfileDelete'>Standort löschen</button></div></div><input type='hidden' name='siteProfiles' id='siteProfilesData' value=\"%FW_SITE_PROFILES%\"><input type='hidden' id='siteAirportsData' value=\"%FW_SITE_AIRPORTS%\"><p id='siteProfileHint' class='muted' role='status'>Flughafen-Vorlagen aus den verfügbaren Lookup-Tabellen im Umkreis von 150 km. Höhe prüfen und Blickrichtung für den Aufstellort festlegen. Erst „Einstellungen speichern“ aktiviert Änderungen.</p><div class='fieldGrid' id='siteProfileFields'><label class='fieldWide muted'>Standortbezeichnung (optional)<input type='text' name='siteName' maxlength='48' value=\"%FW_SITE_NAME%\"></label><label class='third'>Breitengrad<input type='number' name='siteLat' min='-90' max='90' step='0.000001' value='");
   html += String(siteLatitude, 6);
   html += F("'></label><label class='third'>Längengrad<input type='number' name='siteLon' min='-180' max='180' step='0.000001' value='");
   html += String(siteLongitude, 6);
@@ -5473,13 +5605,22 @@ wifiScanResults.addEventListener('change',()=>{
 #if FLIGHTWALL_HAS_MATRIX
   html += F("<p class='muted'>UP/DOWN: manuell; beide Tasten: Automatik.</p>");
 #endif
+  if (configurationPage) html += siteProfilesEditorScript();
   html += F("</body></html>");
   translateWebPageToEnglish(html);
-  // Insert user text after translating labels; never translate the site name.
-  html.replace("%FW_ROUTE_TEST_CALLSIGN%", htmlEscape(
-      statusFlight.available && statusFlight.flight.length() && statusFlight.flight != statusFlight.hex
-          ? statusFlight.flight : String("DLH123")));
-  html.replace("%FW_SITE_NAME%", htmlEscape(siteName));
+  // Insert all user values in one pass; names resembling placeholders stay literal.
+  const String callsign = htmlEscape(statusFlight.available && statusFlight.flight.length() && statusFlight.flight != statusFlight.hex
+      ? statusFlight.flight : String("DLH123"));
+  const String site = htmlEscape(siteName);
+  if (configurationPage) {
+    const PsramBuffer profiles = siteProfiles().encode();
+    const PsramBuffer airports = nearbyAirportTemplates(siteLatitude, siteLongitude);
+    const PsramBuffer profileAttribute = escapedProfileAttribute(profiles);
+    const PsramBuffer airportAttribute = escapedProfileAttribute(airports);
+    if (profiles.failed() || airports.failed() || profileAttribute.failed() || airportAttribute.failed() || !siteProfiles().profiles().size())
+      html.reserve(PsramBuffer::maximumSize + 1);
+    else fillSitePageValues(html, site.c_str(), callsign.c_str(), profileAttribute.c_str(), airportAttribute.c_str());
+  } else fillSitePageValues(html, site.c_str(), callsign.c_str());
   return html;
 }
 
@@ -5517,7 +5658,11 @@ bool validFlightWallHost(const String &host) {
 }
 
 
-void applyWebSettings() {
+bool applyWebSettings() {
+  SiteProfiles stagedProfiles;
+  if (!prepareSiteProfilesSubmission(stagedProfiles)) return siteProfilesError();
+  const PsramBuffer profileBytes = stagedProfiles.encode();
+  if (profileBytes.failed()) return siteProfilesError(503);
   wifiSettingsChanged = false;
   wifiSettingsError = "";
   otaSettingsChanged = false;
@@ -5527,6 +5672,13 @@ void applyWebSettings() {
   settingsWritePreparing = false;
   settingsWriteInProgress = true;
   if (xSemaphoreTake(preferencesMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+    if (preferences.putBytes("siteProfiles", profileBytes.c_str(), profileBytes.length()) != profileBytes.length()) {
+      xSemaphoreGive(preferencesMutex); settingsWriteInProgress = false;
+      return siteProfilesError(503);
+    }
+    const int previousProfile = siteProfiles().active();
+    siteProfiles().swap(stagedProfiles);
+
     String requestedWifiSsid = webServer.arg("wifiSsid");
     const String requestedWifiPassword = webServer.arg("wifiPassword");
     const bool requestedOpenWifi = webServer.hasArg("wifiOpen");
@@ -5592,8 +5744,7 @@ void applyWebSettings() {
     automaticBrightnessEnabled = webServer.hasArg("autoLight");
 #endif
     displayRadiusKm = constrain(webServer.arg("radius").toFloat(), 1.0f, 100.0f);
-    observerElevationM = constrain(
-        webServer.arg("observerElevation").toFloat(), -500.0f, 9000.0f);
+
     farDirectionElevationDeg = constrain(
         webServer.arg("farElevation").toFloat(), 10.0f, 45.0f);
 #if FLIGHTWALL_HAS_MATRIX
@@ -5653,10 +5804,7 @@ void applyWebSettings() {
     requestedRouteUrl.trim();
     if (requestedRouteUrl.startsWith("http://") ||
         requestedRouteUrl.startsWith("https://")) routeUrl = requestedRouteUrl;
-    if (webServer.hasArg("siteName")) siteName = webServer.arg("siteName");
-    siteLatitude = constrain(webServer.arg("siteLat").toDouble(), -90.0, 90.0);
-    siteLongitude = constrain(webServer.arg("siteLon").toDouble(), -180.0, 180.0);
-    viewHeading = constrain(webServer.arg("viewHeading").toFloat(), 0.0f, 359.0f);
+    applyActiveSiteProfile(siteProfiles().selected(), previousProfile != siteProfiles().active());
     routesEnabled = webServer.hasArg("routesEnabled");
     adsbDbFallbackEnabled = webServer.hasArg("adsbDbFallback");
     hideSportAircraft = webServer.hasArg("hideSport");
@@ -5772,7 +5920,7 @@ void applyWebSettings() {
     }
 #endif
     xSemaphoreGive(preferencesMutex);
-  }
+  } else { settingsWriteInProgress = false; return siteProfilesError(503); }
   settingsWriteInProgress = false;
   routedFlight = "";
   ++mqttConfigRevision;
@@ -5781,6 +5929,7 @@ void applyWebSettings() {
   resetPageTransition();
   if (wifiSettingsChanged || otaSettingsChanged)
     manualRebootAt = millis() + 2500;
+  return true;
 }
 
 
@@ -5794,7 +5943,7 @@ void handleWebSave() {
       return;
     }
   }
-  applyWebSettings();
+  if (!applyWebSettings()) return;
   if (wifiSettingsError.length()) {
     webServer.send(400, "text/html; charset=utf-8",
         String("<!doctype html><html lang='") + (uiEnglish ? "en" : "de") +
@@ -5959,7 +6108,7 @@ void handleRouteCacheClear() {
 
 void handleAdsbTest() {
   if (!prepareManualNetworkJob(ManualJobKind::Adsb)) return;
-  applyWebSettings();
+  if (!applyWebSettings()) { manualNetworkJob.queued = false; manualNetworkJob.done = true; return; }
   if (manualRebootAt) {
     // Wi-Fi/OTA credential edits require a restart. Do not leave an orphaned
     // test polling an ID that disappears during that already scheduled reset.
@@ -7709,6 +7858,7 @@ void startWebServer() {
       handleWebDisplay();
     });
     webServer.on("/api/display", HTTP_GET, handleDisplayApi);
+    webServer.on("/api/site-airports", HTTP_GET, handleSiteAirports);
     webServer.on("/api/radar-selection", HTTP_POST, handleRadarSelection);
     webServer.on("/api/status", HTTP_GET, handleStatusApi);
     webServer.on("/api/status-fragment", HTTP_GET, handleStatusFragment);
@@ -8159,6 +8309,15 @@ void setup() {
   siteLatitude = preferences.getDouble("siteLat", DEFAULT_SITE_LATITUDE);
   siteLongitude = preferences.getDouble("siteLon", DEFAULT_SITE_LONGITUDE);
   viewHeading = preferences.getFloat("heading", DEFAULT_VIEW_HEADING);
+  bool loadedProfiles = false;
+  const size_t profileSize = preferences.getBytesLength("siteProfiles");
+  if (profileSize && profileSize <= SiteProfiles::MaxBytes) {
+    PsramBuffer stored;
+    if (stored.reserve(profileSize) && preferences.getBytes("siteProfiles", stored.data(), profileSize) == profileSize)
+      loadedProfiles = siteProfiles().decode(stored.c_str(), profileSize);
+  }
+  if (!loadedProfiles) siteProfiles().legacy(siteName, siteLatitude, siteLongitude, observerElevationM, viewHeading);
+  applyActiveSiteProfile(siteProfiles().selected());
   routesEnabled = preferences.getBool("routesOn", true);
   adsbDbFallbackEnabled = preferences.getBool("routeFallback", true);
   radarTrailsEnabled = preferences.getBool("radarTrails", true);

@@ -60,7 +60,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.60` |
+| Firmware | `3.6.1-dual-target.61` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel), optional 125 nutzbare Spalten, und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -771,6 +771,32 @@ Display, Wetterseite, Standort, Blickrichtung, ADS-B-Quelle, Filter,
 Routendienst, MQTT, Seitenreihenfolge, Freitext, Helligkeit und Nachtruhe.
 Statuskarten werden regelmäßig aktualisiert, ohne geöffnete Bereiche zu
 schließen oder ungespeicherte Formulareingaben zu überschreiben.
+
+### Standortprofile
+
+Matrix- und Headless-Variante verwalten bis zu **16 Standortprofile**. Jedes
+Profil enthält Bezeichnung, Koordinaten, Höhe über NHN in Metern und Blickrichtung.
+Der vorhandene Standort wird beim ersten Start unverändert als erstes Profil
+übernommen; weitere Standorte lassen sich unter `/config` anlegen und per
+Pulldown auswählen, bearbeiten oder löschen. Mindestens ein Profil bleibt erhalten.
+**Änderungen übernehmen** aktualisiert die Liste im Formular; erst
+**Einstellungen speichern** speichert und aktiviert die Auswahl auf dem Controller.
+
+Der Pulldown bietet außerdem Flughafen-Vorlagen innerhalb von **150 km** um die
+angezeigten Koordinaten an, nach Entfernung sortiert. Sie stammen aus den
+verfügbaren Flughafen-Lookups einschließlich manuell hochgeladener Ergänzungen;
+das ist kein vollständiges Verzeichnis aller Flugplätze. Die Auswahl einer
+Vorlage erzeugt ein eigenes Profil. Flughafenhöhen werden von Fuß in Meter
+umgerechnet; ohne Höhenangabe bleibt der bisherige Eingabewert stehen.
+Höhe immer für den tatsächlichen Aufstellort prüfen und die passende Blickrichtung
+eintragen. Vorlagen überschreiben keine eigenen Profile.
+
+Profile und aktive Auswahl gehören zur Konfigurationssicherung. Alte Sicherungen
+ohne Profile aktualisieren nur den aktiven Standort; andere Profile bleiben erhalten.
+Jeder Controller verwaltet seine eigenen Profile. Beim Wechsel werden die manuelle
+Flugzeugauswahl, Radarspuren und die bisherige Anzeige zurückgesetzt; der nächste
+ADS-B-Abruf berechnet Entfernung, CPA und Routenplausibilität am neuen Standort.
+Lookup-Ergänzungen und andere Einstellungen bleiben dabei erhalten.
 
 ### Flugzeug im Webradar auswählen
 

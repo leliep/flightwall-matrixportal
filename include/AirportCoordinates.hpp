@@ -10,3 +10,6 @@ struct AirportCoordinates {
 };
 
 bool airportCoordinates(const String& code, AirportCoordinates& result);
+
+size_t airportCoordinateCount();
+const char *airportCoordinateCodeAt(size_t index);

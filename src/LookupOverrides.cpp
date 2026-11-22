@@ -194,3 +194,5 @@ size_t lookupAirlineCount() { return active["airlines"].size(); }
 size_t lookupPsramBytes() { return allocated; }
 uint32_t lookupAllocationFailures() { return failures; }
 const String& lookupLastError() { return error; }
+
+String lookupAirportCodeAt(size_t index) { return active["airports"][index]["code"] | ""; }
