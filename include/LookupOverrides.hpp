@@ -1,4 +1,6 @@
 #pragma once
+#include <cstdint>
+#include <cstddef>
 #include <Arduino.h>
 #include "AirportCoordinates.hpp"
 constexpr size_t lookupUploadLimit = 65536;
