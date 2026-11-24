@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include "RegistrationCallsign.hpp"
 
 inline bool isGermanAirforceCallsign(const String& callsign) {
   // Standard and already observed abbreviated Luftwaffe prefixes.

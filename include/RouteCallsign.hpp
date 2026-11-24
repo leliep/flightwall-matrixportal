@@ -1,11 +1,14 @@
 #pragma once
 
 #include <cstring>
+#include "RegistrationCallsign.hpp"
 
 // Inputs are trimmed uppercase callsigns. Only an ICAO airline prefix followed
 // entirely by digits may ignore leading zeroes; registrations/suffixes stay exact.
 inline bool routeCallsignMatches(const char* requested, const char* returned) {
   if (std::strcmp(requested, returned) == 0) return true;
+  if (isRegistrationCallsign(requested) || isRegistrationCallsign(returned))
+    return false;
   const size_t requestedLength = std::strlen(requested);
   const size_t returnedLength = std::strlen(returned);
   if (requestedLength < 4 || returnedLength < 4) return false;

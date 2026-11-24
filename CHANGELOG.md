@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.6.1-dual-target.63 – 2026-11-24
+
+- Kennzeichen-Callsigns UP-P mit vier Ziffern, auch ohne Bindestrich wie
+  UPP1088, erzeugen keinen falschen Airline-Code UPP mehr
+- Explizite Kennzeichen mit Bindestrich ebenfalls von Airline-Ableitung getrennt;
+  keine pauschale Zuordnung eines Kennzeichenpräfixes zu einem Betreiber
+- Routenvergleich bei erkannten Kennzeichen exakt, einschließlich führender
+  Nullen; DLH072/DLH72 und alphanumerische Airline-Callsigns unverändert
+- Gemeinsame Erkennung und Regressionstests für Matrix und Headless;
+  Konfigurationen und Lookup-Ergänzungen unverändert
+
+
 ## 3.6.1-dual-target.62 – 2026-11-22
 
 - Zahlenfelder ohne führende Leerzeichen: Blickrichtung 0–9° und Standort-/

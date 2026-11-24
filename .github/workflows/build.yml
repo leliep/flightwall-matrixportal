@@ -45,6 +45,7 @@ jobs:
           python3 tools/test_radar_sweep.py
           python3 tools/test_route_test_responses.py
           python3 tools/test_route_retry.py
+          python3 tools/test_callsign_classifier.py
           python3 tools/test_route_validation.py
           python3 tools/test_adsb_background_io.py
           python3 tools/test_background_jobs.py

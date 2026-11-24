@@ -14,6 +14,9 @@ class String {
   const char *c_str() const { return value_.c_str(); }
   char operator[](size_t index) const { return value_[index]; }
   unsigned int length() const { return value_.size(); }
+  String substring(unsigned int from, unsigned int to) const {
+    return String(value_.substr(from, to - from).c_str());
+  }
   bool isEmpty() const { return value_.empty(); }
   long toInt() const { return std::strtol(value_.c_str(),nullptr,10); }
   bool startsWith(const char *prefix) const { return value_.rfind(prefix, 0) == 0; }
@@ -53,3 +56,6 @@ class String {
 };
 
 inline bool isAlphaNumeric(char c) { return std::isalnum(static_cast<unsigned char>(c)); }
+
+inline bool isAlpha(char c) { return std::isalpha(static_cast<unsigned char>(c)); }
+inline bool isDigit(char c) { return std::isdigit(static_cast<unsigned char>(c)); }
