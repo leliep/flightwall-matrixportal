@@ -38,6 +38,8 @@ jobs:
           node tools/test_site_name.mjs
       - name: Build MatrixPortal firmware
         run: pio run -e adafruit_matrixportal_esp32s3
+      - name: Build 128x64 MatrixPortal firmware
+        run: pio run -e adafruit_matrixportal_esp32s3_128x64
       - name: Test temporary PSRAM buffers and TLS cleanup
         run: |
           python3 tools/test_site_profiles.py
@@ -60,6 +62,11 @@ jobs:
         with:
           name: flightwall-matrixportal-s3
           path: .pio/build/adafruit_matrixportal_esp32s3/firmware.bin
+      - name: Upload 128x64 MatrixPortal firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: flightwall-matrixportal-s3-128x64
+          path: .pio/build/adafruit_matrixportal_esp32s3_128x64/firmware.bin
       - name: Upload headless ESP32-S3 N16R8 firmware
         uses: actions/upload-artifact@v4
         with:

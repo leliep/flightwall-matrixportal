@@ -24,6 +24,12 @@
 #define FLIGHTWALL_HAS_MATRIX 1
 #endif
 
+#ifndef FLIGHTWALL_MATRIX_HEIGHT
+#define FLIGHTWALL_MATRIX_HEIGHT 32
+#endif
+static_assert(FLIGHTWALL_MATRIX_HEIGHT == 32 || FLIGHTWALL_MATRIX_HEIGHT == 64,
+              "Supported matrix heights: 32 or 64");
+
 #include <Adafruit_GFX.h>
 #include <Adafruit_BME280.h>
 #if FLIGHTWALL_HAS_MATRIX
@@ -66,11 +72,15 @@ int16_t matrixLayoutWidth() {
 #endif
 }
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.63";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-24 registration callsign classification";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.64";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-25 128x64 split matrix display";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
+#if FLIGHTWALL_MATRIX_HEIGHT == 64
+constexpr char DEVICE_VARIANT[] = "matrixportal_s3_128x64";
+#else
 constexpr char DEVICE_VARIANT[] = "matrixportal_s3";
+#endif
 constexpr char DEVICE_HOSTNAME[] = "matrixportal";
 #else
 constexpr char DEVICE_NAME[] = "FlightWall ESP32-S3 Server";
@@ -158,12 +168,17 @@ constexpr uint8_t BRIGHTNESS_LEVEL_COUNT =
 
 #if FLIGHTWALL_HAS_MATRIX
 uint8_t rgbPins[] = {42, 41, 40, 38, 39, 37};
+#if FLIGHTWALL_MATRIX_HEIGHT == 64
+// E must be routed to HUB75 pin 8 on this panel; verify the clone jumper.
+uint8_t addrPins[] = {45, 36, 48, 35, 21};
+#else
 uint8_t addrPins[] = {45, 36, 48, 35};
+#endif
 constexpr uint8_t clockPin = 2;
 constexpr uint8_t latchPin = 47;
 constexpr uint8_t oePin = 14;
 Adafruit_Protomatter matrix(
-    MATRIX_WIDTH, BIT_DEPTH, 1, rgbPins, 4, addrPins,
+    MATRIX_WIDTH, BIT_DEPTH, 1, rgbPins, sizeof(addrPins), addrPins,
     clockPin, latchPin, oePin, true);
 #else
 // Retain the common drawing code without allocating a HUB75 framebuffer or
@@ -820,7 +835,7 @@ void showMatrix() {
   const uint32_t started = micros();
   // Clear excluded physical columns on every frame, including fills/tests/transitions.
   const int16_t width = matrixLayoutWidth();
-  if (width < MATRIX_WIDTH) matrix.fillRect(width, 0, MATRIX_WIDTH - width, 32, 0);
+  if (width < MATRIX_WIDTH) matrix.fillRect(width, 0, MATRIX_WIDTH - width, matrix.height(), 0);
   matrix.show();
   matrixShowLastUs = micros() - started;
   matrixShowMaxUs = max(matrixShowMaxUs, matrixShowLastUs);
@@ -2110,14 +2125,23 @@ bool radarPointCoordinates(float distanceKm, float bearing,
       roundf(sinf(relativeRadians) * distanceKm * pixelsPerKm));
   y = RADAR_CENTER_Y - static_cast<int16_t>(
       roundf(cosf(relativeRadians) * distanceKm * pixelsPerKm));
-  return x >= 0 && x < width && y >= 0 && y < matrix.height();
+  // Radar snapshots and web projection stay in logical 128x32 coordinates.
+  return x >= 0 && x < width && y >= 0 && y < 32;
+}
+
+
+// Rendering offset only: shared radar points/trails retain 32-row coordinates.
+int16_t radarDrawOffsetY = 0;
+void drawRadarPixel(int16_t x, int16_t y, uint16_t color) {
+  if (x >= 0 && x < matrixLayoutWidth() && y >= 0 && y < 32)
+    matrix.drawPixel(x, y + radarDrawOffsetY, color);
 }
 
 
 void drawRadarRing() {
   for (uint8_t dot = 0; dot < RADAR_RADIUS_DOT_COUNT; ++dot) {
     const float angle = 2.0F * PI * dot / RADAR_RADIUS_DOT_COUNT;
-    matrix.drawPixel(
+    drawRadarPixel(
         radarCenterX() + static_cast<int16_t>(
             roundf(cosf(angle) * RADAR_RADIUS_PIXELS)),
         RADAR_CENTER_Y + static_cast<int16_t>(
@@ -2160,7 +2184,8 @@ void drawRadarPage() {
   if (showSweep && lineSweep) {
     const uint8_t channel = ((green >> 5) & 63) * 255 / 63;
     const uint8_t dim = min(channel, static_cast<uint8_t>(max(36, channel / 3)));
-    matrix.drawLine(radarCenterX(), RADAR_CENTER_Y, sweepX, sweepY,
+    matrix.drawLine(radarCenterX(), RADAR_CENTER_Y + radarDrawOffsetY,
+                    sweepX, sweepY + radarDrawOffsetY,
                     matrix.color565(0, dim, 0));
   }
   // Trails stay above the beam; own position and live targets are drawn last.
@@ -2185,18 +2210,18 @@ void drawRadarPage() {
             dimChannel(((base >> 11) & 31) * 255 / 31),
             dimChannel(((base >> 5) & 63) * 255 / 63),
             dimChannel((base & 31) * 255 / 31));
-        matrix.drawPixel(dot.x + radarCenterX() - MATRIX_WIDTH / 2, dot.y, color);
+        drawRadarPixel(dot.x + radarCenterX() - MATRIX_WIDTH / 2, dot.y, color);
       }
     }
   }
   if (!lineSweep) drawRadarRing();
-  if (showSweep && !lineSweep) matrix.drawPixel(sweepX, sweepY, white);
+  if (showSweep && !lineSweep) drawRadarPixel(sweepX, sweepY, white);
   // Own position remains visible even when no aircraft is present.
-  matrix.drawPixel(radarCenterX(), RADAR_CENTER_Y, green);
-  matrix.drawPixel(radarCenterX() - 1, RADAR_CENTER_Y, green);
-  matrix.drawPixel(radarCenterX() + 1, RADAR_CENTER_Y, green);
-  matrix.drawPixel(radarCenterX(), RADAR_CENTER_Y - 1, green);
-  matrix.drawPixel(radarCenterX(), RADAR_CENTER_Y + 1, green);
+  drawRadarPixel(radarCenterX(), RADAR_CENTER_Y, green);
+  drawRadarPixel(radarCenterX() - 1, RADAR_CENTER_Y, green);
+  drawRadarPixel(radarCenterX() + 1, RADAR_CENTER_Y, green);
+  drawRadarPixel(radarCenterX(), RADAR_CENTER_Y - 1, green);
+  drawRadarPixel(radarCenterX(), RADAR_CENTER_Y + 1, green);
 
   const bool blinkOn = (millis() / 500U) % 2U == 0;
   for (uint8_t pass = 0; pass < 2; ++pass) {
@@ -2210,18 +2235,31 @@ void drawRadarPage() {
       if (!radarPointCoordinates(point.distanceKm, point.bearing, x, y, matrixLayoutWidth()))
         continue;
       const uint16_t color = radarPointColor(point);
-      matrix.drawPixel(x, y, color);
+      drawRadarPixel(x, y, color);
       if (selectedPoint) {
-        matrix.drawPixel(x - 1, y, color);
-        matrix.drawPixel(x + 1, y, color);
-        matrix.drawPixel(x, y - 1, color);
-        matrix.drawPixel(x, y + 1, color);
+        drawRadarPixel(x - 1, y, color);
+        drawRadarPixel(x + 1, y, color);
+        drawRadarPixel(x, y - 1, color);
+        drawRadarPixel(x, y + 1, color);
       }
     }
   }
   if (lastError.length() &&
       (millis() / IDLE_BLINK_HALF_PERIOD_MS) % 2 == 0)
-    matrix.drawPixel(0, 31, idleErrorPixel);
+    drawRadarPixel(0, 31, idleErrorPixel);
+}
+
+
+void drawPersistentRadar() {
+#if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+  // The radar keeps full configured brightness while only the top pages fade.
+  const uint8_t savedTransition = transitionPercent;
+  setTransitionPercent(100);
+  radarDrawOffsetY = 32;
+  drawRadarPage();
+  radarDrawOffsetY = 0;
+  setTransitionPercent(savedTransition);
+#endif
 }
 
 
@@ -2236,13 +2274,16 @@ void drawIdleDisplay() {
   if (bmeAvailable || mqttAvailable) {
     drawCompactClimateDisplay(bmeAvailable, mqttAvailable);
   } else if (!environmentIdleDisplayEnabled && pageEnabled[7]) {
+#if FLIGHTWALL_MATRIX_HEIGHT == 32
     drawRadarPage();
     radarIdleVisible = true;
+#endif
   }
   if (!radarIdleVisible &&
       (millis() / IDLE_BLINK_HALF_PERIOD_MS) % 2 == 0) {
     matrix.drawPixel(0, 31, lastError.length() ? idleErrorPixel : idlePixel);
   }
+  drawPersistentRadar();
   showMatrix();
 }
 
@@ -2252,6 +2293,9 @@ bool selectEnabledPage() {
     const uint8_t slot = (currentPageSlot + offset) % PAGE_COUNT;
     const uint8_t page = pageOrder[slot];
     const bool pageHasContent =
+#if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+        page != 7 &&
+#endif
         (page != 3 || airportNamesPageHasData()) &&
         (page != 4 || customPageText.length());
     if (page < PAGE_COUNT && pageEnabled[page] && pageHasContent) {
@@ -2284,6 +2328,11 @@ void drawConfiguredPage(uint8_t page) {
 
 
 void clearMatrixBuffers() {
+#if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+  // Each split frame is fully cleared before drawing; avoid blanking the radar
+  // between top-page transitions merely to clear the second DMA buffer.
+  return;
+#endif
   // Protomatter uses two frame buffers. Clear and swap twice so neither one
   // can expose pixels left by the previously active page.
   matrix.fillScreen(0);
@@ -2343,7 +2392,7 @@ bool serviceDisplayTest() {
   else if (stage == 2) matrix.fillScreen(testBlue);
   else if (stage == 3) matrix.fillScreen(testWhite);
   else if (stage == 4) {
-    for (int16_t y = 0; y < 32; y += 4) {
+    for (int16_t y = 0; y < matrix.height(); y += 4) {
       for (int16_t x = 0; x < matrixLayoutWidth(); x += 4) {
         if (((x / 4) + (y / 4)) % 2 == 0) {
           matrix.fillRect(x, y, 4, 4, testWhite);
@@ -2351,22 +2400,22 @@ bool serviceDisplayTest() {
       }
     }
   } else if (stage == 5) {
-    matrix.drawRect(0, 0, matrixLayoutWidth(), 32, testWhite);
-    matrix.drawLine(0, 0, matrixLayoutWidth() - 1, 31, testRed);
-    matrix.drawLine(matrixLayoutWidth() - 1, 0, 0, 31, testGreen);
-    matrix.drawFastVLine(matrixLayoutWidth() / 2 - 1, 0, 32, testBlue);
-    matrix.drawFastVLine(matrixLayoutWidth() / 2, 0, 32, testBlue);
+    matrix.drawRect(0, 0, matrixLayoutWidth(), matrix.height(), testWhite);
+    matrix.drawLine(0, 0, matrixLayoutWidth() - 1, matrix.height() - 1, testRed);
+    matrix.drawLine(matrixLayoutWidth() - 1, 0, 0, matrix.height() - 1, testGreen);
+    matrix.drawFastVLine(matrixLayoutWidth() / 2 - 1, 0, matrix.height(), testBlue);
+    matrix.drawFastVLine(matrixLayoutWidth() / 2, 0, matrix.height(), testBlue);
   } else if (stage == 6) {
     drawLine(0, 0, "DISPLAYTEST", testWhite);
     drawLine(0, 11, "0123456789", testGreen);
-    drawLine(0, 22, String("RGB ") + String(matrixLayoutWidth()) + "x32", testBlue);
+    drawLine(0, 22, String("RGB ") + String(matrixLayoutWidth()) + "x" + String(matrix.height()), testBlue);
   } else if (stage == 7) {
     const int16_t bandWidth = matrixLayoutWidth() / 4;
-    matrix.fillRect(0, 0, bandWidth, 32, testRed);
-    matrix.fillRect(bandWidth, 0, bandWidth, 32, testGreen);
-    matrix.fillRect(bandWidth * 2, 0, bandWidth, 32, testBlue);
+    matrix.fillRect(0, 0, bandWidth, matrix.height(), testRed);
+    matrix.fillRect(bandWidth, 0, bandWidth, matrix.height(), testGreen);
+    matrix.fillRect(bandWidth * 2, 0, bandWidth, matrix.height(), testBlue);
     matrix.fillRect(bandWidth * 3, 0,
-                    matrixLayoutWidth() - bandWidth * 3, 32, testWhite);
+                    matrixLayoutWidth() - bandWidth * 3, matrix.height(), testWhite);
   } else {
     constexpr CompactIconKind TEST_ICONS[7] = {
         CompactIconKind::Helicopter, CompactIconKind::A380,
@@ -2476,6 +2525,7 @@ void drawDisplay() {
     if (now - currentPageStarted < EMERGENCY_PAGE_DURATION_MS) {
       matrix.fillScreen(0);
       drawEmergencyPage();
+      drawPersistentRadar();
       showMatrix();
       return;
     }
@@ -2493,6 +2543,10 @@ void drawDisplay() {
     if (flight.emergency) {
       drawEmergencyPage();
     }
+#if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+    else drawMainPage();
+#endif
+    drawPersistentRadar();
     showMatrix();
     return;
   }
@@ -2540,6 +2594,7 @@ void drawDisplay() {
   activatePage(pageToDraw, now);
   matrix.fillScreen(0);
   drawConfiguredPage(pageToDraw);
+  drawPersistentRadar();
   showMatrix();
 }
 
@@ -6701,6 +6756,10 @@ void handleStatusApi() {
   json += String(BRIGHTNESS_LEVELS[brightnessIndex]);
   json += ",\"matrix_layout_width\":";
   json += String(matrixLayoutWidth());
+  json += ",\"matrix_height\":";
+  json += String(matrix.height());
+  json += ",\"matrix_scan_rows\":";
+  json += String(FLIGHTWALL_HAS_MATRIX ? matrix.height() / 2 : 0);
   json += ",\"matrix_bit_depth\":";
   json += String(BIT_DEPTH);
   json += ",\"matrix_refresh_hz\":";
@@ -8446,6 +8505,10 @@ uint32_t displayDrawIntervalMs() {
       static_cast<int32_t>(brightnessMessageUntil - millis()) > 0) {
     return 50;
   }
+#if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+  // Persistent radar and scrolling pages share a smooth 40 Hz render cadence.
+  return RADAR_SWEEP_DRAW_INTERVAL_MS;
+#endif
   if (!aircraftIsInsideDisplayRadius()) {
 #if FLIGHTWALL_HAS_MATRIX
     if (!environmentIdleDisplayEnabled && pageEnabled[7]) {

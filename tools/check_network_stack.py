@@ -12,7 +12,7 @@ core=Path(os.environ.get('PLATFORMIO_CORE_DIR',str(Path.home()/'.platformio')))
 name='xtensa-esp32s3-elf-objdump'
 objdump=shutil.which(name) or str(core/'packages/toolchain-xtensa-esp32s3/bin'/name)
 results=[]
-for env in ('adafruit_matrixportal_esp32s3','esp32s3_n16r8_headless'):
+for env in ('adafruit_matrixportal_esp32s3','esp32s3_n16r8_headless','adafruit_matrixportal_esp32s3_128x64'):
  disassembly=subprocess.check_output([objdump,'-d',str(root/'.pio/build'/env/'firmware.elf')],text=True)
  frames={}
  for symbol,label in [('_ZN11RouteClient14requestPrimaryERK6StringRK12RouteContextb','primary_http_request'),('_ZN11RouteClient14processPendingEv','primary_batch_worker'),('_ZN11RouteClient12fetchPrimaryERK6StringRK12RouteContext','primary_queue'),('_Z16fetchLocalFlightv','adsb_route_cycle'),('_Z15handleStatusApiv','status_api'),('_Z15handleRouteTestv','route_test_submit'),('_Z15runRouteTestJobv','route_test_worker'),('_Z16handleDisplayApiv','display_api'),('_Z8mqttTaskPv','mqtt_task'),('_Z14handleMqttTestv','mqtt_test_submit'),('_ZN11MqttSession7connectEPKc','mqtt_connect'),('_Z7webPagebb','config_status_page'),('_Z26handleConfigurationRestorev','configuration_restore'),('_Z16applyWebSettingsv','settings_apply'),('_Z18handleSiteAirportsv','site_airports'),('_Z22nearbyAirportTemplatesdd','nearby_airport_templates')]:

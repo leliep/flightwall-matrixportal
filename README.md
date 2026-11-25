@@ -61,9 +61,9 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.63` |
+| Firmware | `3.6.1-dual-target.64` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
-| Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel), optional 125 nutzbare Spalten, und Web-Display |
+| Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) oder eigener 128×64-Build, optional 125 nutzbare Spalten, und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
 | Farbtiefe | 3 Bit je Farbkanal |
 | Framework | Arduino über PlatformIO |
@@ -74,9 +74,10 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 | Lizenz | MIT |
 
 Die aktuelle Firmware ist gezielt für **128×32 Pixel aus zwei horizontal
-verketteten 64×32-Panels** ausgelegt. Ein einzelnes 128×64-Panel oder andere
-Scanverfahren benötigen Änderungen an Matrixhöhe, Layout, Speicherbedarf und
-Protomatter-Konfiguration und sind kein direkt unterstützter Ersatz.
+verketteten 64×32-Panels** ausgelegt. Zusätzlich gibt es einen eigenen Build für ein **128×64-HUB75E-Panel mit
+1/32-Scan und binärer ABCDE-Adressierung**. Er zeigt oben die konfigurierten
+Informationsseiten und unten dauerhaft das Radar. Andere Scanverfahren sind
+weiterhin kein direkt unterstützter Ersatz.
 
 ## Eindrücke aus dem Betrieb
 
@@ -217,6 +218,36 @@ Optional:
 | MQTT-Wetter | Wetter-Ruheanzeige und Status | Status/API; keine lokale Matrixseite |
 | Browser | zusätzliche Anzeige und Bedienung | primäre Anzeige und Bedienung |
 | adsb.im / ADSBDB | Routenauflösung | Routenauflösung |
+
+### Eigenständige 128×64-Variante
+
+Für das Panel **P2-1515-128X64-32S-S2** mit ICN2037BP ist das Environment
+`adafruit_matrixportal_esp32s3_128x64` vorgesehen. Die Hardwarekennung lautet
+`matrixportal_s3_128x64`; dieses Image gehört ausschließlich auf den Controller
+mit dem 128×64-Panel, nicht auf die bisherige 128×32-Hardware.
+
+- Ein Panel, 128×64 Pixel, 1/32-Scan, fünf binäre Adressleitungen ABCDE.
+- E wird durch GPIO 21 angesteuert. Vor Installation die tatsächliche
+  E-Belegung des Panels und des MatrixPortal-Nachbaus prüfen; für E auf
+  HUB75-Pin 8 muss der entsprechende 8/16-Jumper auf 8 stehen.
+- Oben 128×32 Pixel mit den bisherigen konfigurierten Informationsseiten;
+  unten 128×32 Pixel mit dauerhaftem Radar, einschließlich Spuren, Punkt-/
+  Strichumlauf und konfigurierbarer Geschwindigkeit. Die separate Radarseite
+  wird oben übersprungen, ohne die gespeicherte Seitenauswahl zu verändern.
+- Sind nur Radar oder inhaltslose Seiten ausgewählt, erscheinen bei einem
+  aktuellen Flug oben die Flugdaten als Rückfallanzeige.
+- Helligkeit, Nachtabschaltung, Ausschalten der Anzeige, OTA und Startanzeige
+  behalten Vorrang. Ohne ausgewählten Flug zeigt der untere Bereich weiter
+  Radar; oben erscheint gegebenenfalls die konfigurierte Wetteranzeige.
+- Displaytest und die optionale Maskierung der rechten drei Spalten umfassen
+  alle 64 Zeilen. `/api/status` meldet `matrix_height` und `matrix_scan_rows`.
+- Drei Bit Farbtiefe und doppelte Pufferung bleiben erhalten; DMA-Bedarf und
+  Bildpuffer wachsen. Reale Bildwiederholrate, Zeilen-/Farbreihenfolge und
+  TLS-Speicherreserve müssen nach der Inbetriebnahme am Panel geprüft werden.
+
+Die Quelltexte und Webanzeige bleiben gemeinsam mit 128×32 und Headless
+gepflegt. Dieser Build wird zusätzlich im GitHub-Workflow geprüft und als
+separates Artefakt bereitgestellt.
 
 ### Matrixverkabelung
 

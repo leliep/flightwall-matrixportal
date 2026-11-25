@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.6.1-dual-target.64 – 2026-11-25
+
+- Eigenes MatrixPortal-Buildziel für 128×64, 1/32-Scan, ABCDE mit E auf GPIO 21
+  und eindeutiger Hardwarekennung matrixportal_s3_128x64
+- Informationsseiten oben und dauerhaftes Radar unten, einschließlich Spuren
+  und Umlauf; logische Radar-/Web-Koordinaten bleiben unverändert
+- Unabhängige Radarhelligkeit bei Seitenübergängen; Nachtabschaltung, OTA,
+  Start- und Statusanzeigen behalten Vorrang; keine Änderung gespeicherter Werte
+- Displaytest und 125-Pixel-Maskierung über volle physische Panelhöhe;
+  Höhen-/Scan-Diagnose im Status und zusätzlicher CI-Build
+
+
 ## 3.6.1-dual-target.63 – 2026-11-24
 
 - Kennzeichen-Callsigns UP-P mit vier Ziffern, auch ohne Bindestrich wie

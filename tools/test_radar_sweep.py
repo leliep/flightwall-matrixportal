@@ -38,19 +38,21 @@ constexpr uint8_t RADAR_RADIUS_DOT_COUNT=32;
 constexpr uint32_t RADAR_SWEEP_SESSION_GAP_MS=750,IDLE_BLINK_HALF_PERIOD_MS=500;
 constexpr uint8_t RADAR_POINT_SELECTED=1,RADAR_POINT_SPECIAL=2,RADAR_POINT_EMERGENCY=4,RADAR_POINT_GROUND=8;
 uint16_t red=0xf800,yellow=0xffe0,violet=0xf81f,orange=0xfd20,cyan=0x07ff,blue=0x001f,white=0xffff,green=0x07e0,idleErrorPixel=0x1234;
+int16_t radarDrawOffsetY=0;
 int width=128;int16_t matrixLayoutWidth(){return width;}
 float displayRadiusKm=15,viewHeading=0;
 uint8_t radarSweepIntervalSeconds=5;std::atomic<bool>radarSweepLine{false};std::atomic<uint16_t>radarSweepDurationMs{800};
 uint32_t radarSweepStarted=0,radarSweepLastDraw=0,clockMs=1000;
 uint32_t millis(){return clockMs;}
+void setTransitionPercent(uint8_t);
 int transitionPercent=100;bool displayedRadarTrailsEnabled=true;
 String lastError;
 struct Display{
- uint16_t pixels[32][128]={};int lines=0;
- void clear(){std::fill(&pixels[0][0],&pixels[0][0]+4096,0);lines=0;}
- int height(){return 32;}
+ uint16_t pixels[64][128]={};int lines=0;
+ void clear(){std::fill(&pixels[0][0],&pixels[0][0]+8192,0);lines=0;}
+ int height(){return FLIGHTWALL_MATRIX_HEIGHT;}
  uint16_t color565(uint8_t r,uint8_t g,uint8_t b){return ((r&0xf8)<<8)|((g&0xfc)<<3)|(b>>3);}
- void drawPixel(int x,int y,uint16_t color){if(x>=0&&x<128&&y>=0&&y<32)pixels[y][x]=color;}
+ void drawPixel(int x,int y,uint16_t color){if(x>=0&&x<128&&y>=0&&y<64)pixels[y][x]=color;}
  void drawLine(int x,int y,int x1,int y1,uint16_t color){
   ++lines;int dx=std::abs(x1-x),dy=-std::abs(y1-y),sx=x<x1?1:-1,sy=y<y1?1:-1,error=dx+dy;
   for(;;){drawPixel(x,y,color);if(x==x1&&y==y1)break;int twice=2*error;if(twice>=dy){error+=dy;x+=sx;}if(twice<=dx){error+=dx;y+=sy;}}
@@ -59,7 +61,8 @@ struct Display{
 RadarTrailStorage storage;RadarTrailStorage *radarTrailStorage=&storage;
 '''+point+r'''
 RadarPoint radarPoints[64];size_t radarPointCount=0;
-'''+''.join(function(f) for f in ['uint16_t radarPointColor(const RadarPoint &point)','int16_t radarCenterX()', 'void drawRadarRing()','bool radarPointCoordinates(float distanceKm, float bearing,\n                           int16_t &x, int16_t &y, int16_t width = MATRIX_WIDTH)','void drawRadarPage()'])+r'''
+'''+''.join(function(f) for f in ['void drawRadarPixel(int16_t x, int16_t y, uint16_t color)', 'uint16_t radarPointColor(const RadarPoint &point)','int16_t radarCenterX()', 'void drawRadarRing()','bool radarPointCoordinates(float distanceKm, float bearing,\n                           int16_t &x, int16_t &y, int16_t width = MATRIX_WIDTH)','void drawRadarPage()', 'void drawPersistentRadar()'])+r'''
+void setTransitionPercent(uint8_t percent){transitionPercent=percent;}
 struct Prefs{
  std::map<std::string,bool>bools;std::map<std::string,int>ints;
  void putBool(const char*k,bool v){bools[k]=v;}void putUChar(const char*k,int v){ints[k]=v;}void putUShort(const char*k,int v){ints[k]=v;}
@@ -153,11 +156,25 @@ int main(){
  assert(preferences.ints["radarSweepMs"]==4000);
  webServer.args={{"radarSweepDuration","bad"}};save();assert(radarSweepDurationMs==4000);
  webServer.args.clear();save();assert(radarSweepLine && radarSweepDurationMs==4000); // missing form key also preserves style
+#if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+ matrix.clear();width=125;radarPointCount=1;
+ radarPoints[0].distanceKm=0;radarPoints[0].bearing=0;radarPoints[0].flags=RADAR_POINT_SELECTED;
+ radarSweepLine=true;radarSweepIntervalSeconds=5;radarSweepStarted=radarSweepLastDraw=0;
+ for(int y=0;y<32;++y)for(int x=0;x<128;++x)matrix.pixels[y][x]=0x1111;
+ transitionPercent=40;drawPersistentRadar();
+ assert(transitionPercent==40 && radarDrawOffsetY==0);
+ for(int y=0;y<32;++y)for(int x=0;x<128;++x)assert(matrix.pixels[y][x]==0x1111);
+ assert(matrix.pixels[47][62]==yellow);
+ drawRadarPixel(62,-1,white);drawRadarPixel(62,32,white);
+ assert(matrix.pixels[31][62]==0x1111);
+ int16_t x=0,y=0;
+ assert(!radarPointCoordinates(20,180,x,y,125)); // 64-row canvas must not expand shared projection
+#endif
  std::cout<<"Radar sweep: dot/beam, cardinal endpoints, off/timing/rollover, 125/128, target/trail priority, shared form/save/backup/restore passed\n";
 }
 '''
 with tempfile.TemporaryDirectory(prefix='flightwall-radar-sweep-') as d:
  p=Path(d);(p/'test.cpp').write_text(code)
- for variant in [0,1]:
-  subprocess.run(['c++','-std=c++11','-Wall','-Wextra','-pedantic','-fsanitize=address,undefined',f'-DFLIGHTWALL_HAS_MATRIX={variant}','-DARDUINOJSON_ENABLE_ARDUINO_STRING=0','-DARDUINOJSON_ENABLE_ARDUINO_STREAM=0','-DARDUINOJSON_ENABLE_ARDUINO_PRINT=0','-I'+str(root/'tools/test_support'),'-I'+str(root/'include'),'-I'+str(root/'.pio/libdeps/adafruit_matrixportal_esp32s3/ArduinoJson/src'),str(p/'test.cpp'),'-o',str(p/'test')],check=True)
+ for variant,height in ((0,32),(1,32),(1,64)):
+  subprocess.run(['c++','-std=c++11','-Wall','-Wextra','-pedantic','-fsanitize=address,undefined',f'-DFLIGHTWALL_HAS_MATRIX={variant}',f'-DFLIGHTWALL_MATRIX_HEIGHT={height}','-DARDUINOJSON_ENABLE_ARDUINO_STRING=0','-DARDUINOJSON_ENABLE_ARDUINO_STREAM=0','-DARDUINOJSON_ENABLE_ARDUINO_PRINT=0','-I'+str(root/'tools/test_support'),'-I'+str(root/'include'),'-I'+str(root/'.pio/libdeps/adafruit_matrixportal_esp32s3/ArduinoJson/src'),str(p/'test.cpp'),'-o',str(p/'test')],check=True)
   subprocess.run([str(p/'test')],check=True)
