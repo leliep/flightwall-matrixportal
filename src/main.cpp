@@ -72,8 +72,8 @@ int16_t matrixLayoutWidth() {
 #endif
 }
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.64";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-25 128x64 split matrix display";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.65";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-25 128x64 panel red blue mapping";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 #if FLIGHTWALL_MATRIX_HEIGHT == 64
@@ -167,7 +167,13 @@ constexpr uint8_t BRIGHTNESS_LEVEL_COUNT =
     sizeof(BRIGHTNESS_LEVELS) / sizeof(BRIGHTNESS_LEVELS[0]);
 
 #if FLIGHTWALL_HAS_MATRIX
+#if FLIGHTWALL_MATRIX_HEIGHT == 64
+// This 128x64 ICN2037BP panel wires red and blue opposite to the 32-row panels.
+// Protomatter order: R1, G1, B1, R2, G2, B2.
+uint8_t rgbPins[] = {40, 41, 42, 37, 39, 38};
+#else
 uint8_t rgbPins[] = {42, 41, 40, 38, 39, 37};
+#endif
 #if FLIGHTWALL_MATRIX_HEIGHT == 64
 // E must be routed to HUB75 pin 8 on this panel; verify the clone jumper.
 uint8_t addrPins[] = {45, 36, 48, 35, 21};

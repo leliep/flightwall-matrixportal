@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.6.1-dual-target.65 – 2026-11-25
+
+- Rot und Blau ausschließlich im 128×64-Build getauscht: R1/B1 und R2/B2
+  an das bestätigte ICN2037BP-Panel angepasst; Grün bleibt unverändert
+- 128×32-Pinbelegung, Headless und Webfarben unverändert; keine Änderungen
+  an gespeicherten Einstellungen oder Lookup-Ergänzungen
+
+
 ## 3.6.1-dual-target.64 – 2026-11-25
 
 - Eigenes MatrixPortal-Buildziel für 128×64, 1/32-Scan, ABCDE mit E auf GPIO 21

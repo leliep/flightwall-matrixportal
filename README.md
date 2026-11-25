@@ -61,7 +61,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.64` |
+| Firmware | `3.6.1-dual-target.65` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) oder eigener 128×64-Build, optional 125 nutzbare Spalten, und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -227,6 +227,8 @@ Für das Panel **P2-1515-128X64-32S-S2** mit ICN2037BP ist das Environment
 mit dem 128×64-Panel, nicht auf die bisherige 128×32-Hardware.
 
 - Ein Panel, 128×64 Pixel, 1/32-Scan, fünf binäre Adressleitungen ABCDE.
+- Für das bestätigte ICN2037BP-Panel sind seit `.65` R1/B1 und R2/B2
+  hardwareseitig in der Pinzuordnung getauscht; Grün und Webfarben bleiben gleich.
 - E wird durch GPIO 21 angesteuert. Vor Installation die tatsächliche
   E-Belegung des Panels und des MatrixPortal-Nachbaus prüfen; für E auf
   HUB75-Pin 8 muss der entsprechende 8/16-Jumper auf 8 stehen.
