@@ -72,8 +72,8 @@ int16_t matrixLayoutWidth() {
 #endif
 }
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.65";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-25 128x64 panel red blue mapping";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.66";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-25 blank-only matrix activity indicator";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 #if FLIGHTWALL_MATRIX_HEIGHT == 64
@@ -2250,9 +2250,6 @@ void drawRadarPage() {
       }
     }
   }
-  if (lastError.length() &&
-      (millis() / IDLE_BLINK_HALF_PERIOD_MS) % 2 == 0)
-    drawRadarPixel(0, 31, idleErrorPixel);
 }
 
 
@@ -2269,6 +2266,25 @@ void drawPersistentRadar() {
 }
 
 
+bool quietHoursAreActive();
+
+// Call after all normal content has been drawn, before publishing the frame.
+void drawIdleIndicator() {
+#if FLIGHTWALL_HAS_MATRIX
+  if (!displayEnabled || quietHoursAreActive() ||
+      (millis() / IDLE_BLINK_HALF_PERIOD_MS) % 2 != 0) return;
+  const uint16_t *pixels = matrix.getBuffer();
+  if (!pixels) return;
+  const int16_t width = matrixLayoutWidth();
+  for (int16_t y = 0; y < matrix.height(); ++y)
+    for (int16_t x = 0; x < width; ++x)
+      if (pixels[y * MATRIX_WIDTH + x]) return;
+  matrix.drawPixel(0, matrix.height() - 1,
+                   lastError.length() ? idleErrorPixel : idlePixel);
+#endif
+}
+
+
 void drawIdleDisplay() {
   matrix.fillScreen(0);
   const bool bmeAvailable = environmentIdleDisplayEnabled &&
@@ -2276,20 +2292,15 @@ void drawIdleDisplay() {
       isfinite(relativeHumidityPercent) && isfinite(airPressureHpa);
   const bool mqttAvailable = environmentIdleDisplayEnabled &&
       mqttWeatherAvailable();
-  bool radarIdleVisible = false;
   if (bmeAvailable || mqttAvailable) {
     drawCompactClimateDisplay(bmeAvailable, mqttAvailable);
   } else if (!environmentIdleDisplayEnabled && pageEnabled[7]) {
 #if FLIGHTWALL_MATRIX_HEIGHT == 32
     drawRadarPage();
-    radarIdleVisible = true;
 #endif
   }
-  if (!radarIdleVisible &&
-      (millis() / IDLE_BLINK_HALF_PERIOD_MS) % 2 == 0) {
-    matrix.drawPixel(0, 31, lastError.length() ? idleErrorPixel : idlePixel);
-  }
   drawPersistentRadar();
+  drawIdleIndicator();
   showMatrix();
 }
 
@@ -2553,6 +2564,7 @@ void drawDisplay() {
     else drawMainPage();
 #endif
     drawPersistentRadar();
+    drawIdleIndicator();
     showMatrix();
     return;
   }

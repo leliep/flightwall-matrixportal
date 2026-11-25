@@ -61,7 +61,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.65` |
+| Firmware | `3.6.1-dual-target.66` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) oder eigener 128×64-Build, optional 125 nutzbare Spalten, und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -705,11 +705,12 @@ ergänzt, ab 80° gilt das Flugzeug als direkt über dem Betrachter. Eine
 Hysterese beruhigt die Anzeige an den Winkelgrenzen.
 
 Wenn kein Flugzeug im Anzeigeradius liegt, erscheint wahlweise die Wetterseite.
-Ohne Wetterseite blinkt unten links der zusätzliche Matrix-Betriebs-Pixel: weiß
-bei gültigen ADS-B-Daten, rot nach einem Abruffehler. Dieser Pixel bleibt neben
-der gemeinsamen RGB-Status-LED aktiv. Während der Radaransicht bleibt er im
-fehlerfreien Betrieb dunkel und blinkt nur bei einer Störung rot. Display-Aus,
-Nachtruhe, Flash- und OTA-Zustände haben Vorrang vor der normalen Seitenausgabe.
+Nur bei ansonsten leerem sichtbarem Matrixbild blinkt der Betriebs-Pixel ganz
+unten links: (0,31) bei 128×32, (0,63) bei 128×64. Er ist weiß bei gültigen
+ADS-B-Daten und rot nach einem Abruffehler. Wetter, Radar und andere Inhalte
+unterdrücken ihn vollständig, auch bei Fehlern. Bei Display-Aus oder Nachtruhe
+bleibt er dunkel. Die separate NeoPixel-Status-LED bleibt unverändert.
+Flash- und OTA-Zustände haben Vorrang vor der normalen Seitenausgabe.
 
 ### Matrixansteuerung und Helligkeit
 

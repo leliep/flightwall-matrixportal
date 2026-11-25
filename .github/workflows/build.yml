@@ -31,6 +31,7 @@ jobs:
           python3 tools/test_cpa_page.py
           python3 tools/test_matrix_layout.py
           python3 tools/test_matrix_pins.py
+          python3 tools/test_idle_indicator.py
           python3 tools/test_numeric_form.py
           python3 tools/test_boot_screen.py
           python3 tools/test_manual_selection.py

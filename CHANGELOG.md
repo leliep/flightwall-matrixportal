@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.6.1-dual-target.66 – 2026-11-25
+
+- Betriebs-Pixel nur bei ansonsten leerem sichtbarem Matrixbild; Radar, Wetter
+  und andere Inhalte unterdrücken auch den bisherigen roten Radar-Fehlerpunkt
+- Position aus physischer Panelhöhe: (0,31) bei 128×32, (0,63) bei 128×64
+- Keine Betriebsanzeige bei Nachtruhe oder abgeschalteter Anzeige; Headless
+  und NeoPixel unverändert, keine Änderungen an gespeicherten Einstellungen
+
+
 ## 3.6.1-dual-target.65 – 2026-11-25
 
 - Rot und Blau ausschließlich im 128×64-Build getauscht: R1/B1 und R2/B2
