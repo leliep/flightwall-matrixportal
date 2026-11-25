@@ -21,6 +21,7 @@ code=r'''
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include "RadarSweep.hpp"
+#include "RadarIdle.hpp"
 #include "RadarTrailStorage.hpp"
 #include <atomic>
 #include <cassert>
@@ -38,7 +39,8 @@ constexpr uint8_t RADAR_RADIUS_DOT_COUNT=32;
 constexpr uint32_t RADAR_SWEEP_SESSION_GAP_MS=750,IDLE_BLINK_HALF_PERIOD_MS=500;
 constexpr uint8_t RADAR_POINT_SELECTED=1,RADAR_POINT_SPECIAL=2,RADAR_POINT_EMERGENCY=4,RADAR_POINT_GROUND=8;
 uint16_t red=0xf800,yellow=0xffe0,violet=0xf81f,orange=0xfd20,cyan=0x07ff,blue=0x001f,white=0xffff,green=0x07e0,idleErrorPixel=0x1234;
-int16_t radarDrawOffsetY=0;
+int16_t radarCenterX();
+int16_t radarDrawOffsetY=0;bool radarFullHeight=false;
 int width=128;int16_t matrixLayoutWidth(){return width;}
 float displayRadiusKm=15,viewHeading=0;
 uint8_t radarSweepIntervalSeconds=5;std::atomic<bool>radarSweepLine{false};std::atomic<uint16_t>radarSweepDurationMs{800};
@@ -61,7 +63,7 @@ struct Display{
 RadarTrailStorage storage;RadarTrailStorage *radarTrailStorage=&storage;
 '''+point+r'''
 RadarPoint radarPoints[64];size_t radarPointCount=0;
-'''+''.join(function(f) for f in ['void drawRadarPixel(int16_t x, int16_t y, uint16_t color)', 'uint16_t radarPointColor(const RadarPoint &point)','int16_t radarCenterX()', 'void drawRadarRing()','bool radarPointCoordinates(float distanceKm, float bearing,\n                           int16_t &x, int16_t &y, int16_t width = MATRIX_WIDTH)','void drawRadarPage()', 'void drawPersistentRadar()'])+r'''
+'''+''.join(function(f) for f in ['int16_t radarDisplayX(int16_t x)', 'int16_t radarDisplayY(int16_t y)', 'void drawRadarPixel(int16_t x, int16_t y, uint16_t color)', 'uint16_t radarPointColor(const RadarPoint &point)','int16_t radarCenterX()', 'void drawRadarRing()','bool radarPointCoordinates(float distanceKm, float bearing,\n                           int16_t &x, int16_t &y, int16_t width = MATRIX_WIDTH)','void drawRadarPage()', 'void drawPersistentRadar()'])+r'''
 void setTransitionPercent(uint8_t percent){transitionPercent=percent;}
 struct Prefs{
  std::map<std::string,bool>bools;std::map<std::string,int>ints;
@@ -167,6 +169,12 @@ int main(){
  assert(matrix.pixels[47][62]==yellow);
  drawRadarPixel(62,-1,white);drawRadarPixel(62,32,white);
  assert(matrix.pixels[31][62]==0x1111);
+ matrix.clear();radarFullHeight=true;radarPointCount=0;
+ drawRadarPage();assert(matrix.pixels[31][width/2]==green);
+ assert(radarDisplayY(0)==0 && radarDisplayY(15)==31 && radarDisplayY(30)==62);
+ assert(radarDisplayX(width/2+15)==width/2+31);
+ assert(radarDisplayX(width/2-15)==width/2-31);
+ radarFullHeight=false;
  int16_t x=0,y=0;
  assert(!radarPointCoordinates(20,180,x,y,125)); // 64-row canvas must not expand shared projection
 #endif

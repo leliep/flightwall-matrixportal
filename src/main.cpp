@@ -43,6 +43,7 @@ static_assert(FLIGHTWALL_MATRIX_HEIGHT == 32 || FLIGHTWALL_MATRIX_HEIGHT == 64,
 #include "Geo.hpp"
 #include "RadarTrailStorage.hpp"
 #include "RadarSweep.hpp"
+#include "RadarIdle.hpp"
 #include "RouteClient.hpp"
 #include "StatusLed.hpp"
 #include "SiteName.hpp"
@@ -72,8 +73,8 @@ int16_t matrixLayoutWidth() {
 #endif
 }
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.66";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-25 blank-only matrix activity indicator";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.67";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-25 configurable large panel idle radar";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 #if FLIGHTWALL_MATRIX_HEIGHT == 64
@@ -714,6 +715,7 @@ bool specialChronicleLimitReached = false;
 String customPageText;
 uint8_t customScrollSpeed = 1;
 uint8_t radarSweepIntervalSeconds = DEFAULT_RADAR_SWEEP_INTERVAL_SECONDS;
+std::atomic<uint8_t> matrixIdleRadar{RadarIdle::Lower};
 std::atomic<bool> radarSweepLine{false};
 std::atomic<uint16_t> radarSweepDurationMs{RadarSweep::PeriodMs};
 bool pageEnabled[] = {true, true, true, true, true, true, true, true};
@@ -2138,9 +2140,18 @@ bool radarPointCoordinates(float distanceKm, float bearing,
 
 // Rendering offset only: shared radar points/trails retain 32-row coordinates.
 int16_t radarDrawOffsetY = 0;
+bool radarFullHeight = false;
+int16_t radarDisplayX(int16_t x) {
+  return radarFullHeight ? RadarIdle::project(x, radarCenterX(), radarCenterX()) : x;
+}
+int16_t radarDisplayY(int16_t y) {
+  return radarFullHeight ? RadarIdle::project(y, RADAR_CENTER_Y, 31) : y + radarDrawOffsetY;
+}
 void drawRadarPixel(int16_t x, int16_t y, uint16_t color) {
-  if (x >= 0 && x < matrixLayoutWidth() && y >= 0 && y < 32)
-    matrix.drawPixel(x, y + radarDrawOffsetY, color);
+  if (x < 0 || x >= matrixLayoutWidth() || y < 0 || y >= 32) return;
+  x = radarDisplayX(x); y = radarDisplayY(y);
+  if (x >= 0 && x < matrixLayoutWidth() && y >= 0 && y < matrix.height())
+    matrix.drawPixel(x, y, color);
 }
 
 
@@ -2190,8 +2201,8 @@ void drawRadarPage() {
   if (showSweep && lineSweep) {
     const uint8_t channel = ((green >> 5) & 63) * 255 / 63;
     const uint8_t dim = min(channel, static_cast<uint8_t>(max(36, channel / 3)));
-    matrix.drawLine(radarCenterX(), RADAR_CENTER_Y + radarDrawOffsetY,
-                    sweepX, sweepY + radarDrawOffsetY,
+    matrix.drawLine(radarDisplayX(radarCenterX()), radarDisplayY(RADAR_CENTER_Y),
+                    radarDisplayX(sweepX), radarDisplayY(sweepY),
                     matrix.color565(0, dim, 0));
   }
   // Trails stay above the beam; own position and live targets are drawn last.
@@ -2287,6 +2298,22 @@ void drawIdleIndicator() {
 
 void drawIdleDisplay() {
   matrix.fillScreen(0);
+#if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+  // Called only when no eligible aircraft is inside the configured display radius.
+  const uint8_t mode = matrixIdleRadar.load(std::memory_order_relaxed);
+  if (mode == RadarIdle::Off) {
+    drawIdleIndicator();
+    showMatrix();
+    return;
+  }
+  if (mode == RadarIdle::Full) {
+    radarFullHeight = true;
+    drawRadarPage();
+    radarFullHeight = false;
+    showMatrix();
+    return;
+  }
+#endif
   const bool bmeAvailable = environmentIdleDisplayEnabled &&
       environmentSensorAvailable && isfinite(ambientTemperatureC) &&
       isfinite(relativeHumidityPercent) && isfinite(airPressureHpa);
@@ -4185,6 +4212,9 @@ PsramBuffer configurationJson() {
 #if FLIGHTWALL_HAS_MATRIX
   settings["boot_show_ip"] = bootShowIp.load(std::memory_order_relaxed);
   settings["matrix_reduced_width"] = matrixReducedWidth.load(std::memory_order_relaxed);
+#if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+  settings["matrix_idle_radar"] = RadarIdle::name(matrixIdleRadar.load(std::memory_order_relaxed));
+#endif
   settings["custom_text"] = customPageText;
   settings["custom_scroll_speed"] = customScrollSpeed;
   settings["smooth_transitions"] = smoothTransitions;
@@ -4248,6 +4278,15 @@ void handleConfigurationRestore() {
   if (!prepareSiteProfilesRestore(s, restoredProfiles)) { siteProfilesError(); return; }
   const PsramBuffer restoredProfileBytes = restoredProfiles.encode();
   if (restoredProfileBytes.failed()) { siteProfilesError(503); return; }
+#if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+  uint8_t restoredIdleRadar = RadarIdle::Lower;
+  const bool hasIdleRadar = !s["matrix_idle_radar"].isNull();
+  if (hasIdleRadar && (!s["matrix_idle_radar"].is<const char*>() ||
+      !RadarIdle::parse(s["matrix_idle_radar"].as<const char*>(), restoredIdleRadar))) {
+    webServer.send(400, "text/plain; charset=utf-8", uiText("Ungültiger Leerlauf-Radarmodus.", "Invalid idle radar mode."));
+    return;
+  }
+#endif
   bool restoredSweepLine = false;
   const bool hasSweepStyle = !s["radar_sweep_style"].isNull();
   if (hasSweepStyle && (!s["radar_sweep_style"].is<const char*>() ||
@@ -4306,6 +4345,9 @@ void handleConfigurationRestore() {
   if (!s["radar_sweep_interval_seconds"].isNull()) preferences.putUChar("radarSweepSec", constrain(s["radar_sweep_interval_seconds"].as<int>(), 0, 10));
   if (hasSweepStyle) preferences.putBool("radarSweepLine", restoredSweepLine);
   if (!s["radar_sweep_duration_ms"].isNull()) preferences.putUShort("radarSweepMs", RadarSweep::duration(s["radar_sweep_duration_ms"].as<int>()));
+#if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+  if (hasIdleRadar) preferences.putUChar("idleRadar", restoredIdleRadar);
+#endif
   putBool("routesOn", "routes_enabled"); putBool("routeFallback", "adsbdb_fallback");
   putBool("hideSport", "hide_sport_aircraft"); putBool("altFilter", "altitude_filter");
   if (!s["maximum_altitude_ft"].isNull()) preferences.putInt("maxAltFt", constrain(s["maximum_altitude_ft"].as<int>(), 1000, 100000));
@@ -5022,6 +5064,18 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
   html += F("<fieldset><legend>Radar</legend><label class='check'><input type='checkbox' name='radarTrails' value='1'");
   html += checked(radarTrailsEnabled);
   html += F("> Radarspuren (60 Sekunden)</label>");
+#if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+  html += "<label>" + String(uiText("Radar ohne angezeigtes Flugzeug", "Radar without displayed aircraft")) + "<select name='matrixIdleRadar'>";
+  for (uint8_t mode = 0; mode <= RadarIdle::Full; ++mode) {
+    const char* label = mode == RadarIdle::Off ? uiText("Aus (nur Betriebspunkt)", "Off (activity pixel only)") :
+        mode == RadarIdle::Full ? uiText("Volle Höhe", "Full height") : uiText("Untere Hälfte", "Lower half");
+    html += "<option value='" + String(RadarIdle::name(mode)) + "'" +
+            selected(matrixIdleRadar.load(std::memory_order_relaxed) == mode) + ">" + label + "</option>";
+  }
+  html += "</select></label><p class='muted'>" + String(uiText(
+      "Gilt, wenn kein anzeigbares Flugzeug im Anzeigeradius liegt. Aus und volle Höhe ersetzen die Wetter-Leerlaufanzeige. Bei einem Flug erscheinen wieder Informationen oben und Radar unten.",
+      "Applies when no eligible aircraft is inside the display radius. Off and full height replace idle weather. With an aircraft, information returns above the lower radar.")) + "</p>";
+#endif
   html += F("<label>Radar-Umlauf<select name='radarSweepStyle'><option value='dot'");
   html += selected(!radarSweepLine.load(std::memory_order_relaxed));
   html += F(">Punkt</option><option value='line'");
@@ -5740,6 +5794,14 @@ bool validFlightWallHost(const String &host) {
 
 
 bool applyWebSettings() {
+#if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+  uint8_t requestedIdleRadar = matrixIdleRadar.load(std::memory_order_relaxed);
+  if (webServer.hasArg("matrixIdleRadar") &&
+      !RadarIdle::parse(webServer.arg("matrixIdleRadar").c_str(), requestedIdleRadar)) {
+    webServer.send(400, "text/plain; charset=utf-8", uiText("Ungültiger Leerlauf-Radarmodus.", "Invalid idle radar mode."));
+    return false;
+  }
+#endif
   SiteProfiles stagedProfiles;
   if (!prepareSiteProfilesSubmission(stagedProfiles)) return siteProfilesError();
   const PsramBuffer profileBytes = stagedProfiles.encode();
@@ -5981,6 +6043,10 @@ bool applyWebSettings() {
     preferences.putDouble("siteLat", siteLatitude);
     preferences.putDouble("siteLon", siteLongitude);
     preferences.putFloat("heading", viewHeading);
+#if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+    matrixIdleRadar.store(requestedIdleRadar, std::memory_order_relaxed);
+    preferences.putUChar("idleRadar", requestedIdleRadar);
+#endif
     preferences.putBool("radarTrails", radarTrailsEnabled);
     preferences.putUChar("radarSweepSec", radarSweepIntervalSeconds);
     preferences.putBool("radarSweepLine", radarSweepLine.load(std::memory_order_relaxed));
@@ -6826,6 +6892,11 @@ void handleStatusApi() {
   json += String(viewHeading, 0);
   json += ",\"display_radius_km\":";
   json += String(displayRadiusKm, 1);
+#if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+  json += ",\"matrix_idle_radar\":\"";
+  json += RadarIdle::name(matrixIdleRadar.load(std::memory_order_relaxed));
+  json += "\"";
+#endif
   json += ",\"radar_sweep_style\":\"";
   json += RadarSweep::styleName(radarSweepLine.load(std::memory_order_relaxed));
   json += "\"";
@@ -8406,6 +8477,9 @@ void setup() {
   routesEnabled = preferences.getBool("routesOn", true);
   adsbDbFallbackEnabled = preferences.getBool("routeFallback", true);
   radarTrailsEnabled = preferences.getBool("radarTrails", true);
+#if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+  matrixIdleRadar.store(RadarIdle::valid(preferences.getUChar("idleRadar", RadarIdle::Lower)), std::memory_order_relaxed);
+#endif
   radarSweepLine.store(preferences.getBool("radarSweepLine", false), std::memory_order_relaxed);
   radarSweepDurationMs.store(RadarSweep::duration(preferences.getUShort("radarSweepMs", RadarSweep::PeriodMs)), std::memory_order_relaxed);
   hideSportAircraft = preferences.getBool("hideSport", true);

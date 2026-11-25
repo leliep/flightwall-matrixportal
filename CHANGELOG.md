@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.6.1-dual-target.67 – 2026-11-25
+
+- 128×64-Leerlaufradar konfigurierbar: aus/nur Betriebspunkt, untere Hälfte
+  (Standard) oder volle Höhe, wenn kein anzeigbares Flugzeug im Anzeigeradius ist
+- Volle Höhe mit einheitlicher Projektion für Ring, Umlauf, Ziele und Spuren;
+  Rückkehr zum normalen Informations-/Radarlayout bei angezeigtem Flugzeug
+- Aus und volle Höhe ersetzen die Wetter-Leerlaufanzeige; Nachtabschaltung,
+  Display-Aus und Start-/Status-/OTA-Anzeigen behalten Vorrang
+- NVS, Konfigurationsformular, Sicherung/Wiederherstellung und Status;
+  alte Sicherungen erhalten die Auswahl, 128×32 und Headless unverändert
+
+
 ## 3.6.1-dual-target.66 – 2026-11-25
 
 - Betriebs-Pixel nur bei ansonsten leerem sichtbarem Matrixbild; Radar, Wetter

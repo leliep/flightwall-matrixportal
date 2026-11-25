@@ -61,7 +61,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.66` |
+| Firmware | `3.6.1-dual-target.67` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) oder eigener 128×64-Build, optional 125 nutzbare Spalten, und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -232,6 +232,16 @@ mit dem 128×64-Panel, nicht auf die bisherige 128×32-Hardware.
 - E wird durch GPIO 21 angesteuert. Vor Installation die tatsächliche
   E-Belegung des Panels und des MatrixPortal-Nachbaus prüfen; für E auf
   HUB75-Pin 8 muss der entsprechende 8/16-Jumper auf 8 stehen.
+- Unter `/config` → Radar ist „Radar ohne angezeigtes Flugzeug“ wählbar:
+  **Aus** (leeres Panel mit Blink-Pixel unten links), **Untere Hälfte** (Standard)
+  oder **Volle Höhe** (Radar über 64 Zeilen). Auslöser ist kein anzeigbares
+  Flugzeug im eingestellten Anzeigeradius; weiter entfernte Radarziele verhindern
+  den Leerlauf nicht. Aus und volle Höhe ersetzen die Wetter-Leerlaufanzeige.
+  Sobald wieder ein Flugzeug angezeigt wird, gilt automatisch das normale
+  Layout. Nachtruhe, Display-Aus, Start-/Fehler- und OTA-Anzeigen behalten Vorrang.
+  Gespeichert als `matrix_idle_radar` (`off`, `lower`, `full`), nur beim 128×64-Build;
+  Sicherung, Wiederherstellung und Status enthalten die Auswahl. Alte Sicherungen
+  ohne diesen Wert erhalten die bestehende Auswahl.
 - Oben 128×32 Pixel mit den bisherigen konfigurierten Informationsseiten;
   unten 128×32 Pixel mit dauerhaftem Radar, einschließlich Spuren, Punkt-/
   Strichumlauf und konfigurierbarer Geschwindigkeit. Die separate Radarseite

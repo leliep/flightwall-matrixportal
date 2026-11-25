@@ -5,7 +5,7 @@ import subprocess,tempfile
 root=Path(__file__).resolve().parents[1];s=(root/'src/main.cpp').read_text()
 a=s.index('void drawIdleIndicator() {');f=s[a:s.index('\n}\n',a)+3]
 idle=s[s.index('void drawIdleDisplay()'):s.index('\n\nbool selectEnabledPage()')]
-assert idle.index('drawPersistentRadar();')<idle.index('drawIdleIndicator();')<idle.index('showMatrix();')
+assert idle.index('drawPersistentRadar();')<idle.rindex('drawIdleIndicator();')<idle.rindex('showMatrix();')
 radar=s[s.index('void drawRadarPage()'):s.index('void drawPersistentRadar()')]
 assert 'idleErrorPixel' not in radar
 code=r'''
