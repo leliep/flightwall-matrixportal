@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.6.1-dual-target.69 – 2026-11-27
+
+- WLAN-Suche koordiniert Stations-Verbindungsversuche im AP+STA-Setupmodus;
+  Setup-Netz, gespeicherte Zugangsdaten und bestehende Verbindungen bleiben erhalten
+- Asynchrone Suche mit begrenzten Startwiederholungen und browserunabhängiger
+  Freigabe der Wiederverbindung spätestens nach 15 Sekunden
+- SDK-Startfehler und SCAN_DONE-Status mit Phase, Laufzeit und Versuchen in
+  Formular, Status-API, Statusseite und serieller Diagnose
+
 ## 3.6.1-dual-target.68 – 2026-11-27
 
 - Statusseite und Status-API zeigen echten Funkmodus, AP-Aktivität, tatsächliche

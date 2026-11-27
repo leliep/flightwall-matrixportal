@@ -13,6 +13,7 @@ code = r'''
 #include <cstdint>
 #include <iostream>
 NetworkRecovery networkRecovery;
+struct {bool active=false;bool busy(){return active;}}wifiSurvey;
 uint32_t clockMs=200000, lastWifiDisconnect=0, lastWiFiAttempt=0;
 uint32_t otaRebootAt=0, manualRebootAt=0;
 bool otaPreparing=false, otaInProgress=false, routeCacheWritePreparing=false;
@@ -39,6 +40,7 @@ void startSetupAccessPoint(){++starts;}
 void failing(){for(unsigned i=0;i<5;++i)networkRecovery.transportFailure(clockMs-100000+i);}
 int main(){
  failing();
+ wifiSurvey.active=true;assert(!recoverStalledWiFi());wifiSurvey.active=false;
  otaPreparing=true; assert(!recoverStalledWiFi()); otaPreparing=false;
  otaInProgress=true; assert(!recoverStalledWiFi()); otaInProgress=false;
  otaRebootAt=clockMs+1000; assert(!recoverStalledWiFi()); otaRebootAt=0;

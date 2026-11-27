@@ -2,6 +2,7 @@
 #include "ManualAircraftSelection.hpp"
 #include "SiteProfiles.hpp"
 #include "NumericForm.hpp"
+#include "WifiScan.hpp"
 // Version generated: 2026-10-03 12:17:49 CEST (Europe/Berlin)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
@@ -73,8 +74,8 @@ int16_t matrixLayoutWidth() {
 #endif
 }
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.68";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-27 actual access point status and shutdown";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.69";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-27 coordinated setup Wi-Fi scan diagnostics";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 #if FLIGHTWALL_MATRIX_HEIGHT == 64
@@ -454,7 +455,7 @@ String otaSettingsError;
 String otaPassword = OTA_PASSWORD;
 String wifiSetupAccessPointSsid;
 bool wifiScanRequested = false;
-uint32_t wifiScanStartedAt = 0;
+WifiSurvey wifiSurvey;
 PsramBuffer wifiScanResultJson;
 uint32_t wifiReconnectCount = 0;
 uint32_t webServerStartCount = 0;
@@ -3007,6 +3008,7 @@ void syncNetworkState() {
 
 bool connectWiFi(uint32_t timeoutMs) {
   if (WiFi.status() == WL_CONNECTED) return true;
+  if (wifiSurvey.busy()) return false;
   operationRevision = applicationRevision;
   WiFi.mode(wifiSetupAccessPointActive ? WIFI_AP_STA : WIFI_STA);
   WiFi.setSleep(false);
@@ -3015,7 +3017,7 @@ bool connectWiFi(uint32_t timeoutMs) {
   const uint32_t started = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - started < timeoutMs) {
     { NetworkIoScope io; delay(250); }
-    if (networkOperationCancelled()) return false;
+    if (networkOperationCancelled() || wifiSurvey.busy()) return false;
   }
   if (WiFi.status() != WL_CONNECTED) {
     setNetworkError("WLAN FEHLER");
@@ -5209,6 +5211,21 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
   html += "</b><span>AP-SSID</span><b>" + (wifiAccessPointEnabled() ? htmlEscape(WiFi.softAPSSID()) : String("-"));
   html += "</b><span>AP-MAC</span><b>" + WiFi.softAPmacAddress();
   html += "</b><span>AP-IP</span><b>" + (wifiAccessPointEnabled() ? WiFi.softAPIP().toString() : String("-"));
+  html += "</b><span>" + String(uiText("Letzte WLAN-Suche", "Last Wi-Fi scan")) + "</span><b>";
+  html += wifiSurvey.stateName();
+  html += " / ";
+  html += wifiSurvey.phase;
+  html += " / ";
+  html += esp_err_to_name(wifiSurvey.error);
+  html += " (";
+  html += String(wifiSurvey.error);
+  html += ") / event ";
+  html += wifiSurvey.eventStatus.load() == UINT32_MAX ? String("-") : String(wifiSurvey.eventStatus.load());
+  html += " / ";
+  html += String(wifiSurvey.attempts);
+  html += " / ";
+  html += String(wifiSurvey.busy() ? millis() - wifiSurvey.started : wifiSurvey.duration);
+  html += " ms";
   html += F("</b><span>Einrichtungsnetz</span><b>");
   html += wifiSetupAccessPointActive
               ? htmlEscape(wifiSetupAccessPointSsid + " / 192.168.4.1")
@@ -5692,6 +5709,10 @@ const wifiScanLabel=document.getElementById('wifiScanLabel');
 const wifiScanResults=document.getElementById('wifiScanResults');
 const wifiScanStatus=document.getElementById('wifiScanStatus');
 const wifiSsid=document.getElementById('wifiSsid');
+function wifiScanError(data){
+  return [data.phase,data.error_name,data.error_code!==undefined?'code '+data.error_code:'',
+    data.scan_done_status!=null?'event '+data.scan_done_status:''].filter(Boolean).join(' · ');
+}
 async function pollWifiScan(){
   try{
     const response=await fetch('/api/wifi-scan',{cache:'no-store'});
@@ -5701,7 +5722,7 @@ async function pollWifiScan(){
       setTimeout(pollWifiScan,700);
       return;
     }
-    if(data.state!=='ready')throw new Error();
+    if(!response.ok||data.state!=='ready')throw new Error(wifiScanError(data));
     wifiScanResults.replaceChildren();
     const placeholder=document.createElement('option');
     placeholder.value='';placeholder.textContent='WLAN auswählen …';placeholder.selected=true;
@@ -5719,7 +5740,7 @@ async function pollWifiScan(){
         data.networks.length+' WLANs gefunden':'Keine WLANs gefunden.';
     wifiScanButton.disabled=false;
   }catch(error){
-    wifiScanStatus.textContent='WLAN-Suche fehlgeschlagen.';
+    wifiScanStatus.textContent='WLAN-Suche fehlgeschlagen.'+(error.message?' '+error.message:'');
     wifiScanButton.disabled=false;
   }
 }
@@ -5728,10 +5749,11 @@ wifiScanButton.addEventListener('click',async()=>{
   wifiScanStatus.textContent='Suche läuft …';
   try{
     const response=await fetch('/api/wifi-scan',{method:'POST'});
-    if(!response.ok)throw new Error();
+    const data=await response.json();
+    if(!response.ok)throw new Error(data.message||wifiScanError(data)||('HTTP '+response.status));
     pollWifiScan();
   }catch(error){
-    wifiScanStatus.textContent='WLAN-Suche fehlgeschlagen.';
+    wifiScanStatus.textContent='WLAN-Suche fehlgeschlagen.'+(error.message?' '+error.message:'');
     wifiScanButton.disabled=false;
   }
 });
@@ -6689,6 +6711,8 @@ void handleDisplayApi() {
 }
 
 
+PsramBuffer wifiScanDiagnosticJson();
+
 void handleStatusApi() {
   const RouteMemorySnapshot statusMemory = routeMemorySnapshot();
   FlightData statusFlight;
@@ -6838,6 +6862,8 @@ void handleStatusApi() {
   json += "\",\"wifi_ap_ip\":\"";
   json += wifiAccessPointEnabled() ? WiFi.softAPIP().toString() : String("");
   json += "\"";
+  json += ",\"wifi_scan\":";
+  json += wifiScanDiagnosticJson();
   json += ",\"wifi_setup_ap_active\":";
   json += String(wifiSetupAccessPointActive ? "true" : "false");
   json += ",\"wifi_setup_ap_ssid\":\"";
@@ -7410,27 +7436,41 @@ const char *wifiSecurityName(wifi_auth_mode_t mode) {
 }
 
 
+PsramBuffer wifiScanDiagnosticJson() {
+  PsramBuffer json("{\"state\":\"");
+  json += wifiSurvey.stateName();
+  json += "\",\"phase\":\"";
+  json += wifiSurvey.phase;
+  json += "\",\"error_name\":\"";
+  json += esp_err_to_name(wifiSurvey.error);
+  json += "\",\"error_code\":";
+  json += String(wifiSurvey.error);
+  json += ",\"scan_done_status\":";
+  json += wifiSurvey.eventStatus.load() == UINT32_MAX ? String("null") : String(wifiSurvey.eventStatus.load());
+  json += ",\"attempts\":";
+  json += String(wifiSurvey.attempts);
+  json += ",\"duration_ms\":";
+  json += String(wifiSurvey.busy() ? millis() - wifiSurvey.started : wifiSurvey.duration);
+  json += ",\"wifi_mode\":\"";
+  json += wifiModeName();
+  json += "\",\"ap_clients\":";
+  json += String(WiFi.softAPgetStationNum());
+  json += ",\"networks\":[]}";
+  return json;
+}
+
+
 void handleWifiScanStart() {
   if (otaPreparing || otaInProgress) {
     webServer.send(409, "application/json; charset=utf-8",
                    "{\"state\":\"blocked\",\"message\":\"OTA läuft\"}");
     return;
   }
-  if (WiFi.scanComplete() == WIFI_SCAN_RUNNING) {
-    webServer.send(202, "application/json; charset=utf-8",
-                   "{\"state\":\"running\"}");
-    return;
-  }
-  WiFi.scanDelete();
-  wifiScanResultJson = "";
-  wifiScanRequested = true;
-  wifiScanStartedAt = millis();
-  const int result = WiFi.scanNetworks(true, false, false, 160);
-  if (result == WIFI_SCAN_FAILED) {
-    wifiScanRequested = false;
-    webServer.send(500, "application/json; charset=utf-8",
-                   "{\"state\":\"failed\"}");
-    return;
+  if (!wifiSurvey.busy()) {
+    WiFi.scanDelete();
+    wifiScanResultJson = "";
+    wifiScanRequested = true;
+    wifiSurvey.request();
   }
   webServer.send(202, "application/json; charset=utf-8",
                  "{\"state\":\"running\"}");
@@ -7449,25 +7489,18 @@ void handleWifiScanResult() {
     return;
   }
 
-  const int count = WiFi.scanComplete();
-  if (count == WIFI_SCAN_RUNNING) {
-    if (millis() - wifiScanStartedAt > 15000UL) {
-      WiFi.scanDelete();
-      wifiScanRequested = false;
-      webServer.send(500, "application/json; charset=utf-8",
-                     "{\"state\":\"failed\",\"networks\":[]}");
-    } else {
-      webServer.send(202, "application/json; charset=utf-8",
-                     "{\"state\":\"running\"}");
-    }
+  if (wifiSurvey.busy()) {
+    webServer.send(202, "application/json; charset=utf-8",
+                   "{\"state\":\"running\"}");
     return;
   }
-  if (count == WIFI_SCAN_FAILED) {
-    wifiScanRequested = false;
-    webServer.send(500, "application/json; charset=utf-8",
-                   "{\"state\":\"failed\",\"networks\":[]}");
+  if (wifiSurvey.state == WifiSurvey::State::Failed) {
+    PsramBuffer json = wifiScanDiagnosticJson();
+    webServer.sendHeader("Cache-Control", "no-store");
+    sendPsramResponse("application/json; charset=utf-8", json, 0, SIZE_MAX, 500);
     return;
   }
+  const int count = wifiSurvey.count;
 
   struct WifiScanEntry {
     String ssid;
@@ -8194,7 +8227,7 @@ bool recoverStalledWiFi() {
   // Runtime reconnect only: keep credentials, caches and lookup files.
   const uint32_t now = millis();
   const bool busy = otaPreparing || otaInProgress || otaRebootAt ||
-      manualRebootAt || routeCacheWritePreparing;
+      manualRebootAt || routeCacheWritePreparing || wifiSurvey.busy();
   if (!networkRecovery.due(now, WiFi.status() == WL_CONNECTED, busy)) return false;
   Serial.printf("Wi-Fi recovery: %u failed ADS-B cycles over at least 90 seconds; reconnecting\r\n",
                 static_cast<unsigned>(networkRecovery.failures()));
@@ -8262,6 +8295,7 @@ void webTask(void *) {
         NetworkPhaseScope phase(NetworkPhase::Web);
         webServer.handleClient();
       }
+      wifiSurvey.service();
       if (wifiSetupAccessPointActive) setupDnsServer.processNextRequest();
       // A pending UI/OTA restart must not wait for a remote request timeout.
       const uint32_t now = millis();
@@ -8322,7 +8356,7 @@ void networkTask(void *) {
         vTaskDelay(pdMS_TO_TICKS(1));
       }
       if (recoverStalledWiFi()) continue;
-      if (!wifiConnected && now - lastWiFiAttempt >= WIFI_RETRY_MS) {
+      if (!wifiConnected && !wifiSurvey.busy() && now - lastWiFiAttempt >= WIFI_RETRY_MS) {
         lastWiFiAttempt = now;
         NetworkPhaseScope phase(NetworkPhase::Wifi);
         connectWiFi(10000);

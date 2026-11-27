@@ -61,7 +61,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.68` |
+| Firmware | `3.6.1-dual-target.69` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) oder eigener 128×64-Build, optional 125 nutzbare Spalten, und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -1685,6 +1685,28 @@ unmittelbar nach GET/POST, bevor alle Ressourcen freigegeben wurden. Die
 Differenz ist deshalb für sich kein Nachweis eines Speicherlecks. Die Werte
 beim Funktionsende enthalten weiterhin andere laufende Anwendungsdaten und
 messen nicht den Speicherbedarf mitten im TLS-Handshake.
+
+### WLAN-Suche im Einrichtungsmodus
+
+Ab `.69` koordiniert die WLAN-Suche die Nutzung des Funkmoduls mit den
+Verbindungsversuchen der Station. Im AP+STA-Einrichtungsmodus werden während
+der Suche automatische Wiederverbindungen pausiert und ein noch laufender
+Stations-Verbindungsversuch beendet. Das Setup-Netz bleibt aktiv; gespeicherte
+SSID, Passwörter, Konfiguration und Lookups werden nicht verändert.
+Eine bestehende erfolgreiche Stationsverbindung wird nicht getrennt.
+
+Die Suche läuft im Hintergrund weiter, auch wenn der Browser die Seite verlässt.
+Nach Erfolg oder Fehler, spätestens nach 15 Sekunden, wird die vorherige
+Wiederverbindungseinstellung wiederhergestellt. Ein vorübergehend belegtes
+Funkmodul (`ESP_ERR_WIFI_STATE`) wird beim Start bis zu viermal versucht.
+
+Fehler erscheinen im Formular mit Phase, SDK-Fehlername, numerischem Fehlercode
+und gegebenenfalls dem rohen `SCAN_DONE`-Status. Statusseite, `/api/status` unter
+`wifi_scan` und serielle Diagnose enthalten zusätzlich Versuche, Laufzeit,
+Funkmodus und AP-Clientzahl (in der API). Ein Timeout wird als `ESP_ERR_TIMEOUT`
+kenntlich gemacht und nicht als vom Treiber gelieferter Startfehler ausgegeben.
+Die Diagnosedaten enthalten keine Zugangsdaten. Die Frameworkbibliothek bleibt
+unverändert; ihre bestehende Verwaltung der Scanergebnisse wird weiter genutzt.
 
 ### Automatische WLAN-Wiederherstellung
 
