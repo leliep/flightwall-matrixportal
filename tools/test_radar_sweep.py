@@ -41,6 +41,9 @@ constexpr uint8_t RADAR_POINT_SELECTED=1,RADAR_POINT_SPECIAL=2,RADAR_POINT_EMERG
 uint16_t red=0xf800,yellow=0xffe0,violet=0xf81f,orange=0xfd20,cyan=0x07ff,blue=0x001f,white=0xffff,green=0x07e0,idleErrorPixel=0x1234;
 int16_t radarCenterX();
 int16_t radarDrawOffsetY=0;bool radarFullHeight=false;
+bool fullPageMode=false,insideDisplayRadius=true;
+bool largeFullPagesEnabled(){return fullPageMode;}
+bool aircraftIsInsideDisplayRadius(){return insideDisplayRadius;}
 int width=128;int16_t matrixLayoutWidth(){return width;}
 float displayRadiusKm=15,viewHeading=0;
 uint8_t radarSweepIntervalSeconds=5;std::atomic<bool>radarSweepLine{false};std::atomic<uint16_t>radarSweepDurationMs{800};
@@ -167,6 +170,12 @@ int main(){
  assert(transitionPercent==40 && radarDrawOffsetY==0);
  for(int y=0;y<32;++y)for(int x=0;x<128;++x)assert(matrix.pixels[y][x]==0x1111);
  assert(matrix.pixels[47][62]==yellow);
+ fullPageMode=true;matrix.clear();drawPersistentRadar();
+ for(int y=0;y<64;++y)for(int x=0;x<128;++x)assert(matrix.pixels[y][x]==0);
+ insideDisplayRadius=false;drawPersistentRadar();assert(matrix.pixels[47][62]==yellow);
+ fullPageMode=false;insideDisplayRadius=true;
+ for(int y=0;y<32;++y)for(int x=0;x<128;++x)matrix.pixels[y][x]=0x1111;
+
  drawRadarPixel(62,-1,white);drawRadarPixel(62,32,white);
  assert(matrix.pixels[31][62]==0x1111);
  matrix.clear();radarFullHeight=true;radarPointCount=0;
