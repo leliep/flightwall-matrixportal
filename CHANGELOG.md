@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.6.1-dual-target.68 – 2026-11-27
+
+- Statusseite und Status-API zeigen echten Funkmodus, AP-Aktivität, tatsächliche
+  AP-SSID, AP-MAC und AP-IP unabhängig vom internen Einrichtungskennzeichen
+- Beenden des Einrichtungsnetzes deaktiviert nur die AP-Schnittstelle, statt
+  ihre Konfiguration zu leeren und ein Standardnetz ESP_xxxxxx zurückzulassen
+- Station, gespeicherte WLAN-Daten und sonstige Konfiguration bleiben erhalten
+
+
 ## 3.6.1-dual-target.67 – 2026-11-25
 
 - 128×64-Leerlaufradar konfigurierbar: aus/nur Betriebspunkt, untere Hälfte

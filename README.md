@@ -61,7 +61,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.67` |
+| Firmware | `3.6.1-dual-target.68` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) oder eigener 128×64-Build, optional 125 nutzbare Spalten, und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -1174,6 +1174,11 @@ Einrichtungsnetz mit einem gerätespezifischen Namen nach dem Muster
 
 Das Einrichtungsnetz leitet Browseraufrufe auf die Konfigurationsseite um und
 wird nach einer erfolgreichen Verbindung mit dem normalen WLAN wieder beendet.
+Die Statusseite zeigt den tatsächlichen WLAN-Funkmodus, AP-Zustand, AP-SSID,
+AP-MAC und AP-IP zusätzlich zum internen Einrichtungsstatus. Die Status-API
+liefert `wifi_mode`, `wifi_ap_active`, `wifi_ap_ssid`, `wifi_ap_mac_address` und
+`wifi_ap_ip`. Die AP-MAC unterscheidet sich von der Stations-MAC; das Ende
+des Einrichtungsmodus schaltet ausschließlich die AP-Schnittstelle ab.
 Solange es aktiv ist, zeigt die Matrix dauerhaft WLAN-Name, Passwort und
 `CONFIG IP 192.168.4.1` an. Ein zu langer WLAN-Name läuft als Laufschrift.
 

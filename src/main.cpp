@@ -73,8 +73,8 @@ int16_t matrixLayoutWidth() {
 #endif
 }
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.67";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-25 configurable large panel idle radar";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.68";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-27 actual access point status and shutdown";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 #if FLIGHTWALL_MATRIX_HEIGHT == 64
@@ -4866,6 +4866,20 @@ String numberInputValue(double value, unsigned decimals) {
 }
 
 
+bool wifiAccessPointEnabled() {
+  return (WiFi.getMode() & WIFI_AP) != 0;
+}
+
+const char* wifiModeName() {
+  switch (WiFi.getMode()) {
+    case WIFI_STA: return "STA";
+    case WIFI_AP: return "AP";
+    case WIFI_AP_STA: return "AP+STA";
+    default: return "OFF";
+  }
+}
+
+
 PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = true) {
   const RouteMemorySnapshot statusMemory = routeMemorySnapshot();
   FlightData statusFlight;
@@ -5190,6 +5204,11 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
   html += WiFi.status() == WL_CONNECTED ? String(WiFi.channel()) : "-";
   html += F("</b><span>MAC-Adresse</span><b>");
   html += WiFi.macAddress();
+  html += "</b><span>" + String(uiText("WLAN-Funkmodus", "Wi-Fi radio mode")) + "</span><b>" + wifiModeName();
+  html += "</b><span>Access Point</span><b>" + String(wifiAccessPointEnabled() ? uiText("aktiv", "active") : uiText("inaktiv", "inactive"));
+  html += "</b><span>AP-SSID</span><b>" + (wifiAccessPointEnabled() ? htmlEscape(WiFi.softAPSSID()) : String("-"));
+  html += "</b><span>AP-MAC</span><b>" + WiFi.softAPmacAddress();
+  html += "</b><span>AP-IP</span><b>" + (wifiAccessPointEnabled() ? WiFi.softAPIP().toString() : String("-"));
   html += F("</b><span>Einrichtungsnetz</span><b>");
   html += wifiSetupAccessPointActive
               ? htmlEscape(wifiSetupAccessPointSsid + " / 192.168.4.1")
@@ -6808,6 +6827,17 @@ void handleStatusApi() {
   json += ",\"wifi_signal_quality\":\"";
   json += jsonEscape(wifiSignalQualityText());
   json += "\"";
+  json += ",\"wifi_mode\":\"";
+  json += wifiModeName();
+  json += "\",\"wifi_ap_active\":";
+  json += wifiAccessPointEnabled() ? "true" : "false";
+  json += ",\"wifi_ap_ssid\":\"";
+  json += wifiAccessPointEnabled() ? jsonEscape(WiFi.softAPSSID()) : String("");
+  json += "\",\"wifi_ap_mac_address\":\"";
+  json += WiFi.softAPmacAddress();
+  json += "\",\"wifi_ap_ip\":\"";
+  json += wifiAccessPointEnabled() ? WiFi.softAPIP().toString() : String("");
+  json += "\"";
   json += ",\"wifi_setup_ap_active\":";
   json += String(wifiSetupAccessPointActive ? "true" : "false");
   json += ",\"wifi_setup_ap_ssid\":\"";
@@ -8130,9 +8160,14 @@ void startSetupAccessPoint() {
 
 
 void stopSetupAccessPoint() {
-  if (!wifiSetupAccessPointActive) return;
+  if (!wifiSetupAccessPointActive && !wifiAccessPointEnabled()) return;
   setupDnsServer.stop();
-  WiFi.softAPdisconnect(false);
+  // Disable only AP: softAPdisconnect(false) clears its credentials but leaves
+  // the AP radio enabled, which can expose the SDK's default ESP_xxxxxx SSID.
+  if (!WiFi.enableAP(false)) {
+    Serial.println("Wi-Fi setup network could not be disabled");
+    return;
+  }
   wifiSetupAccessPointActive = false;
   Serial.println("Wi-Fi setup network stopped");
 }
