@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.6.1-dual-target.70 – 2026-11-27
+
+- 128×64 mit großzügigen Vollbildseiten und automatischer Radarseite nach
+  jeder Informationsseite; geteilte Ansicht mit dauerhaftem Radar bleibt wählbar
+- Große Flugnummern, getrennte Textbereiche und vollständiger Vor-/Rücklauf
+  samt angepasster Dauer; Freitextgeschwindigkeit und 125-Pixel-Option bleiben wirksam
+- Eigene große Notfallseite; Leerlaufoptionen und Anzeigeprioritäten erhalten
+- Matrixlayout in NVS, Formular, Sicherung/Wiederherstellung und Status;
+  ältere Sicherungen erhalten die Auswahl, 128×32 und Headless unverändert
+- Neuer Airport LDY (Derry) mit OurAirports-Koordinaten und regenerierten Tabellen
+
 ## 3.6.1-dual-target.69 – 2026-11-27
 
 - WLAN-Suche koordiniert Stations-Verbindungsversuche im AP+STA-Setupmodus;

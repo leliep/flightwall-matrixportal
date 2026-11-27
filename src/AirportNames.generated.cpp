@@ -292,6 +292,7 @@ const AirportName names[] = {
   {"LCA", "Larnaka"},
   {"LCJ", "Łódź"},
   {"LCY", "London-City"},
+  {"LDY", "Derry"},
   {"LED", "Pulkovo Airport"},
   {"LEJ", "Leipzig"},
   {"LGG", "Lüttich"},

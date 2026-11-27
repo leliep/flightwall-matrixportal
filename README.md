@@ -61,7 +61,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.69` |
+| Firmware | `3.6.1-dual-target.70` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) oder eigener 128×64-Build, optional 125 nutzbare Spalten, und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -75,8 +75,8 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 Die aktuelle Firmware ist gezielt für **128×32 Pixel aus zwei horizontal
 verketteten 64×32-Panels** ausgelegt. Zusätzlich gibt es einen eigenen Build für ein **128×64-HUB75E-Panel mit
-1/32-Scan und binärer ABCDE-Adressierung**. Er zeigt oben die konfigurierten
-Informationsseiten und unten dauerhaft das Radar. Andere Scanverfahren sind
+1/32-Scan und binärer ABCDE-Adressierung**. Er bietet großzügige Vollbildseiten mit wechselndem Radar sowie eine wählbare
+geteilte Ansicht mit Informationen oben und dauerhaftem Radar unten. Andere Scanverfahren sind
 weiterhin kein direkt unterstützter Ersatz.
 
 ## Eindrücke aus dem Betrieb
@@ -242,15 +242,29 @@ mit dem 128×64-Panel, nicht auf die bisherige 128×32-Hardware.
   Gespeichert als `matrix_idle_radar` (`off`, `lower`, `full`), nur beim 128×64-Build;
   Sicherung, Wiederherstellung und Status enthalten die Auswahl. Alte Sicherungen
   ohne diesen Wert erhalten die bestehende Auswahl.
-- Oben 128×32 Pixel mit den bisherigen konfigurierten Informationsseiten;
-  unten 128×32 Pixel mit dauerhaftem Radar, einschließlich Spuren, Punkt-/
-  Strichumlauf und konfigurierbarer Geschwindigkeit. Die separate Radarseite
-  wird oben übersprungen, ohne die gespeicherte Seitenauswahl zu verändern.
-- Sind nur Radar oder inhaltslose Seiten ausgewählt, erscheinen bei einem
-  aktuellen Flug oben die Flugdaten als Rückfallanzeige.
-- Helligkeit, Nachtabschaltung, Ausschalten der Anzeige, OTA und Startanzeige
-  behalten Vorrang. Ohne ausgewählten Flug zeigt der untere Bereich weiter
-  Radar; oben erscheint gegebenenfalls die konfigurierte Wetteranzeige.
+- Ab `.70` unter **Radar → 128×64-Anordnung** wählbar: **Vollbildseiten und
+  Radar im Wechsel** (neue Voreinstellung) oder **Geteilt: Informationen oben,
+  Radar unten** (bisherige Ansicht). Der Modus gilt nur für diesen Build und
+  verändert weder Webdisplay noch 128×32/Headless.
+- Vollbildseiten nutzen vier großzügig getrennte Textbereiche über 64 Zeilen:
+  große Flugnummer, thematisch getrennte Flugdaten, Airline/Route, CPA/Sondertyp,
+  Flughafennamen oder Freitext. Lange Texte erhalten den vollständigen Vor- und
+  schnellen Rücklauf samt automatisch verlängerter Seitendauer. Freitext nutzt
+  weiterhin die konfigurierte Scrollgeschwindigkeit, in doppelter Schriftgröße.
+- Nach jeder aktivierten Informationsseite erscheint automatisch das Radar über
+  die volle Höhe. Die Dauer stammt aus der Radarseiten-Einstellung; die Radar-
+  Checkbox wird dafür nicht benötigt. Gespeicherte Seitenauswahl, Reihenfolge
+  und Zeiten werden nicht umgeschrieben. Sind ausschließlich Radar-Seiten
+  gewählt, bleibt das Vollbildradar sichtbar. Die geteilte Ansicht behält ihr
+  dauerhaftes Radar unten und überspringt die separate Radarseite oben.
+- Die vorhandene Leerlaufauswahl **Aus / Untere Hälfte / Volle Höhe** bleibt
+  unabhängig davon wirksam. Nachtruhe, Display-Aus, Start-, Fehler- und
+  OTA-Anzeigen behalten Vorrang. Die priorisierte Notfallseite nutzt in der
+  Vollbildansicht große vierfach skalierte Squawk-Ziffern.
+- `matrix_layout` (`full` / `split`) gehört zur Konfigurationssicherung und
+  Status-API; die Statusseite nennt die Anordnung. Ältere Sicherungen ohne das
+  Feld erhalten die vorhandene Auswahl. Vor der ersten Auswahl ist Vollbild
+  aktiv; alle anderen Einstellungen und Lookup-Ergänzungen bleiben erhalten.
 - Displaytest und die optionale Maskierung der rechten drei Spalten umfassen
   alle 64 Zeilen. `/api/status` meldet `matrix_height` und `matrix_scan_rows`.
 - Drei Bit Farbtiefe und doppelte Pufferung bleiben erhalten; DMA-Bedarf und
@@ -884,7 +898,7 @@ Das Routentest-Feld wird beim Seitenaufruf mit dem aktuellen Callsign vorbelegt.
 
 ### Liste der Konfigurationsoptionen
 
-Stand: **`.62`**. Die Tabellen beschreiben die Bedienung unter `/config`.
+Stand: **`.70`**. Die Tabellen beschreiben die Bedienung unter `/config`.
 **Beide** bedeutet Matrix- und Headless-Variante, **Matrix** nur den
 Matrixcontroller. Angegebene Grenzen und Schrittweiten entsprechen dem Formular.
 
@@ -979,6 +993,7 @@ BME280 und BH1750 werden automatisch erkannt; ihre I²C-Adressen werden nicht
 | Status-LED | Aus, schwach oder normal | Beide |
 | Nachtruhe / Nachtabsenkung | Ein / aus; Anfang und Ende als Uhrzeit, auch über Mitternacht; gleiche Zeiten deaktivieren die Absenkung | Beide |
 | IP-Adresse beim Start anzeigen | Ein / aus; standardmäßig ein, Version und Standort bleiben Teil der Startanzeige | Matrix |
+| 128×64-Anordnung | Vollbildseiten mit wechselndem Radar (Standard) oder bisherige geteilte Ansicht; nur beim 128×64-Build | Matrix 128×64 |
 | Defekte rechte Spalten ausblenden | 125 statt 128 nutzbare Pixel; Inhalte werden entsprechend angeordnet | Matrix |
 | Sanfte Übergänge | Ein / aus | Matrix |
 | Anzeigeseiten | Jede der acht normalen Matrixseiten einzeln aktivieren oder deaktivieren | Matrix |

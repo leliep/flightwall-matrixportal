@@ -45,6 +45,7 @@ static_assert(FLIGHTWALL_MATRIX_HEIGHT == 32 || FLIGHTWALL_MATRIX_HEIGHT == 64,
 #include "RadarTrailStorage.hpp"
 #include "RadarSweep.hpp"
 #include "RadarIdle.hpp"
+#include "LargeMatrixLayout.hpp"
 #include "RouteClient.hpp"
 #include "StatusLed.hpp"
 #include "SiteName.hpp"
@@ -74,8 +75,8 @@ int16_t matrixLayoutWidth() {
 #endif
 }
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.69";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-27 coordinated setup Wi-Fi scan diagnostics";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.70";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-27 spacious 128x64 full pages and alternating radar";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 #if FLIGHTWALL_MATRIX_HEIGHT == 64
@@ -717,6 +718,15 @@ String customPageText;
 uint8_t customScrollSpeed = 1;
 uint8_t radarSweepIntervalSeconds = DEFAULT_RADAR_SWEEP_INTERVAL_SECONDS;
 std::atomic<uint8_t> matrixIdleRadar{RadarIdle::Lower};
+std::atomic<uint8_t> matrixLargeLayout{LargeMatrixLayout::Full};
+bool largeRadarPhase = false;
+bool largeFullPagesEnabled() {
+#if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+  return matrixLargeLayout.load(std::memory_order_relaxed) == LargeMatrixLayout::Full;
+#else
+  return false;
+#endif
+}
 std::atomic<bool> radarSweepLine{false};
 std::atomic<uint16_t> radarSweepDurationMs{RadarSweep::PeriodMs};
 bool pageEnabled[] = {true, true, true, true, true, true, true, true};
@@ -1965,6 +1975,24 @@ String emergencyMeaning(const String &squawk) {
 
 
 void drawEmergencyPage() {
+#if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+  if (largeFullPagesEnabled()) {
+    matrix.fillScreen(0);
+    const String identity = clipped(displayAscii(flight.flight.length() ? flight.flight : flight.hex), 14);
+    drawLine(2, 0, identity, white);
+    if (flight.emergencyCount > 1) {
+      const String position = String(flight.emergencyIndex) + "/" + String(flight.emergencyCount);
+      drawLine(matrixLayoutWidth() - 2 - position.length() * 6, 0, position, white);
+    }
+    const String squawk = isEmergencySquawk(flight.squawk) ? flight.squawk : "7???";
+    const uint16_t color = squawk == "7600" ? yellow : red;
+    drawLine((matrixLayoutWidth() - 96) / 2, 15, squawk, color, 4);
+    const String meaning = squawk == "7???" ? String("ALARM") : emergencyMeaning(squawk);
+    drawLine((matrixLayoutWidth() - meaning.length() * 6) / 2, 54, meaning, color);
+    return;
+  }
+#endif
+
   matrix.fillScreen(0);
   const String identity = flight.flight.length() ? flight.flight : flight.hex;
   const String position = flight.emergencyCount > 1
@@ -2267,6 +2295,7 @@ void drawRadarPage() {
 
 void drawPersistentRadar() {
 #if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+  if (largeFullPagesEnabled() && aircraftIsInsideDisplayRadius()) return;
   // The radar keeps full configured brightness while only the top pages fade.
   const uint8_t savedTransition = transitionPercent;
   setTransitionPercent(100);
@@ -2352,13 +2381,164 @@ bool selectEnabledPage() {
 }
 
 
+uint8_t currentConfiguredPage() {
+  return largeFullPagesEnabled() && largeRadarPhase ? 7 : pageOrder[currentPageSlot];
+}
+
+
 void advancePage() {
+  if (largeFullPagesEnabled()) {
+    largeRadarPhase = !largeRadarPhase;
+    if (largeRadarPhase) return;
+  }
   currentPageSlot = (currentPageSlot + 1) % PAGE_COUNT;
   selectEnabledPage();
 }
 
 
+#if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+// Four separated text bands; only existing 1-bit text scratch storage is reused.
+struct LargePageContent {
+  String rows[4];
+  uint16_t colors[4];
+  uint8_t sizes[4] = {2, 1, 1, 1};
+  uint8_t y[4] = {0, 22, 38, 54};
+};
+
+LargePageContent largePageContent(uint8_t page) {
+  LargePageContent content;
+  content.rows[0] = clipped(displayAscii(flight.flight.length() ? flight.flight : flight.hex), 10);
+  content.colors[0] = white;
+  content.colors[1] = cyan;
+  content.colors[2] = yellow;
+  content.colors[3] = green;
+  const String distance = isnan(flight.distanceKm) ? "? km" : String(flight.distanceKm, 1) + " km";
+  const String altitude = flight.onGround ? uiText("am Boden", "on ground") :
+      (isnan(flight.altitudeFt) ? "? ft" : String(static_cast<int>(round(flight.altitudeFt))) + " ft");
+  const String speed = isnan(flight.speedKmh) ? "" : String(static_cast<int>(round(flight.speedKmh))) + " km/h";
+  String route = flight.routeCodes.length() ? compactLoopRouteCodes() : compactRoute();
+  String names = flight.routeNames.length() ? compactLoopRouteNames() :
+      displayAscii(flight.originName.length() && flight.destinationName.length()
+          ? flight.originName + " > " + flight.destinationName
+          : flight.originName.length() ? flight.originName : flight.destinationName);
+  if (!names.length()) names = route;
+  const String cpa = "CPA " + (isnan(flight.cpaKm) ? String("? km") : String(flight.cpaKm, 1) + "km");
+  String countdown = flight.motion == "departing" ? uiText("entfernt sich", "departing") : cpaCountdownText(flight);
+  if (flight.motion != "departing" && countdown.length()) countdown = "in " + countdown;
+  switch (page) {
+    case 0:
+      content.rows[1] = distance;
+      content.sizes[1] = 2;
+      content.colors[1] = yellow;
+      content.rows[2] = altitude + (speed.length() ? "  " + speed : "");
+      content.y[2] = 42;
+      content.rows[3] = displayAscii(compactLookDirection(flight.relativeBearing));
+      content.y[3] = 56;
+      break;
+    case 1:
+      content.rows[1] = displayedAirline();
+      content.rows[2] = route;
+      content.sizes[2] = route.length() <= 10 ? 2 : 1;
+      content.y[2] = 36;
+      content.rows[3] = speed;
+      content.y[3] = 56;
+      break;
+    case 2:
+      content.rows[1] = cpa;
+      content.sizes[1] = cpa.length() <= 10 ? 2 : 1;
+      content.colors[1] = green;
+      content.rows[2] = countdown;
+      content.y[2] = 42;
+      content.colors[2] = flight.motion == "departing" ? orange : green;
+      content.rows[3] = cpaPageDetails();
+      content.colors[3] = aircraftColor();
+      content.y[3] = 56;
+      break;
+    case 3:
+      content.rows[1] = route;
+      content.sizes[1] = route.length() <= 10 ? 2 : 1;
+      content.rows[2] = flightHasMultiHopRoute() ? names :
+          displayAscii("S " + (flight.originName.length() ? flight.originName : flight.origin));
+      content.y[2] = 42;
+      content.rows[3] = flightHasMultiHopRoute() ? String("") :
+          displayAscii("Z " + (flight.destinationName.length() ? flight.destinationName : flight.destination));
+      content.y[3] = 56;
+      break;
+    case 4:
+      content.rows[1] = customPageText;
+      content.sizes[1] = 2;
+      content.y[1] = 30;
+      content.rows[3] = uiText("Freitext", "Custom text");
+      content.y[3] = 56;
+      break;
+    case 5:
+      content.rows[1] = flight.type + (speed.length() ? "  " + speed : "");
+      content.rows[2] = distance + "  " + altitude;
+      content.rows[3] = cpa + (countdown.length() ? " " + countdown : "");
+      break;
+    default:
+      content.rows[1] = displayedAirline();
+      content.rows[2] = names;
+      content.rows[3] = route;
+      break;
+  }
+  for (String &row : content.rows) row = limitedAirportText(row);
+  return content;
+}
+
+void drawLargeText(const String &text, uint8_t y, uint8_t size, uint16_t color, uint16_t pixelMs = 80) {
+  if (!text.length() || !airportTextCanvas.getBuffer()) return;
+  const int16_t width = matrixLayoutWidth() - 4;
+  const int16_t offset = LargeMatrixLayout::offset(text.length(), width, size, millis() - currentPageStarted, pixelMs);
+  airportTextCanvas.fillScreen(0);
+  airportTextCanvas.setFont(nullptr);
+  airportTextCanvas.setTextWrap(false);
+  airportTextCanvas.setTextSize(1);
+  airportTextCanvas.setTextColor(1);
+  airportTextCanvas.setCursor(0, 0);
+  airportTextCanvas.print(text);
+  for (int16_t x = 0; x < width; ++x) {
+    const int16_t sourceX = (x - offset) / size;
+    if (sourceX < 0 || sourceX >= AIRPORT_TEXT_CANVAS_WIDTH) continue;
+    for (int16_t row = 0; row < 8 * size && y + row < 64; ++row) {
+      if (airportTextCanvas.getPixel(sourceX, row / size)) matrix.drawPixel(x + 2, y + row, color);
+    }
+  }
+}
+
+void drawLargeConfiguredPage(uint8_t page) {
+  if (page == 7) {
+    radarFullHeight = true;
+    drawRadarPage();
+    radarFullHeight = false;
+    return;
+  }
+  const LargePageContent content = largePageContent(page);
+  for (uint8_t row = 0; row < 4; ++row)
+    drawLargeText(content.rows[row], content.y[row], content.sizes[row], content.colors[row], page == 4 && row == 1 ? customScrollPixelMs() : 80);
+}
+
+#endif
+
+uint32_t largePageDuration(uint8_t page) {
+#if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+  if (page == 7) return 0;
+  const LargePageContent content = largePageContent(page);
+  uint32_t duration = 0;
+  for (uint8_t row = 0; row < 4; ++row)
+    duration = max(duration, LargeMatrixLayout::duration(content.rows[row].length(), matrixLayoutWidth() - 4, content.sizes[row], page == 4 && row == 1 ? customScrollPixelMs() : 80));
+  return duration;
+#else
+  (void)page;
+  return 0;
+#endif
+}
+
+
 void drawConfiguredPage(uint8_t page) {
+#if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+  if (largeFullPagesEnabled()) { drawLargeConfiguredPage(page); return; }
+#endif
   switch (page) {
     case 0: drawMainPage(); break;
     case 1: drawRoutePage(); break;
@@ -2396,6 +2576,7 @@ void activatePage(uint8_t page, uint32_t now) {
 
 
 void resetPageTransition() {
+  largeRadarPhase = false;
   transitionPhase = TransitionPhase::Normal;
   currentPageStarted = 0;
   activeRenderedPage = -1;
@@ -2575,6 +2756,7 @@ void drawDisplay() {
       return;
     }
     emergencyPagePending = false;
+    largeRadarPhase = false;
     currentPageSlot = 0;
     currentPageStarted = 0;
     activeRenderedPage = -1;
@@ -2589,7 +2771,9 @@ void drawDisplay() {
       drawEmergencyPage();
     }
 #if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
-    else drawMainPage();
+    else if (largeFullPagesEnabled()) {
+      drawLargeConfiguredPage(pageEnabled[7] ? 7 : 0);
+    } else drawMainPage();
 #endif
     drawPersistentRadar();
     drawIdleIndicator();
@@ -2599,12 +2783,13 @@ void drawDisplay() {
 
   const uint32_t now = millis();
   if (currentPageStarted == 0) currentPageStarted = now;
-  const uint8_t page = pageOrder[currentPageSlot];
+  const uint8_t page = currentConfiguredPage();
   uint32_t duration = pageDurationMs[page];
-  if (page == 2) duration = max(duration, cpaPageDuration());
-  if (page == 3) duration = max(duration, airportNamesPageDuration());
-  if (page == 4) duration = max(duration, customPageScrollDuration());
-  if (page == 6) duration = max(duration, compactAirportsMinimumDuration());
+  if (largeFullPagesEnabled()) duration = max(duration, largePageDuration(page));
+  else if (page == 2) duration = max(duration, cpaPageDuration());
+  if (!largeFullPagesEnabled() && page == 3) duration = max(duration, airportNamesPageDuration());
+  if (!largeFullPagesEnabled() && page == 4) duration = max(duration, customPageScrollDuration());
+  if (!largeFullPagesEnabled() && page == 6) duration = max(duration, compactAirportsMinimumDuration());
 
   if (transitionPhase == TransitionPhase::Normal &&
       now - currentPageStarted >= duration) {
@@ -2636,7 +2821,7 @@ void drawDisplay() {
     }
   }
 
-  const uint8_t pageToDraw = pageOrder[currentPageSlot];
+  const uint8_t pageToDraw = currentConfiguredPage();
   activatePage(pageToDraw, now);
   matrix.fillScreen(0);
   drawConfiguredPage(pageToDraw);
@@ -2985,6 +3170,7 @@ void syncNetworkState() {
     if (incomingEmergencyKey != displayedEmergencyKey) {
       displayedEmergencyKey = incomingEmergencyKey;
       emergencyPagePending = networkFlight.emergency;
+      largeRadarPhase = false;
       currentPageSlot = 0;
       currentPageStarted = 0;
       activeRenderedPage = -1;
@@ -4216,6 +4402,7 @@ PsramBuffer configurationJson() {
   settings["matrix_reduced_width"] = matrixReducedWidth.load(std::memory_order_relaxed);
 #if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
   settings["matrix_idle_radar"] = RadarIdle::name(matrixIdleRadar.load(std::memory_order_relaxed));
+  settings["matrix_layout"] = LargeMatrixLayout::name(matrixLargeLayout.load(std::memory_order_relaxed));
 #endif
   settings["custom_text"] = customPageText;
   settings["custom_scroll_speed"] = customScrollSpeed;
@@ -4281,6 +4468,13 @@ void handleConfigurationRestore() {
   const PsramBuffer restoredProfileBytes = restoredProfiles.encode();
   if (restoredProfileBytes.failed()) { siteProfilesError(503); return; }
 #if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+  uint8_t restoredLayout = LargeMatrixLayout::Full;
+  const bool hasLayout = !s["matrix_layout"].isNull();
+  if (hasLayout && (!s["matrix_layout"].is<const char*>() ||
+      !LargeMatrixLayout::parse(s["matrix_layout"].as<const char*>(), restoredLayout))) {
+    webServer.send(400, "text/plain; charset=utf-8", uiText("Ungültiges Matrixlayout.", "Invalid matrix layout."));
+    return;
+  }
   uint8_t restoredIdleRadar = RadarIdle::Lower;
   const bool hasIdleRadar = !s["matrix_idle_radar"].isNull();
   if (hasIdleRadar && (!s["matrix_idle_radar"].is<const char*>() ||
@@ -4349,6 +4543,7 @@ void handleConfigurationRestore() {
   if (!s["radar_sweep_duration_ms"].isNull()) preferences.putUShort("radarSweepMs", RadarSweep::duration(s["radar_sweep_duration_ms"].as<int>()));
 #if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
   if (hasIdleRadar) preferences.putUChar("idleRadar", restoredIdleRadar);
+  if (hasLayout) preferences.putUChar("largeLayout", restoredLayout);
 #endif
   putBool("routesOn", "routes_enabled"); putBool("routeFallback", "adsbdb_fallback");
   putBool("hideSport", "hide_sport_aircraft"); putBool("altFilter", "altitude_filter");
@@ -5081,6 +5276,16 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
   html += checked(radarTrailsEnabled);
   html += F("> Radarspuren (60 Sekunden)</label>");
 #if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+  html += "<label>" + String(uiText("128×64-Anordnung", "128×64 layout")) + "<select name='matrixLayout'>";
+  for (uint8_t layout = 0; layout <= LargeMatrixLayout::Full; ++layout) {
+    html += "<option value='" + String(LargeMatrixLayout::name(layout)) + "'" +
+        selected(matrixLargeLayout.load(std::memory_order_relaxed) == layout) + ">" +
+        String(layout == LargeMatrixLayout::Full ? uiText("Vollbildseiten und Radar im Wechsel", "Full pages alternating with radar") :
+          uiText("Geteilt: Informationen oben, Radar unten", "Split: information above, radar below")) + "</option>";
+  }
+  html += "</select></label><p class='muted'>" + String(uiText(
+      "Vollbild zeigt nach jeder aktivierten Informationsseite ein Radar über die gesamte Höhe. Dessen Dauer ist unter Radarseite einstellbar; die Radar-Checkbox wird dabei nicht benötigt. Reihenfolge und Auswahl der Informationsseiten bleiben erhalten.",
+      "Full layout inserts a full-height radar after every enabled information page. Use the radar page duration; its checkbox is not required. Information page order and selection stay unchanged.")) + "</p>";
   html += "<label>" + String(uiText("Radar ohne angezeigtes Flugzeug", "Radar without displayed aircraft")) + "<select name='matrixIdleRadar'>";
   for (uint8_t mode = 0; mode <= RadarIdle::Full; ++mode) {
     const char* label = mode == RadarIdle::Off ? uiText("Aus (nur Betriebspunkt)", "Off (activity pixel only)") :
@@ -5089,8 +5294,8 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
             selected(matrixIdleRadar.load(std::memory_order_relaxed) == mode) + ">" + label + "</option>";
   }
   html += "</select></label><p class='muted'>" + String(uiText(
-      "Gilt, wenn kein anzeigbares Flugzeug im Anzeigeradius liegt. Aus und volle Höhe ersetzen die Wetter-Leerlaufanzeige. Bei einem Flug erscheinen wieder Informationen oben und Radar unten.",
-      "Applies when no eligible aircraft is inside the display radius. Off and full height replace idle weather. With an aircraft, information returns above the lower radar.")) + "</p>";
+      "Gilt, wenn kein anzeigbares Flugzeug im Anzeigeradius liegt. Aus und volle Höhe ersetzen die Wetter-Leerlaufanzeige. Bei einem Flug gilt wieder die gewählte 128×64-Anordnung.",
+      "Applies when no eligible aircraft is inside the display radius. Off and full height replace idle weather. With an aircraft, the selected 128×64 layout resumes.")) + "</p>";
 #endif
   html += F("<label>Radar-Umlauf<select name='radarSweepStyle'><option value='dot'");
   html += selected(!radarSweepLine.load(std::memory_order_relaxed));
@@ -5226,6 +5431,10 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
   html += " / ";
   html += String(wifiSurvey.busy() ? millis() - wifiSurvey.started : wifiSurvey.duration);
   html += " ms";
+#if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+  html += "</b><span>" + String(uiText("Matrix-Anordnung", "Matrix layout")) + "</span><b>";
+  html += largeFullPagesEnabled() ? uiText("Vollbild / Radar im Wechsel", "Full pages / alternating radar") : uiText("Geteilt", "Split");
+#endif
   html += F("</b><span>Einrichtungsnetz</span><b>");
   html += wifiSetupAccessPointActive
               ? htmlEscape(wifiSetupAccessPointSsid + " / 192.168.4.1")
@@ -5836,6 +6045,12 @@ bool validFlightWallHost(const String &host) {
 
 bool applyWebSettings() {
 #if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+  uint8_t requestedLayout = matrixLargeLayout.load(std::memory_order_relaxed);
+  if (webServer.hasArg("matrixLayout") &&
+      !LargeMatrixLayout::parse(webServer.arg("matrixLayout").c_str(), requestedLayout)) {
+    webServer.send(400, "text/plain; charset=utf-8", uiText("Ungültiges Matrixlayout.", "Invalid matrix layout."));
+    return false;
+  }
   uint8_t requestedIdleRadar = matrixIdleRadar.load(std::memory_order_relaxed);
   if (webServer.hasArg("matrixIdleRadar") &&
       !RadarIdle::parse(webServer.arg("matrixIdleRadar").c_str(), requestedIdleRadar)) {
@@ -6085,6 +6300,8 @@ bool applyWebSettings() {
     preferences.putDouble("siteLon", siteLongitude);
     preferences.putFloat("heading", viewHeading);
 #if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+    matrixLargeLayout.store(requestedLayout, std::memory_order_relaxed);
+    preferences.putUChar("largeLayout", requestedLayout);
     matrixIdleRadar.store(requestedIdleRadar, std::memory_order_relaxed);
     preferences.putUChar("idleRadar", requestedIdleRadar);
 #endif
@@ -6949,6 +7166,9 @@ void handleStatusApi() {
   json += ",\"display_radius_km\":";
   json += String(displayRadiusKm, 1);
 #if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+  json += ",\"matrix_layout\":\"";
+  json += LargeMatrixLayout::name(matrixLargeLayout.load(std::memory_order_relaxed));
+  json += "\"";
   json += ",\"matrix_idle_radar\":\"";
   json += RadarIdle::name(matrixIdleRadar.load(std::memory_order_relaxed));
   json += "\"";
@@ -8547,6 +8767,7 @@ void setup() {
   adsbDbFallbackEnabled = preferences.getBool("routeFallback", true);
   radarTrailsEnabled = preferences.getBool("radarTrails", true);
 #if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+  matrixLargeLayout.store(LargeMatrixLayout::valid(preferences.getUChar("largeLayout", LargeMatrixLayout::Full)), std::memory_order_relaxed);
   matrixIdleRadar.store(RadarIdle::valid(preferences.getUChar("idleRadar", RadarIdle::Lower)), std::memory_order_relaxed);
 #endif
   radarSweepLine.store(preferences.getBool("radarSweepLine", false), std::memory_order_relaxed);
