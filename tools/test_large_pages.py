@@ -5,6 +5,9 @@ import subprocess,tempfile,os,re
 root=Path(__file__).resolve().parents[1];s=(root/'src/main.cpp').read_text()
 def function(signature):
  a=s.index(signature+' {');return s[a:s.index('\n}\n',a)+3]
+arrow_enum=s[s.index('enum class LookDirection {'):s.index('};',s.index('enum class LookDirection {'))+2]
+arrow_bitmaps=s[s.index('constexpr uint8_t ARROW_UP[7]'):s.index('constexpr uint8_t ALTITUDE_TRIANGLE_UP[7]')]
+arrow_functions=function('void drawArrowBitmap(int16_t x, int16_t y, const uint8_t bitmap[7],\n                     uint16_t color)')+'\n'+function('void drawLookArrowAt(float angle, int16_t x, int16_t y, uint16_t color)')
 render=s[s.index('struct LargePageContent {'):s.index('\n#endif\n\nuint32_t largePageDuration')]
 functions='\n'.join(function(x) for x in ['bool largeFullPagesEnabled()','bool selectEnabledPage()','uint8_t currentConfiguredPage()','void advancePage()','void resetPageTransition()','void drawPersistentRadar()','uint32_t largePageDuration(uint8_t page)','void drawEmergencyPage()'])
 # Exact pinned GFX font for pixel previews; tests also work before dependencies download.
@@ -57,7 +60,7 @@ String compactLoopRouteCodes(){return flight.routeCodes;}
 String compactLoopRouteNames(){return flight.routeNames;}
 uint16_t customPixelMs=80;uint16_t customScrollPixelMs(){return customPixelMs;}
 String compactRoute(){return flight.origin+">"+flight.destination;}
-String compactLookDirection(float){return "rechts / NW";}
+String lookText="rechts / NW";String compactLookDirection(float){return lookText;}
 String cpaCountdownText(const Flight&){return "27s";}
 String displayedAirline(){return flight.airline;}
 String cpaPageDetails(){return flight.specialType.length()?flight.specialType+" | "+flight.typeDescription:flight.typeDescription;}
@@ -87,7 +90,7 @@ void drawLine(int16_t x,int16_t y,const String&text,uint16_t color,uint8_t size=
   if((font[(unsigned char)text[i]*5+col/size]>>(row/size))&1)matrix.drawPixel(x+i*6*size+col,y+row,color);
 }
 void drawRadarPage(){++radarCalls;if(radarFullHeight)assert(radarDrawOffsetY==0);else{assert(radarDrawOffsetY==32);++persistentCalls;}}
-'''.replace('FONT',','.join(map(str,font)))+render+'\n'+functions+r'''
+'''.replace('FONT',','.join(map(str,font)))+arrow_enum+'\n'+arrow_bitmaps+'\nLookDirection testDirection=LookDirection::Right;LookDirection lookDirection(float){return testDirection;}\n'+arrow_functions+'\n'+render+'\n'+functions+r'''
 int main(int argc,char**argv){
  uint8_t mode=0;assert(!LargeMatrixLayout::parse(nullptr,mode));assert(!LargeMatrixLayout::parse("FULL",mode));
  assert(!LargeMatrixLayout::parse("",mode));assert(LargeMatrixLayout::valid(99)==LargeMatrixLayout::Full);
@@ -117,6 +120,17 @@ int main(int argc,char**argv){
    assert(LargeMatrixLayout::offset(n,w-4,size,d)==0);
   }
  }
+ // Every view-direction bitmap must survive even when the direction text scrolls.
+ for(int w:{125,128}){width=w;lookText="Ein sehr langer Blickrichtungstext im Vor- und Ruecklauf";
+  for(auto direction:{LookDirection::Above,LookDirection::AboveFront,LookDirection::AboveBack,LookDirection::Front,LookDirection::FarFront,LookDirection::AboveRight,LookDirection::Right,LookDirection::FarRight,LookDirection::RightShoulder,LookDirection::Back,LookDirection::FarBack,LookDirection::LeftShoulder,LookDirection::AboveLeft,LookDirection::Left,LookDirection::FarLeft,LookDirection::Unknown}){
+   testDirection=direction;
+   for(uint32_t t:{0U,800U,16000U}){now=currentPageStarted+t;matrix.clear();drawLargeConfiguredPage(0);
+    int count=0;for(int y=56;y<63;++y)for(int x=w-9;x<w-2;++x)if(matrix.pixels[y][x]){assert(matrix.pixels[y][x]==yellow);++count;}
+    assert((count>0)==(direction!=LookDirection::Unknown));
+   }
+  }
+ }
+ testDirection=LookDirection::Right;
  // Emergency owns the full frame; large squawk and identity stay within 125/128.
  for(int w:{125,128})for(const char*sq:{"7500","7600","7700"}){width=w;flight.squawk=sq;drawEmergencyPage();assert(matrix.pixels[63][127]==0);}
  customPixelMs=25;const auto fast=largePageDuration(4);customPixelMs=120;assert(largePageDuration(4)>fast);customPixelMs=80;
@@ -140,7 +154,7 @@ with tempfile.TemporaryDirectory(prefix='flightwall-large-pages-') as tmp:
  p=Path(tmp);arduino=(root/'tools/test_support/Arduino.h').read_text().replace('#include <string>','#include <string>\n#include <sstream>\n#include <iomanip>').replace('  const char *c_str()', '  String(float number, int digits) { std::ostringstream stream;stream<<std::fixed<<std::setprecision(digits)<<number;value_=stream.str(); }\n  const char *c_str()')
  arduino=arduino.replace('  bool operator==', '  bool operator!=(const String &other) const { return !(*this==other); }\n  bool operator==')
  (p/'Arduino.h').write_text(arduino);(p/'test.cpp').write_text(code)
- subprocess.run(['c++','-std=c++11','-Wall','-Wextra','-pedantic','-fsanitize=address,undefined','-DFLIGHTWALL_HAS_MATRIX=1','-DFLIGHTWALL_MATRIX_HEIGHT=64','-I'+str(p),'-I'+str(root/'include'),str(p/'test.cpp'),'-o',str(p/'test')],check=True)
+ subprocess.run(['c++','-std=c++14','-Wall','-Wextra','-pedantic','-fsanitize=address,undefined','-DFLIGHTWALL_HAS_MATRIX=1','-DFLIGHTWALL_MATRIX_HEIGHT=64','-I'+str(p),'-I'+str(root/'include'),str(p/'test.cpp'),'-o',str(p/'test')],check=True)
  output=os.environ.get('FLIGHTWALL_PREVIEW_DIR')
  if output:Path(output).mkdir(parents=True,exist_ok=True)
  subprocess.run([str(p/'test')]+([output] if output else []),check=True)

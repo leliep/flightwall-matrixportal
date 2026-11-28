@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.6.1-dual-target.71 – 2026-11-28
+
+- Blickrichtungspfeil auf der 128×64-Vollbild-Flugdatenseite wiederhergestellt
+- Fester Pfeilbereich rechts unten; Richtungstext und Scroll-Dauer berücksichtigen
+  den schmaleren Textbereich bei 128 und 125 Pixeln
+- Bisherige Richtungs-/Oben-Symbole, geteilte Ansicht und 128×32 unverändert
+
 ## 3.6.1-dual-target.70 – 2026-11-27
 
 - 128×64 mit großzügigen Vollbildseiten und automatischer Radarseite nach

@@ -61,7 +61,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.70` |
+| Firmware | `3.6.1-dual-target.71` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) oder eigener 128×64-Build, optional 125 nutzbare Spalten, und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -251,6 +251,10 @@ mit dem 128×64-Panel, nicht auf die bisherige 128×32-Hardware.
   Flughafennamen oder Freitext. Lange Texte erhalten den vollständigen Vor- und
   schnellen Rücklauf samt automatisch verlängerter Seitendauer. Freitext nutzt
   weiterhin die konfigurierte Scrollgeschwindigkeit, in doppelter Schriftgröße.
+- Die Vollbild-Flugdatenseite zeigt den Blickrichtungspfeil rechts neben dem
+  Richtungstext. Sein fester Bereich bleibt auch bei langen laufenden Texten
+  und 125 nutzbaren Spalten frei; Richtung und Oben-Symbol entsprechen der
+  bisherigen Blickrichtungslogik.
 - Nach jeder aktivierten Informationsseite erscheint automatisch das Radar über
   die volle Höhe. Die Dauer stammt aus der Radarseiten-Einstellung; die Radar-
   Checkbox wird dafür nicht benötigt. Gespeicherte Seitenauswahl, Reihenfolge

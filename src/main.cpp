@@ -75,8 +75,8 @@ int16_t matrixLayoutWidth() {
 #endif
 }
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.70";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-27 spacious 128x64 full pages and alternating radar";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.71";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-28 restore full-page viewing direction arrow";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 #if FLIGHTWALL_MATRIX_HEIGHT == 64
@@ -2403,6 +2403,7 @@ struct LargePageContent {
   uint16_t colors[4];
   uint8_t sizes[4] = {2, 1, 1, 1};
   uint8_t y[4] = {0, 22, 38, 54};
+  int16_t widths[4] = {0, 0, 0, 0};
 };
 
 LargePageContent largePageContent(uint8_t page) {
@@ -2433,6 +2434,7 @@ LargePageContent largePageContent(uint8_t page) {
       content.rows[2] = altitude + (speed.length() ? "  " + speed : "");
       content.y[2] = 42;
       content.rows[3] = displayAscii(compactLookDirection(flight.relativeBearing));
+      content.widths[3] = matrixLayoutWidth() - 16;
       content.y[3] = 56;
       break;
     case 1:
@@ -2486,9 +2488,9 @@ LargePageContent largePageContent(uint8_t page) {
   return content;
 }
 
-void drawLargeText(const String &text, uint8_t y, uint8_t size, uint16_t color, uint16_t pixelMs = 80) {
+void drawLargeText(const String &text, uint8_t y, uint8_t size, uint16_t color, uint16_t pixelMs = 80, int16_t regionWidth = 0) {
   if (!text.length() || !airportTextCanvas.getBuffer()) return;
-  const int16_t width = matrixLayoutWidth() - 4;
+  const int16_t width = regionWidth > 0 ? regionWidth : matrixLayoutWidth() - 4;
   const int16_t offset = LargeMatrixLayout::offset(text.length(), width, size, millis() - currentPageStarted, pixelMs);
   airportTextCanvas.fillScreen(0);
   airportTextCanvas.setFont(nullptr);
@@ -2515,7 +2517,8 @@ void drawLargeConfiguredPage(uint8_t page) {
   }
   const LargePageContent content = largePageContent(page);
   for (uint8_t row = 0; row < 4; ++row)
-    drawLargeText(content.rows[row], content.y[row], content.sizes[row], content.colors[row], page == 4 && row == 1 ? customScrollPixelMs() : 80);
+    drawLargeText(content.rows[row], content.y[row], content.sizes[row], content.colors[row], page == 4 && row == 1 ? customScrollPixelMs() : 80, content.widths[row]);
+  if (page == 0) drawLookArrowAt(flight.relativeBearing, matrixLayoutWidth() - 9, 56, yellow);
 }
 
 #endif
@@ -2526,7 +2529,7 @@ uint32_t largePageDuration(uint8_t page) {
   const LargePageContent content = largePageContent(page);
   uint32_t duration = 0;
   for (uint8_t row = 0; row < 4; ++row)
-    duration = max(duration, LargeMatrixLayout::duration(content.rows[row].length(), matrixLayoutWidth() - 4, content.sizes[row], page == 4 && row == 1 ? customScrollPixelMs() : 80));
+    duration = max(duration, LargeMatrixLayout::duration(content.rows[row].length(), content.widths[row] > 0 ? content.widths[row] : matrixLayoutWidth() - 4, content.sizes[row], page == 4 && row == 1 ? customScrollPixelMs() : 80));
   return duration;
 #else
   (void)page;
