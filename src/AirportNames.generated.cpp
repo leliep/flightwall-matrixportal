@@ -152,6 +152,8 @@ const AirportName names[] = {
   {"DXB", "Dubai"},
   {"EAP", "Basel/Mülhausen"},
   {"EBL", "Erbil"},
+  {"EBSG", "Saint-Ghislain"},
+  {"EBZW", "Genk-Zwartberg"},
   {"ECN", "Ercan"},
   {"EDAZ", "Schönhagen"},
   {"EDFA", "Anspach/Taunus"},

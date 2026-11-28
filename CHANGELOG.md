@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.6.1-dual-target.72 – 2026-11-28
+
+- 128×64-Vollbildradar mit kleinem zentriertem Radiuskreis und unverändertem
+  Maßstab; zusätzliche Flugzeuge und Spuren ober- und unterhalb sichtbar
+- Gleiche unskalierte Projektion für Kreis, Umlauf, Punkte und Spuren, sowohl
+  auf der wechselnden Radarseite als auch im Vollbild-Leerlauf
+- Erweiterte Erfassung ohne neue Spurpuffer; bisherige Ziele werden bevorzugt,
+  Webradar und geteilte Ansicht behalten den alten Ausschnitt
+- Airportcodes EBSG und EBZW mit Namen/Koordinaten ergänzt, Tabellen regeneriert
+
 ## 3.6.1-dual-target.71 – 2026-11-28
 
 - Blickrichtungspfeil auf der 128×64-Vollbild-Flugdatenseite wiederhergestellt

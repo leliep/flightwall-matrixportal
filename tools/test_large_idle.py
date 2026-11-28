@@ -43,8 +43,8 @@ int main(){
 #endif
  }
  assert(RadarIdle::project(15,15,31)==31);
- assert(RadarIdle::project(0,15,31)==0);
- assert(RadarIdle::project(30,15,31)==62);
+ assert(RadarIdle::project(0,15,31)==16);
+ assert(RadarIdle::project(30,15,31)==46);
 }
 '''
 with tempfile.TemporaryDirectory(prefix='flightwall-large-idle-') as d:
@@ -52,4 +52,4 @@ with tempfile.TemporaryDirectory(prefix='flightwall-large-idle-') as d:
  for matrix,height in ((0,32),(1,32),(1,64)):
   subprocess.run(['c++','-std=c++11','-Wall','-Wextra','-pedantic','-fsanitize=address,undefined',f'-DFLIGHTWALL_HAS_MATRIX={matrix}',f'-DFLIGHTWALL_MATRIX_HEIGHT={height}','-I'+str(root/'tools/test_support'),'-I'+str(root/'include'),str(p/'test.cpp'),'-o',str(p/'test')],check=True)
   subprocess.run([str(p/'test')],check=True)
-print('Large-panel idle: off/lower/full, weather suppression, state reset, strict modes and 31/15 geometry passed')
+print('Large-panel idle: off/lower/full, weather suppression, state reset, strict modes and unscaled translated geometry passed')

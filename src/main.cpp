@@ -75,8 +75,8 @@ int16_t matrixLayoutWidth() {
 #endif
 }
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.71";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-28 restore full-page viewing direction arrow";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.72";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-28 unscaled full-height radar viewport";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 #if FLIGHTWALL_MATRIX_HEIGHT == 64
@@ -2135,10 +2135,13 @@ constexpr int16_t RADAR_RADIUS_PIXELS = 15;
 constexpr uint8_t RADAR_RADIUS_DOT_COUNT = RadarSweep::DotCount;
 constexpr uint32_t RADAR_SWEEP_DRAW_INTERVAL_MS = RadarSweep::DrawIntervalMs;
 constexpr uint32_t RADAR_SWEEP_SESSION_GAP_MS = 750;
-// The furthest matrix corner is about 4.4 configured radii away when the
-// same distance scale is used on both axes. A small margin avoids losing
-// edge pixels through rounding or receiver-side distance filtering.
+// Cover the furthest viewport corner at the same scale on both axes:
+// about 4.4 radii for 128x32 and 4.8 for 128x64, including rounding margin.
+#if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
+constexpr float RADAR_COVERAGE_RADIUS_FACTOR = 4.8F; // include 128x64 corners
+#else
 constexpr float RADAR_COVERAGE_RADIUS_FACTOR = 4.5F;
+#endif
 
 
 float radarCoverageRadiusKm() {
@@ -2152,8 +2155,15 @@ bool radarDataCollectionEnabled() {
 }
 
 
+bool radarCollectionPass(uint8_t pass, bool selected, bool relevant, bool addedRowsOnly) {
+  if (selected) return pass == 0;
+  if (addedRowsOnly) return pass == 3;
+  return pass == (relevant ? 1 : 2);
+}
+
+
 bool radarPointCoordinates(float distanceKm, float bearing,
-                           int16_t &x, int16_t &y, int16_t width = MATRIX_WIDTH) {
+                           int16_t &x, int16_t &y, int16_t width = MATRIX_WIDTH, bool fullViewport = false) {
   if (displayRadiusKm <= 0.0F || !isfinite(distanceKm) ||
       !isfinite(bearing)) return false;
   const float pixelsPerKm = RADAR_RADIUS_PIXELS / displayRadiusKm;
@@ -2162,12 +2172,14 @@ bool radarPointCoordinates(float distanceKm, float bearing,
       roundf(sinf(relativeRadians) * distanceKm * pixelsPerKm));
   y = RADAR_CENTER_Y - static_cast<int16_t>(
       roundf(cosf(relativeRadians) * distanceKm * pixelsPerKm));
-  // Radar snapshots and web projection stay in logical 128x32 coordinates.
-  return x >= 0 && x < width && y >= 0 && y < 32;
+  // Keep the legacy logical center at y=15. A 64-row viewport adds 16
+  // rows at both ends; signed trail bytes already cover this range.
+  return x >= 0 && x < width && y >= (fullViewport ? -16 : 0) &&
+         y < (fullViewport ? 48 : 32);
 }
 
 
-// Rendering offset only: shared radar points/trails retain 32-row coordinates.
+// Rendering translation only: signed snapshots retain the legacy center at y=15.
 int16_t radarDrawOffsetY = 0;
 bool radarFullHeight = false;
 int16_t radarDisplayX(int16_t x) {
@@ -2177,7 +2189,8 @@ int16_t radarDisplayY(int16_t y) {
   return radarFullHeight ? RadarIdle::project(y, RADAR_CENTER_Y, 31) : y + radarDrawOffsetY;
 }
 void drawRadarPixel(int16_t x, int16_t y, uint16_t color) {
-  if (x < 0 || x >= matrixLayoutWidth() || y < 0 || y >= 32) return;
+  if (x < 0 || x >= matrixLayoutWidth() ||
+      y < (radarFullHeight ? -16 : 0) || y >= (radarFullHeight ? 48 : 32)) return;
   x = radarDisplayX(x); y = radarDisplayY(y);
   if (x >= 0 && x < matrixLayoutWidth() && y >= 0 && y < matrix.height())
     matrix.drawPixel(x, y, color);
@@ -2278,7 +2291,7 @@ void drawRadarPage() {
       if ((point.flags & RADAR_POINT_EMERGENCY) && !blinkOn) continue;
       int16_t x = 0;
       int16_t y = 0;
-      if (!radarPointCoordinates(point.distanceKm, point.bearing, x, y, matrixLayoutWidth()))
+      if (!radarPointCoordinates(point.distanceKm, point.bearing, x, y, matrixLayoutWidth(), radarFullHeight))
         continue;
       const uint16_t color = radarPointColor(point);
       drawRadarPixel(x, y, color);
@@ -4026,7 +4039,8 @@ bool fetchLocalFlight() {
         ? aircraftIdentity(selected) : 0;
     // Preserve the selected target and all selection-relevant traffic before
     // filling the remaining fixed capacity with the wider radar surroundings.
-    for (uint8_t pass = 0; pass < 3; ++pass) {
+    constexpr bool extendedRadarViewport = FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64;
+    for (uint8_t pass = 0; pass < (extendedRadarViewport ? 4 : 3); ++pass) {
       for (const Aircraft &candidate : result.candidates) {
         if (!candidate.hasPosition ||
             networkRadarPointCount >= RADAR_POINT_LIMIT) continue;
@@ -4038,13 +4052,16 @@ bool fetchLocalFlight() {
             (special && candidate.distanceKm <= displayRadiusKm * 2.0F);
         if ((pass == 0 && !isSelected) ||
             (pass == 1 && (isSelected || !selectionRelevant)) ||
-            (pass == 2 && (isSelected || selectionRelevant))) continue;
+            (pass == 2 && (isSelected || selectionRelevant)) ||
+            (pass == 3 && isSelected)) continue;
         if (hideSportAircraft && candidate.sportAircraft && !special) continue;
         int16_t radarX = 0;
         int16_t radarY = 0;
         if (!radarPointCoordinates(
-                candidate.distanceKm, candidate.bearing, radarX, radarY))
+                candidate.distanceKm, candidate.bearing, radarX, radarY, MATRIX_WIDTH, extendedRadarViewport))
           continue;
+        const bool addedRowsOnly = radarY < 0 || radarY >= 32;
+        if (!radarCollectionPass(pass, isSelected, selectionRelevant, addedRowsOnly)) continue;
         RadarPoint &point = networkRadarPoints[networkRadarPointCount++];
         RadarTrailSnapshot *trail = radarTrailStorage
             ? &radarTrailStorage->network[networkRadarPointCount - 1] : nullptr;
@@ -4060,7 +4077,7 @@ bool fetchLocalFlight() {
               const auto &fix = track->fixes[j];
               int16_t x = 0, y = 0;
               if (!radarPointCoordinates(hypotf(fix.east, fix.north),
-                      atan2f(fix.east, fix.north) * 180.0F / PI, x, y) ||
+                      atan2f(fix.east, fix.north) * 180.0F / PI, x, y, MATRIX_WIDTH, extendedRadarViewport) ||
                   (x == radarX && y == radarY)) continue;
               bool duplicate = false;
               for (uint8_t k = 0; k < trail->trailCount; ++k) {
@@ -6856,8 +6873,13 @@ void handleDisplayApi() {
           ",\"radar\":{\"radius_km\":" + String(displayRadiusKm, 1) +
           ",\"view_heading\":" + String(viewHeading, 1) +
           ",\"points\":[";
+  bool firstRadarPoint = true;
   for (size_t index = 0; index < webRadarPointCount; ++index) {
-    if (index) json += ',';
+    int16_t webX = 0, webY = 0;
+    if (!radarPointCoordinates(webRadarPoints[index].distanceKm,
+                              webRadarPoints[index].bearing, webX, webY)) continue;
+    if (!firstRadarPoint) json += ',';
+    firstRadarPoint = false;
     json += '[';
     json += String(webRadarPoints[index].distanceKm, 2) + ',' +
             String(webRadarPoints[index].bearing, 1) + ',' +
@@ -6868,7 +6890,7 @@ void handleDisplayApi() {
     if (radarTrailsEnabled && trail) for (uint8_t j = 0; j < trail->trailCount; ++j) {
       const auto &dot = trail->trail[j];
       const uint32_t age = millis() - dot.time;
-      if (age >= RadarTrails::LifetimeMs) continue;
+      if (age >= RadarTrails::LifetimeMs || dot.y < 0 || dot.y >= 32) continue;
       if (!firstDot) json += ',';
       firstDot = false;
       json += '[' + String(dot.x) + ',' + String(dot.y) + ',' +

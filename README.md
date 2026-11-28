@@ -61,7 +61,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.71` |
+| Firmware | `3.6.1-dual-target.72` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) oder eigener 128×64-Build, optional 125 nutzbare Spalten, und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -255,6 +255,15 @@ mit dem 128×64-Panel, nicht auf die bisherige 128×32-Hardware.
   Richtungstext. Sein fester Bereich bleibt auch bei langen laufenden Texten
   und 125 nutzbaren Spalten frei; Richtung und Oben-Symbol entsprechen der
   bisherigen Blickrichtungslogik.
+- Das Vollbildradar behält ab `.72` den kleinen Radiuskreis (15 Pixel Radius,
+  etwa 30 Pixel Durchmesser) und den gleichen Entfernungsmaßstab wie die
+  geteilte Ansicht. Es sitzt mittig bei y=31. Zusätzliche Ziele und 60-Sekunden-
+  Spuren erscheinen ober- und unterhalb des Kreises, bis zu den Panelrändern.
+  Umlauf, Kreis, Ziele und Spuren werden gemeinsam nur verschoben, nicht gezoomt.
+  Das gilt für die wechselnde Radarseite und den Vollbild-Leerlauf. Webradar,
+  geteilte Ansicht und 128×32 behalten ihren bisherigen 32-Zeilen-Ausschnitt.
+  Die vorhandenen PSRAM-Spurpuffer bleiben unverändert groß. Zusätzliche
+  Randziele füllen erst nach den bisherigen Zielen die Kapazität von 64 Punkten.
 - Nach jeder aktivierten Informationsseite erscheint automatisch das Radar über
   die volle Höhe. Die Dauer stammt aus der Radarseiten-Einstellung; die Radar-
   Checkbox wird dafür nicht benötigt. Gespeicherte Seitenauswahl, Reihenfolge

@@ -17,6 +17,7 @@ restore='\n'.join(line for line in s.splitlines() if line.startswith('  if (!s["
 a=s.index('    if (webServer.hasArg("radarSweepInterval"))');saveform=s[a:s.index('    radarTrailsEnabled =',a)]
 write='\n'.join(line for line in s.splitlines() if line.startswith('    preferences.put') and 'radarSweep' in line)
 assert s.index('settings["radar_sweep_style"]')<s.index('#if FLIGHTWALL_HAS_MATRIX',s.index('PsramBuffer configurationJson()'))
+a=s.index('  bool firstRadarPoint = true;',s.index('void handleDisplayApi()'));web_fragment=s[a:s.index('  const uint32_t remaining =',a)]
 code=r'''
 #include <Arduino.h>
 #include <ArduinoJson.h>
@@ -66,7 +67,7 @@ struct Display{
 RadarTrailStorage storage;RadarTrailStorage *radarTrailStorage=&storage;
 '''+point+r'''
 RadarPoint radarPoints[64];size_t radarPointCount=0;
-'''+''.join(function(f) for f in ['int16_t radarDisplayX(int16_t x)', 'int16_t radarDisplayY(int16_t y)', 'void drawRadarPixel(int16_t x, int16_t y, uint16_t color)', 'uint16_t radarPointColor(const RadarPoint &point)','int16_t radarCenterX()', 'void drawRadarRing()','bool radarPointCoordinates(float distanceKm, float bearing,\n                           int16_t &x, int16_t &y, int16_t width = MATRIX_WIDTH)','void drawRadarPage()', 'void drawPersistentRadar()'])+r'''
+'''+''.join(function(f) for f in ['bool radarCollectionPass(uint8_t pass, bool selected, bool relevant, bool addedRowsOnly)', 'int16_t radarDisplayX(int16_t x)', 'int16_t radarDisplayY(int16_t y)', 'void drawRadarPixel(int16_t x, int16_t y, uint16_t color)', 'uint16_t radarPointColor(const RadarPoint &point)','int16_t radarCenterX()', 'void drawRadarRing()','bool radarPointCoordinates(float distanceKm, float bearing,\n                           int16_t &x, int16_t &y, int16_t width = MATRIX_WIDTH, bool fullViewport = false)','void drawRadarPage()', 'void drawPersistentRadar()'])+r'''
 void setTransitionPercent(uint8_t percent){transitionPercent=percent;}
 struct Prefs{
  std::map<std::string,bool>bools;std::map<std::string,int>ints;
@@ -180,18 +181,58 @@ int main(){
  assert(matrix.pixels[31][62]==0x1111);
  matrix.clear();radarFullHeight=true;radarPointCount=0;
  drawRadarPage();assert(matrix.pixels[31][width/2]==green);
- assert(radarDisplayY(0)==0 && radarDisplayY(15)==31 && radarDisplayY(30)==62);
- assert(radarDisplayX(width/2+15)==width/2+31);
- assert(radarDisplayX(width/2-15)==width/2-31);
+ assert(radarDisplayY(0)==16 && radarDisplayY(15)==31 && radarDisplayY(30)==46);
+ assert(radarDisplayX(width/2+15)==width/2+15);
+ assert(radarDisplayX(width/2-15)==width/2-15);
+ // Live targets and their signed trail samples beyond the old 32-row window.
+ for(int w:{125,128}){
+  width=w;radarFullHeight=true;radarPointCount=2;radarSweepIntervalSeconds=0;
+  radarPoints[0].distanceKm=20;radarPoints[0].bearing=0;radarPoints[0].flags=RADAR_POINT_SELECTED;
+  radarPoints[1].distanceKm=20;radarPoints[1].bearing=180;radarPoints[1].flags=RADAR_POINT_SPECIAL;
+  storage.consumer[0].trailCount=1;storage.consumer[0].trail[0].x=64+4;storage.consumer[0].trail[0].y=-3;storage.consumer[0].trail[0].time=millis();
+  matrix.clear();drawRadarPage();assert(matrix.pixels[11][w/2]==yellow);assert(matrix.pixels[51][w/2]==violet);
+  assert(matrix.pixels[13][w/2+4]!=0);assert(matrix.pixels[31][w/2+15]==blue);
+  assert(radarDisplayY(-16)==0&&radarDisplayY(47)==63);
+  drawRadarPixel(w/2,-16,white);drawRadarPixel(w/2,47,white);assert(matrix.pixels[0][w/2]==white&&matrix.pixels[63][w/2]==white);
+  matrix.clear();drawRadarPixel(w/2,-17,white);drawRadarPixel(w/2,48,white);
+  assert(!matrix.pixels[0][w/2]&&!matrix.pixels[63][w/2]);
+  radarFullHeight=false;radarDrawOffsetY=32;matrix.clear();drawRadarPage();
+  assert(!matrix.pixels[43][w/2]&&!matrix.pixels[63][w/2]);radarDrawOffsetY=0;
+ }
  radarFullHeight=false;
  int16_t x=0,y=0;
+ assert(radarPointCoordinates(20,0,x,y,125,true)&&y==-5);
+ assert(radarPointCoordinates(20,180,x,y,125,true)&&y==35);
+ assert(!radarPointCoordinates(33,0,x,y,125,true));
+ for(bool selected:{false,true})for(bool relevant:{false,true})for(bool added:{false,true}){
+  int hits=0;for(uint8_t pass=0;pass<4;++pass)if(radarCollectionPass(pass,selected,relevant,added)){++hits;assert(pass==(selected?0:added?3:relevant?1:2));}assert(hits==1);
+ }
+
  assert(!radarPointCoordinates(20,180,x,y,125)); // 64-row canvas must not expand shared projection
 #endif
  std::cout<<"Radar sweep: dot/beam, cardinal endpoints, off/timing/rollover, 125/128, target/trail priority, shared form/save/backup/restore passed\n";
 }
 '''
+web_function = 'String exportWebRadar(){String json="[";auto*webRadarPoints=radarPoints;size_t webRadarPointCount=radarPointCount;bool radarTrailsEnabled=true;\n'+web_fragment+'json+=\']\';return json;}\n'
+code=code.replace('int main(){',web_function+'int main(){',1)
+code=code.replace(' std::cout<<"Radar sweep:',r'''
+ // The actual API loop keeps its old 32-row window and valid JSON after filtering.
+ radarPointCount=3;clockMs=10000;
+ radarPoints[0].distanceKm=20;radarPoints[0].bearing=0;
+ radarPoints[1].distanceKm=0;radarPoints[1].bearing=0;
+ radarPoints[2].distanceKm=20;radarPoints[2].bearing=180;
+ auto&wt=storage.webConsumer[1];wt.trailCount=3;
+ for(int j=0;j<3;++j){wt.trail[j].time=clockMs;wt.trail[j].x=64;}
+ wt.trail[0].y=-5;wt.trail[1].y=15;wt.trail[2].y=40;
+ JsonDocument exported;assert(!deserializeJson(exported,exportWebRadar().c_str()));
+ assert(exported.size()==1&&exported[0][3].size()==1&&exported[0][3][0][1]==15);
+ radarPoints[1].distanceKm=20;assert(!deserializeJson(exported,exportWebRadar().c_str()));assert(exported.size()==0);
+ std::cout<<"Radar sweep:''',1)
 with tempfile.TemporaryDirectory(prefix='flightwall-radar-sweep-') as d:
  p=Path(d);(p/'test.cpp').write_text(code)
+ arduino=(root/'tools/test_support/Arduino.h').read_text().replace('#include <string>','#include <string>\n#include <sstream>\n#include <iomanip>')
+ arduino=arduino.replace('  const char *c_str()', '  String(float number,int digits){std::ostringstream out;out<<std::fixed<<std::setprecision(digits)<<number;value_=out.str();}\n  String&operator+=(char c){value_+=c;return *this;}\n  friend String operator+(char c,const String&s){return String(std::string(1,c).c_str())+s;}\n  friend String operator+(const String&s,char c){return s+String(std::string(1,c).c_str());}\n  const char *c_str()')
+ (p/'Arduino.h').write_text(arduino)
  for variant,height in ((0,32),(1,32),(1,64)):
-  subprocess.run(['c++','-std=c++11','-Wall','-Wextra','-pedantic','-fsanitize=address,undefined',f'-DFLIGHTWALL_HAS_MATRIX={variant}',f'-DFLIGHTWALL_MATRIX_HEIGHT={height}','-DARDUINOJSON_ENABLE_ARDUINO_STRING=0','-DARDUINOJSON_ENABLE_ARDUINO_STREAM=0','-DARDUINOJSON_ENABLE_ARDUINO_PRINT=0','-I'+str(root/'tools/test_support'),'-I'+str(root/'include'),'-I'+str(root/'.pio/libdeps/adafruit_matrixportal_esp32s3/ArduinoJson/src'),str(p/'test.cpp'),'-o',str(p/'test')],check=True)
+  subprocess.run(['c++','-std=c++11','-Wall','-Wextra','-pedantic','-fsanitize=address,undefined',f'-DFLIGHTWALL_HAS_MATRIX={variant}',f'-DFLIGHTWALL_MATRIX_HEIGHT={height}','-DARDUINOJSON_ENABLE_ARDUINO_STRING=0','-DARDUINOJSON_ENABLE_ARDUINO_STREAM=0','-DARDUINOJSON_ENABLE_ARDUINO_PRINT=0','-I'+str(p),'-I'+str(root/'tools/test_support'),'-I'+str(root/'include'),'-I'+str(root/'.pio/libdeps/adafruit_matrixportal_esp32s3/ArduinoJson/src'),str(p/'test.cpp'),'-o',str(p/'test')],check=True)
   subprocess.run([str(p/'test')],check=True)
