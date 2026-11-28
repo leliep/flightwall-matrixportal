@@ -61,7 +61,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.73` |
+| Firmware | `3.6.1-dual-target.74` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) oder eigener 128×64-Build, optional 125 nutzbare Spalten, und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -233,10 +233,13 @@ mit dem 128×64-Panel, nicht auf die bisherige 128×32-Hardware.
   E-Belegung des Panels und des MatrixPortal-Nachbaus prüfen; für E auf
   HUB75-Pin 8 muss der entsprechende 8/16-Jumper auf 8 stehen.
 - Unter `/config` → Radar ist „Radar ohne angezeigtes Flugzeug“ wählbar:
-  **Aus** (leeres Panel mit Blink-Pixel unten links), **Untere Hälfte** (Standard)
+  **Aus** (leeres Panel mit Blink-Pixel unten links), **Automatisch / untere Hälfte** (Standard)
   oder **Volle Höhe** (Radar über 64 Zeilen). Auslöser ist kein anzeigbares
   Flugzeug im eingestellten Anzeigeradius; weiter entfernte Radarziele verhindern
-  den Leerlauf nicht. Aus und volle Höhe ersetzen die Wetter-Leerlaufanzeige.
+  den Leerlauf nicht. Im automatischen Modus erscheinen Wetterdaten oben und
+  Radar unten, sofern die Wetter-Ruheanzeige aktiviert ist. Wird sie abgewählt,
+  nutzt das Radar ab `.74` automatisch die volle Höhe mit kleinem zentriertem
+  Kreis. Die expliziten Optionen Aus und volle Höhe behalten ihren Vorrang.
   Sobald wieder ein Flugzeug angezeigt wird, gilt automatisch das normale
   Layout. Nachtruhe, Display-Aus, Start-/Fehler- und OTA-Anzeigen behalten Vorrang.
   Gespeichert als `matrix_idle_radar` (`off`, `lower`, `full`), nur beim 128×64-Build;
@@ -794,8 +797,10 @@ Ab `.73` ergänzt MQTT fehlende Temperatur-, Feuchte- und Druckwerte. Frische
 lokale BME280-Werte haben je Messwert Vorrang; MQTT-Werte verfallen nach
 15 Minuten ohne gültige Nachricht. Die Wetter-Ruheanzeige funktioniert auch
 ohne BME280 und zeigt bereits verfügbare Teilwerte. Auf 128×64 muss die
-Leerlaufwahl Wetter erlauben: **Untere Hälfte** zeigt Wetter oben und Radar
-unten; **Aus** und **Volle Höhe** ersetzen weiterhin die Wetteranzeige.
+Leerlaufwahl Wetter erlauben: **Automatisch / untere Hälfte** zeigt Wetter oben und Radar
+unten; bei abgewählter Wetter-Ruheanzeige wird das Radar automatisch zum
+Vollbild. **Aus** und **Volle Höhe** ersetzen weiterhin die Wetteranzeige.
+MQTT und die Wetterwerte im Status bleiben vom Anzeige-Schalter unabhängig.
 
 Die vier zusätzlichen Topics sind unter `/config` konfigurierbar. Die
 Voreinstellungen sind einfache Zahlen ohne JSON-Hülle oder Einheit:

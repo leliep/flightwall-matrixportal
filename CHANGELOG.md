@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.6.1-dual-target.74 – 2026-11-28
+
+- 128×64-Ruheanzeige im automatischen Modus: Wetter aktiv zeigt Wetter oben
+  und Radar unten, Wetter abgewählt zeigt das unskalierte Vollbildradar
+- Explizite Radar-Aus-/Vollbildwahl, MQTT-Empfang, Flugzeugseiten, gespeicherte
+  Konfigurationen sowie 128×32 und Headless bleiben unverändert
+
 ## 3.6.1-dual-target.73 – 2026-11-28
 
 - MQTT-Außenklima ergänzt fehlende Temperatur-, Feuchte-, Druck- und Taupunktwerte;

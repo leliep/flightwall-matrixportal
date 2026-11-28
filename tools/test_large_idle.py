@@ -18,7 +18,13 @@ bool pageEnabled[8]={};int climate=0,radar=0,lower=0,pixel=0,shown=0;
 struct Display{void fillScreen(int){climate=radar=lower=pixel=shown=0;}}matrix;
 bool mqttWeatherAvailable(){return false;}
 void drawCompactClimateDisplay(bool,bool){++climate;}
-void drawRadarPage(){++radar;assert(radarFullHeight);}
+void drawRadarPage(){++radar;
+#if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT==64
+ assert(radarFullHeight);
+#else
+ assert(!radarFullHeight);
+#endif
+}
 void drawPersistentRadar(){
 #if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT==64
  ++lower;
@@ -33,15 +39,26 @@ int main(){
  assert(!RadarIdle::parse(nullptr,mode));
  for(uint8_t m=0;m<3;++m){assert(RadarIdle::parse(RadarIdle::name(m),mode)&&mode==m);}
  assert(RadarIdle::valid(255)==RadarIdle::Lower);
- for(uint8_t m=0;m<3;++m){
-  matrixIdleRadar=m;drawIdleDisplay();assert(shown==1&&!radarFullHeight);
+ for(bool weather:{false,true})for(uint8_t m=0;m<3;++m){
+  environmentIdleDisplayEnabled=weather;matrixIdleRadar=m;
+  drawIdleDisplay();assert(shown==1&&!radarFullHeight);assert(matrixIdleRadar==m);
 #if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT==64
-  assert(climate==(m==RadarIdle::Lower));assert(lower==(m==RadarIdle::Lower));
-  assert(radar==(m==RadarIdle::Full));assert(pixel==(m==RadarIdle::Off));
+  const bool full=m!=RadarIdle::Off&&(m==RadarIdle::Full||!weather);
+  assert(climate==(weather&&m==RadarIdle::Lower));
+  assert(lower==(weather&&m==RadarIdle::Lower));
+  assert(radar==full);assert(pixel==(m==RadarIdle::Off));
 #else
-  assert(climate==1&&!radar&&!lower&&!pixel);
+  assert(climate==weather&&!radar&&!lower&&pixel==!weather);
 #endif
  }
+ // The existing 32-row radar checkbox retains its previous behavior.
+ environmentIdleDisplayEnabled=false;pageEnabled[7]=true;matrixIdleRadar=RadarIdle::Lower;
+ drawIdleDisplay();assert(shown==1&&!radarFullHeight);
+#if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT==64
+ assert(radar==1&&!lower&&!climate);
+#else
+ assert(radar==1&&!climate&&!lower);
+#endif
  assert(RadarIdle::project(15,15,31)==31);
  assert(RadarIdle::project(0,15,31)==16);
  assert(RadarIdle::project(30,15,31)==46);
@@ -52,4 +69,4 @@ with tempfile.TemporaryDirectory(prefix='flightwall-large-idle-') as d:
  for matrix,height in ((0,32),(1,32),(1,64)):
   subprocess.run(['c++','-std=c++11','-Wall','-Wextra','-pedantic','-fsanitize=address,undefined',f'-DFLIGHTWALL_HAS_MATRIX={matrix}',f'-DFLIGHTWALL_MATRIX_HEIGHT={height}','-I'+str(root/'tools/test_support'),'-I'+str(root/'include'),str(p/'test.cpp'),'-o',str(p/'test')],check=True)
   subprocess.run([str(p/'test')],check=True)
-print('Large-panel idle: off/lower/full, weather suppression, state reset, strict modes and unscaled translated geometry passed')
+print('Large-panel idle: off/lower/full, weather on/off priority, explicit off/full, state reset, strict modes and unscaled translated geometry passed')

@@ -76,8 +76,8 @@ int16_t matrixLayoutWidth() {
 #endif
 }
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.73";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-28 MQTT outdoor climate fallback without mold assessment";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.74";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-28 full idle radar when weather is disabled";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 #if FLIGHTWALL_MATRIX_HEIGHT == 64
@@ -2359,7 +2359,7 @@ void drawIdleDisplay() {
     showMatrix();
     return;
   }
-  if (mode == RadarIdle::Full) {
+  if (mode == RadarIdle::Full || !environmentIdleDisplayEnabled) {
     radarFullHeight = true;
     drawRadarPage();
     radarFullHeight = false;
@@ -5387,13 +5387,13 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
   html += "<label>" + String(uiText("Radar ohne angezeigtes Flugzeug", "Radar without displayed aircraft")) + "<select name='matrixIdleRadar'>";
   for (uint8_t mode = 0; mode <= RadarIdle::Full; ++mode) {
     const char* label = mode == RadarIdle::Off ? uiText("Aus (nur Betriebspunkt)", "Off (activity pixel only)") :
-        mode == RadarIdle::Full ? uiText("Volle Höhe", "Full height") : uiText("Untere Hälfte", "Lower half");
+        mode == RadarIdle::Full ? uiText("Volle Höhe", "Full height") : uiText("Automatisch / untere Hälfte", "Automatic / lower half");
     html += "<option value='" + String(RadarIdle::name(mode)) + "'" +
             selected(matrixIdleRadar.load(std::memory_order_relaxed) == mode) + ">" + label + "</option>";
   }
   html += "</select></label><p class='muted'>" + String(uiText(
-      "Gilt, wenn kein anzeigbares Flugzeug im Anzeigeradius liegt. Aus und volle Höhe ersetzen die Wetter-Leerlaufanzeige. Bei einem Flug gilt wieder die gewählte 128×64-Anordnung.",
-      "Applies when no eligible aircraft is inside the display radius. Off and full height replace idle weather. With an aircraft, the selected 128×64 layout resumes.")) + "</p>";
+      "Gilt ohne anzeigbares Flugzeug. Automatisch zeigt Wetter oben und Radar unten; bei abgewählter Wetter-Ruheanzeige füllt das Radar den Bildschirm. Aus und volle Höhe haben weiterhin Vorrang. Bei einem Flug gilt wieder die gewählte 128×64-Anordnung.",
+      "Applies without an eligible aircraft. Automatic shows weather above the lower radar; disabling idle weather makes the radar full height. Off and full height still take priority. With an aircraft, the selected 128×64 layout resumes.")) + "</p>";
 #endif
   html += F("<label>Radar-Umlauf<select name='radarSweepStyle'><option value='dot'");
   html += selected(!radarSweepLine.load(std::memory_order_relaxed));
