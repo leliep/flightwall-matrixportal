@@ -6,17 +6,19 @@
 #include <cstdint>
 #include <cstring>
 
+constexpr unsigned MQTT_TOPIC_COUNT = 8;
+
 struct MqttSettings {
   String host, user, password;
   uint16_t port = 1883;
-  String topics[4];
+  String topics[MQTT_TOPIC_COUNT];
 };
 
 // Observe ACKs without changing PubSubClient's protocol implementation. Only
 // the first eight body bytes are retained; PUBLISH bodies are never copied here.
 struct MqttWireObserver {
-  uint16_t pending[4] = {};
-  int16_t subscription[4] = {-1,-1,-1,-1}; // -1 empty, -2 pending, -3 write failed
+  uint16_t pending[MQTT_TOPIC_COUNT] = {};
+  int16_t subscription[MQTT_TOPIC_COUNT] = {-1,-1,-1,-1,-1,-1,-1,-1}; // -1 empty, -2 pending, -3 write failed
   int16_t connack = -1;
   uint32_t pongs = 0, malformed = 0;
   uint8_t phase = 0, header = 0, digits = 0, prefix[8] = {};
@@ -31,10 +33,10 @@ struct MqttReport {
   int code = -1;
   char ip[16] = {}, clientId[32] = {};
   uint32_t dnsMs = 0, tcpMs = 0, connackMs = 0, connectedAtMs = 0;
-  int16_t subscription[4] = {-1,-1,-1,-1};
-  uint32_t received[4] = {}, valid[4] = {}, invalid[4] = {}, updated[4] = {};
-  float values[4] = {};
-  bool lastValid[4] = {};
+  int16_t subscription[MQTT_TOPIC_COUNT] = {-1,-1,-1,-1,-1,-1,-1,-1};
+  uint32_t received[MQTT_TOPIC_COUNT] = {}, valid[MQTT_TOPIC_COUNT] = {}, invalid[MQTT_TOPIC_COUNT] = {}, updated[MQTT_TOPIC_COUNT] = {};
+  float values[MQTT_TOPIC_COUNT] = {};
+  bool lastValid[MQTT_TOPIC_COUNT] = {};
   uint32_t pongs = 0;
 };
 

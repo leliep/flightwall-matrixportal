@@ -88,6 +88,7 @@ class WiFiClient:public Client {
 '''}
 code=r'''
 #include "MqttSession.hpp"
+#include "WeatherFallback.hpp"
 #include "TemporaryPsram.hpp"
 #include <esp_heap_caps.h>
 #include <cassert>
@@ -127,7 +128,7 @@ struct Server {
  void sendHeader(const char*,const String&){}
 } webServer;
 bool otaAuthenticated(){if(!authenticated)webServer.status=401;return authenticated;}
-'''+io_class+function('bool validFlightWallHost(')+function('bool prepareManualNetworkJob(')+function('void redirectToManualNetworkJob(')+function('void handleMqttTest(')+function('String jsonEscape(')+function('void appendMqttReportJson(')+function('bool parseMqttNumber(')+function('bool parseMqttCompassDirection(')+function('bool parseMqttWeatherValue(')+function('void appendRouteTestHtmlText(')+function('void renderMqttTestResult(')+r'''
+'''+io_class+function('bool validFlightWallHost(')+function('bool prepareManualNetworkJob(')+function('void redirectToManualNetworkJob(')+function('bool validMqttClimateTopic(')+function('void handleMqttTest(')+function('String jsonEscape(')+function('void appendMqttReportJson(')+function('bool parseMqttNumber(')+function('bool parseMqttCompassDirection(')+function('bool parseMqttWeatherValue(')+function('void appendRouteTestHtmlText(')+function('void renderMqttTestResult(')+r'''
 void packet(MqttWireObserver &o,std::initializer_list<uint8_t> b){for(auto c:b)o.byte(c);}
 int main(){
  uint8_t a[]={0x90,0x70,0x69,1,2,3},b[]={0x90,0x70,0x69,4,5,6};char id[32],other[32],test[32];
@@ -148,6 +149,16 @@ int main(){
  dropSuback=true;assert(s.connect(id));for(unsigned i=0;i<4;++i)s.step();assert(!s.subscriptionsReady() && s.report.subscription[0]==-2);dropSuback=false;
  assert(s.connect(id));for(unsigned i=0;i<4;++i)s.step();
  for(unsigned i=0;i<4;++i){latestSocket->inject(std::to_string(i),i==0?"NW":"1.2");s.step();assert(s.report.valid[i]==1 && s.report.lastValid[i]);}
+ // New climate subscriptions exercise real wire ACKs and negative temperatures.
+ s.settings.topics[4]="outTemp";s.settings.topics[5]="outHum";s.settings.topics[6]="pressure";s.settings.topics[7]="dewpoint";
+ assert(s.connect(id));for(unsigned i=0;i<MQTT_TOPIC_COUNT;++i)s.step();assert(s.subscriptionsReady());
+ for(unsigned i=0;i<4;++i){latestSocket->inject(std::to_string(i),i==0?"NW":"1.2");s.step();}
+ const char*climateTopics[]={"outTemp","outHum","pressure","dewpoint"};
+ const char*climateValues[]={"-1.83333333333","79.0","1022.31999304","-1.41662900881"};
+ for(unsigned i=0;i<4;++i){latestSocket->inject(climateTopics[i],climateValues[i]);s.step();assert(s.report.valid[i+4]==1&&s.report.lastValid[i+4]);}
+ assert(s.report.values[4]<0&&s.report.values[7]<0);
+ latestSocket->inject("outHum","101");s.step();assert(!s.report.lastValid[5]&&s.report.invalid[5]==1);
+ latestSocket->inject("outHum","79.0");s.step();
  assert(s.allDataValid());assert(s.report.values[0]==315 && std::fabs(s.report.values[3]-12)<.001);
  auto validTime=s.report.updated[1];latestSocket->inject("1","bad");s.step();assert(s.report.valid[1]==1 && s.report.invalid[1]==1 && !s.report.lastValid[1] && s.report.updated[1]==validTime);
  latestSocket->inject("2",std::string("12\0x",4));s.step();assert(s.report.invalid[2]==1);
@@ -201,5 +212,5 @@ with tempfile.TemporaryDirectory(prefix='flightwall-mqtt-') as folder:
   output=subprocess.check_output([str(binary)],text=True)
   import json
   report=json.loads(next(line[5:] for line in output.splitlines() if line.startswith('JSON:')))
-  assert len(report['topics'])==4 and 'sensitive-secret' not in output and 'sensitive-user' not in output
+  assert len(report['topics'])==8 and 'sensitive-secret' not in output and 'sensitive-user' not in output
   print(next(line for line in output.splitlines() if line.startswith('MQTT:')))

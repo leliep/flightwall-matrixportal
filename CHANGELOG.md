@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.6.1-dual-target.73 – 2026-11-28
+
+- MQTT-Außenklima ergänzt fehlende Temperatur-, Feuchte-, Druck- und Taupunktwerte;
+  Wetteranzeige auch ohne BME280, lokale Messwerte haben Vorrang
+- Außen-/gemischte Temperatur/Feuchte führen ausschließlich zu Schimmelrisiko N/A;
+  bestehende Risikotimer werden gelöscht, keine kritische Oberflächentemperatur
+- Eigene Höhe für die MQTT-Wetterstation (40 m), getrennte Druckkorrektur,
+  Quellen-/Altersdiagnose und 15-Minuten-Gültigkeit je MQTT-Messwert
+- Vier zusätzliche konfigurierbare Topics einschließlich Sicherung/Wiederherstellung
+  und MQTT-Hintergrundtest mit acht Abonnements; negative Temperaturen unterstützt
+- Airlinecodes JAF und PNC anhand der FAA-Daten ergänzt, Tabelle regeneriert
+
 ## 3.6.1-dual-target.72 – 2026-11-28
 
 - 128×64-Vollbildradar mit kleinem zentriertem Radiuskreis und unverändertem

@@ -59,6 +59,7 @@ jobs:
           python3 tools/test_background_jobs.py
           python3 tools/test_route_publication.py
           python3 tools/test_mqtt_session.py
+          python3 tools/test_weather_fallback.py
       - name: Build headless ESP32-S3 N16R8 firmware
         run: pio run -e esp32s3_n16r8_headless
       - name: Check network handler stack frames on both targets

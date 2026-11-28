@@ -6,7 +6,7 @@ void MqttWireObserver::complete() {
   if(type==2 && remaining==2)connack=prefix[1];
   else if(type==9 && remaining>=3 && remaining<=8){
     const uint16_t id=(uint16_t(prefix[0])<<8)|prefix[1];
-    for(unsigned i=0;i<4;++i)if(pending[i] && pending[i]==id)subscription[i]=prefix[2];
+    for(unsigned i=0;i<MQTT_TOPIC_COUNT;++i)if(pending[i] && pending[i]==id)subscription[i]=prefix[2];
   } else if(type==13 && !remaining)++pongs;
   phase=0;
 }
@@ -22,7 +22,7 @@ void MqttWireObserver::byte(uint8_t value) {
   if(++position==remaining)complete();
 }
 void MqttWireObserver::subscriptionWrite(int slot,const uint8_t *data,size_t length) {
-  if(slot<0 || slot>=4 || length<4 || data[0]!=0x82)return;
+  if(slot<0 || slot>=int(MQTT_TOPIC_COUNT) || length<4 || data[0]!=0x82)return;
   size_t at=1;unsigned digits=0;
   while(at<length && (data[at++]&128)){if(++digits==4)return;}
   if(at+2>length)return;
@@ -74,7 +74,7 @@ bool MqttSession::connect(const char *id) {
   if(!report.connected && transport_.writeFailed)report.code=-22;
   if(!report.connected){transport_.stop();return false;}
   report.connectedAtMs=millis();
-  for(unsigned i=0;i<4;++i)if(settings.topics[i].length()){
+  for(unsigned i=0;i<MQTT_TOPIC_COUNT;++i)if(settings.topics[i].length()){
     transport_.subscriptionSlot=i;
     if(!client_.subscribe(settings.topics[i].c_str()))transport_.wire.subscription[i]=-3;
     transport_.subscriptionSlot=-1;
@@ -82,7 +82,7 @@ bool MqttSession::connect(const char *id) {
   syncReport();return true;
 }
 void MqttSession::syncReport() {
-  for(unsigned i=0;i<4;++i)report.subscription[i]=transport_.wire.subscription[i];
+  for(unsigned i=0;i<MQTT_TOPIC_COUNT;++i)report.subscription[i]=transport_.wire.subscription[i];
   report.pongs=transport_.wire.pongs;
 }
 bool MqttSession::step() {
@@ -90,7 +90,7 @@ bool MqttSession::step() {
 }
 void MqttSession::close() { if(bufferOk_)client_.disconnect();transport_.stop();report.connected=false; }
 void MqttSession::message(char *topic,uint8_t *payload,unsigned length) {
-  for(unsigned i=0;i<4;++i)if(settings.topics[i].length() && settings.topics[i]==topic){
+  for(unsigned i=0;i<MQTT_TOPIC_COUNT;++i)if(settings.topics[i].length() && settings.topics[i]==topic){
     ++report.received[i];report.lastValid[i]=false;float value=0;char text[49];
     if(length>48 || !length || std::memchr(payload,0,length)){++report.invalid[i];return;}
     std::memcpy(text,payload,length);text[length]=0;
@@ -99,13 +99,13 @@ void MqttSession::message(char *topic,uint8_t *payload,unsigned length) {
   }
 }
 bool MqttSession::subscriptionsReady()const {
-  for(unsigned i=0;i<4;++i)if(settings.topics[i].length() && (report.subscription[i]<0 || report.subscription[i]>2))return false;
+  for(unsigned i=0;i<MQTT_TOPIC_COUNT;++i)if(settings.topics[i].length() && (report.subscription[i]<0 || report.subscription[i]>2))return false;
   return true;
 }
 bool MqttSession::subscriptionsDenied()const {
-  for(unsigned i=0;i<4;++i)if(report.subscription[i]>=3 || report.subscription[i]==-3)return true;
+  for(unsigned i=0;i<MQTT_TOPIC_COUNT;++i)if(report.subscription[i]>=3 || report.subscription[i]==-3)return true;
   return false;
 }
 bool MqttSession::allDataValid()const {
-  bool any=false;for(unsigned i=0;i<4;++i)if(settings.topics[i].length()){any=true;if(!report.valid[i] || !report.lastValid[i])return false;}return any;
+  bool any=false;for(unsigned i=0;i<MQTT_TOPIC_COUNT;++i)if(settings.topics[i].length()){any=true;if(!report.valid[i] || !report.lastValid[i])return false;}return any;
 }

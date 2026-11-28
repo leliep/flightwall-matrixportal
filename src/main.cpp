@@ -37,6 +37,7 @@ static_assert(FLIGHTWALL_MATRIX_HEIGHT == 32 || FLIGHTWALL_MATRIX_HEIGHT == 64,
 #include <Adafruit_Protomatter.h>
 #endif
 #include "MqttSession.hpp"
+#include "WeatherFallback.hpp"
 #include "AdsbClient.hpp"
 #include "AircraftProcessor.hpp"
 #include "AirlineNames.hpp"
@@ -75,8 +76,8 @@ int16_t matrixLayoutWidth() {
 #endif
 }
 constexpr uint8_t BIT_DEPTH = 3;
-constexpr char APP_VERSION[] = "3.6.1-dual-target.72";
-constexpr char BUILD_TIMESTAMP[] = "2026-11-28 unscaled full-height radar viewport";
+constexpr char APP_VERSION[] = "3.6.1-dual-target.73";
+constexpr char BUILD_TIMESTAMP[] = "2026-11-28 MQTT outdoor climate fallback without mold assessment";
 #if FLIGHTWALL_HAS_MATRIX
 constexpr char DEVICE_NAME[] = "FlightWall MatrixPortal";
 #if FLIGHTWALL_MATRIX_HEIGHT == 64
@@ -491,6 +492,10 @@ bool environmentSensorAvailable = false;
 bool environmentSensorOnStemma = false;
 uint8_t environmentSensorAddress = 0;
 uint8_t environmentSensorFailures = 0;
+WeatherFallback::Samples localClimate, mqttClimate;
+WeatherFallback::Resolved resolvedClimate;
+std::atomic<bool> outdoorClimateInUse{false};
+float mqttWeatherElevationM = 40.0f;
 float ambientTemperatureC = NAN;
 float relativeHumidityPercent = NAN;
 float stationPressureHpa = NAN;
@@ -521,6 +526,10 @@ String windDirectionTopic = DEFAULT_WIND_DIRECTION_TOPIC;
 String windSpeedTopic = DEFAULT_WIND_SPEED_TOPIC;
 String windGustTopic = DEFAULT_WIND_GUST_TOPIC;
 String rainTopic = DEFAULT_RAIN_TOPIC;
+String mqttTemperatureTopic = "zons/weather/outTemp_C";
+String mqttHumidityTopic = "zons/weather/outHumidity";
+String mqttPressureTopic = "zons/weather/pressure_mbar";
+String mqttDewPointTopic = "zons/weather/dewpoint_C";
 bool mqttConnected = false;
 uint32_t lastMqttAttempt = 0;
 uint32_t lastMqttMessage = 0;
@@ -2066,6 +2075,7 @@ bool mqttWeatherAvailable() {
 
 
 void drawCompactClimateDisplay(bool bmeAvailable, bool mqttAvailable) {
+  (void)bmeAvailable;
   String direction;
   float speed = NAN;
   float gust = NAN;
@@ -2080,15 +2090,15 @@ void drawCompactClimateDisplay(bool bmeAvailable, bool mqttAvailable) {
     if (weatherValueFresh(rainUpdated)) rain = rain24Mm;
     xSemaphoreGive(weatherMutex);
   }
-  const String temperatureText = bmeAvailable
+  const String temperatureText = isfinite(ambientTemperatureC)
       ? String(ambientTemperatureC, 1) : "--";
   drawLine(0, 5, temperatureText, yellow);
   const int16_t degreeX = temperatureText.length() * 6 + 1;
   matrix.drawCircle(degreeX + 1, 6, 1, yellow);
   drawLine(degreeX + 4, 5, "C", yellow);
-  const String humidityText = bmeAvailable
+  const String humidityText = isfinite(relativeHumidityPercent)
       ? String(relativeHumidityPercent, 0) + "%" : "--%";
-  const String pressureText = bmeAvailable
+  const String pressureText = isfinite(airPressureHpa)
       ? String(airPressureHpa, 0) + "hPa" : "----hPa";
   const int16_t middleColumnCenterX = matrixLayoutWidth() / 2;
   const int16_t humidityX = middleColumnCenterX -
@@ -2358,8 +2368,7 @@ void drawIdleDisplay() {
   }
 #endif
   const bool bmeAvailable = environmentIdleDisplayEnabled &&
-      environmentSensorAvailable && isfinite(ambientTemperatureC) &&
-      isfinite(relativeHumidityPercent) && isfinite(airPressureHpa);
+      (isfinite(ambientTemperatureC) || isfinite(relativeHumidityPercent) || isfinite(airPressureHpa));
   const bool mqttAvailable = environmentIdleDisplayEnabled &&
       mqttWeatherAvailable();
   if (bmeAvailable || mqttAvailable) {
@@ -3046,6 +3055,8 @@ void serviceEnvironmentSensor() {
   const float temperature = environmentSensor.readTemperature();
   const float humidity = environmentSensor.readHumidity();
   const float pressure = environmentSensor.readPressure() / 100.0f;
+  localClimate.values[0]=temperature;localClimate.values[1]=humidity;localClimate.values[2]=pressure;
+  for(unsigned i=0;i<3;++i)localClimate.updated[i]=now;
   if (!isfinite(temperature) || !isfinite(humidity) || !isfinite(pressure)) {
     if (++environmentSensorFailures >= ENVIRONMENT_SENSOR_FAILURE_LIMIT) {
       environmentSensorAvailable = false;
@@ -3063,7 +3074,30 @@ void serviceEnvironmentSensor() {
   relativeHumidityPercent = humidity;
   stationPressureHpa = pressure;
   airPressureHpa = pressureReducedToSeaLevel(pressure, observerElevationM);
-  updateMoldRisk(temperature, humidity, now);
+
+}
+
+
+void applyEnvironmentWeather(const WeatherFallback::Resolved &weather, uint32_t now) {
+  outdoorClimateInUse.store(weather.outdoorClimate(),std::memory_order_relaxed);
+  if(weather.moldEligible)updateMoldRisk(weather.temperature,weather.humidity,now);
+  else resetMoldRisk();
+  ambientTemperatureC=weather.temperature;relativeHumidityPercent=weather.humidity;
+  stationPressureHpa=weather.stationPressure;airPressureHpa=weather.seaPressure;
+  dewPointC=weather.dewPoint;
+  resolvedClimate=weather;
+}
+
+void serviceEnvironmentWeather() {
+  static uint32_t lastResolve=0;
+  const uint32_t now=millis();
+  if(lastResolve && now-lastResolve<500)return;
+  WeatherFallback::Samples remote;
+  if(!weatherMutex || xSemaphoreTake(weatherMutex,pdMS_TO_TICKS(20))!=pdTRUE)return;
+  remote=mqttClimate;xSemaphoreGive(weatherMutex);
+  lastResolve=now;
+  applyEnvironmentWeather(WeatherFallback::resolve(localClimate,remote,now,
+      environmentSensorAvailable,mqttWeatherEnabled,observerElevationM,mqttWeatherElevationM),now);
 }
 
 
@@ -4387,6 +4421,11 @@ PsramBuffer configurationJson() {
   settings["wind_speed_topic"] = windSpeedTopic;
   settings["wind_gust_topic"] = windGustTopic;
   settings["rain_topic"] = rainTopic;
+  settings["mqtt_temperature_topic"] = mqttTemperatureTopic;
+  settings["mqtt_humidity_topic"] = mqttHumidityTopic;
+  settings["mqtt_pressure_topic"] = mqttPressureTopic;
+  settings["mqtt_dew_point_topic"] = mqttDewPointTopic;
+  settings["mqtt_weather_elevation_m"] = mqttWeatherElevationM;
   settings["quiet_hours"] = quietHoursEnabled;
   settings["quiet_start"] = quietHoursStartMinutes;
   settings["quiet_end"] = quietHoursEndMinutes;
@@ -4465,6 +4504,12 @@ bool validSiteNameSetting(JsonVariantConst value) {
 }
 
 
+bool validMqttClimateTopic(const String &topic) {
+  if(topic.length()>128)return false;
+  for(size_t i=0;i<topic.length();++i)if(static_cast<uint8_t>(topic[i])<32 || topic[i]=='#' || topic[i]=='+')return false;
+  return true;
+}
+
 void handleConfigurationRestore() {
   JsonDocument document(&temporaryJsonAllocator());
   const DeserializationError error =
@@ -4477,6 +4522,15 @@ void handleConfigurationRestore() {
     return;
   }
   JsonObjectConst s = document["settings"].as<JsonObjectConst>();
+  for(const char*field:{"mqtt_temperature_topic","mqtt_humidity_topic","mqtt_pressure_topic","mqtt_dew_point_topic"})if(!s[field].isNull() &&
+      (!s[field].is<const char*>() || !validMqttClimateTopic(s[field].as<String>()))){
+    webServer.send(400,"text/plain","Invalid MQTT climate topic");return;
+  }
+  if(!s["mqtt_weather_elevation_m"].isNull() && (!s["mqtt_weather_elevation_m"].is<float>() ||
+      !isfinite(s["mqtt_weather_elevation_m"].as<float>()) || s["mqtt_weather_elevation_m"].as<float>()< -500 || s["mqtt_weather_elevation_m"].as<float>()>9000)){
+    webServer.send(400,"text/plain","Invalid MQTT station elevation");return;
+  }
+
   if (!validSiteNameSetting(s["site_name"])) {
     webServer.send(400, "text/plain; charset=utf-8",
                    uiText("Standortbezeichnung ungültig (maximal 48 Zeichen).",
@@ -4538,6 +4592,11 @@ void handleConfigurationRestore() {
   putString("mqttUser", "mqtt_user"); putString("mqttPass", "mqtt_password");
   putString("windDirTop", "wind_direction_topic"); putString("windSpdTop", "wind_speed_topic");
   putString("windGstTop", "wind_gust_topic"); putString("rainTop", "rain_topic");
+  putString("mqttTempTop", "mqtt_temperature_topic");
+  putString("mqttHumTop", "mqtt_humidity_topic");
+  putString("mqttPresTop", "mqtt_pressure_topic");
+  putString("mqttDewTop", "mqtt_dew_point_topic");
+  if(!s["mqtt_weather_elevation_m"].isNull())preferences.putFloat("mqttElevM",s["mqtt_weather_elevation_m"].as<float>());
   putBool("quietOn", "quiet_hours");
   if (!s["quiet_start"].isNull()) preferences.putUShort("quietStart", constrain(s["quiet_start"].as<int>(), 0, 1439));
   if (!s["quiet_end"].isNull()) preferences.putUShort("quietEnd", constrain(s["quiet_end"].as<int>(), 0, 1439));
@@ -4640,7 +4699,14 @@ String jsonNumberOrNull(float value, uint8_t decimals = 1) {
 }
 
 
+String climateSourceText(unsigned index) {
+  String text=WeatherFallback::name(resolvedClimate.sources[index]);
+  if(resolvedClimate.updated[index])text+=" / "+ageText(resolvedClimate.updated[index]);
+  return text;
+}
+
 const char *moldRiskText() {
+  if(outdoorClimateInUse.load(std::memory_order_relaxed))return "N/A";
   switch (moldRiskLevel) {
     case MoldRiskLevel::Normal: return uiText("unauffällig", "low");
     case MoldRiskLevel::Elevated: return uiText("erhöht", "elevated");
@@ -4651,6 +4717,7 @@ const char *moldRiskText() {
 
 
 const char *moldRiskCssClass() {
+  if(outdoorClimateInUse.load(std::memory_order_relaxed))return "neutral";
   switch (moldRiskLevel) {
     case MoldRiskLevel::Normal: return "ok";
     case MoldRiskLevel::Elevated: return "warn";
@@ -4696,7 +4763,7 @@ void translateWebPageToEnglish(Text &html) {
     {"lang=\"de\"", "lang=\"en\""},
     {"ADS-B-Adresse Quelle", "ADS-B address source"},
     {"Nur die ausgewählte Quelle wird abgefragt. Quelle 2 darf unkonfiguriert bleiben. Der Radius von adsb.fi wird automatisch aus dem Anzeigeradius berechnet.", "Only the selected source is queried. Source 2 may remain unconfigured. The adsb.fi radius is calculated automatically from the display radius."},
-    {"Regen wird für die Anzeige von cm in mm umgerechnet. Ein leeres Passwortfeld behält das gespeicherte Passwort bei.", "Rain is converted from cm to mm for display. An empty password field keeps the saved password."},
+    {"MQTT-Klimawerte sind Außenwerte: Schimmelrisiko N/A. Lokale BME280-Werte haben Vorrang. Der MQTT-Stationsdruck wird mit der Höhe der Wetterstation auf Meereshöhe reduziert. Regen wird von cm in mm umgerechnet. Ein leeres Passwortfeld behält das gespeicherte Passwort bei.", "Rain is converted from cm to mm for display. An empty password field keeps the saved password."},
     {"WLAN-Zugang", "Wi-Fi access"},
     {"Aktuelle Netzwerkadresse", "Current network address"},
     {"Verbindungsstatus", "Connection status"},
@@ -4843,7 +4910,7 @@ void translateWebPageToEnglish(Text &html) {
     {"Kritische Oberflächentemperatur", "Critical surface temperature"},
     {"Dauer erhöhter Feuchte", "Elevated humidity duration"},
     {"Oberflächen unterhalb dieses Werts können 80 % relative Feuchte erreichen.", "Surfaces below this value may reach 80% relative humidity."},
-    {"Luftdruck auf Meereshöhe", "Sea-level pressure"}, {"Stationsdruck (BME280 roh)", "Station pressure (raw BME280)"},
+    {"Luftdruck auf Meereshöhe", "Sea-level pressure"}, {"Stationsdruck (Messwert)", "Station pressure (raw BME280)"},
     {"Wetterdaten-Ruheanzeige", "Idle weather display"}, {"Letzte MQTT-Nachricht", "Last MQTT message"},
     {"MQTT-Server", "MQTT server"}, {"MQTT-Fehler", "MQTT error"}, {"Wind / Richtung", "Wind / direction"},
     {"Matrix-Farbtiefe", "Matrix color depth"}, {"Matrix-Refresh", "Matrix refresh"},
@@ -4942,7 +5009,7 @@ void appendMqttReportJson(PsramBuffer &json, const MqttReport &report) {
   json += ",\"connack_ms\":";json += String(report.connackMs);
   json += ",\"pong_count\":";json += String(report.pongs);
   json += ",\"topics\":[";
-  for(unsigned i=0;i<4;++i){
+  for(unsigned i=0;i<MQTT_TOPIC_COUNT;++i){
     if(i)json+=',';
     json+="{\"index\":";json+=String(i);
     json+=",\"suback\":";json+=String(report.subscription[i]);
@@ -5291,6 +5358,17 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
   html += htmlEscape(windGustTopic);
   html += F("'></label><label>Regen heute (cm)<input type='text' name='rainTopic' maxlength='128' value='");
   html += htmlEscape(rainTopic);
+  html += F("'></label><label>Außentemperatur (°C)<input type='text' name='mqttTemperatureTopic' maxlength='128' value='");
+  html += htmlEscape(mqttTemperatureTopic);
+  html += F("'></label><label>Außenfeuchte (%)<input type='text' name='mqttHumidityTopic' maxlength='128' value='");
+  html += htmlEscape(mqttHumidityTopic);
+  html += F("'></label><label>Stationsdruck (hPa)<input type='text' name='mqttPressureTopic' maxlength='128' value='");
+  html += htmlEscape(mqttPressureTopic);
+  html += F("'></label><label>Außentaupunkt (°C)<input type='text' name='mqttDewPointTopic' maxlength='128' value='");
+  html += htmlEscape(mqttDewPointTopic);
+  html += F("'></label><label>Höhe der MQTT-Wetterstation (m NHN)<input type='number' name='mqttWeatherElevation' min='-500' max='9000' step='1' value='");
+  html += String(mqttWeatherElevationM,0);
+
   html += F("'></label></div><p class='muted'>Regen wird für die Anzeige von cm in mm umgerechnet. Ein leeres Passwortfeld behält das gespeicherte Passwort bei. Der Test speichert keine Einstellungen und funktioniert auch bei deaktivierter Wetteranzeige.</p><button type='submit' formaction='/test-mqtt'>MQTT-Verbindung testen</button></fieldset>");
   html += F("<fieldset><legend>Radar</legend><label class='check'><input type='checkbox' name='radarTrails' value='1'");
   html += checked(radarTrailsEnabled);
@@ -5775,15 +5853,19 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
   html += numberOrDash(ambientTemperatureC) + " °C";
   html += F("</b><span>Relative Feuchte</span><b>");
   html += numberOrDash(relativeHumidityPercent) + " %";
+  html += "</b><span>" + String(uiText("Quelle Temperatur / Feuchte / Druck", "Temperature / humidity / pressure source")) + "</span><b>";
+  html += climateSourceText(0);html += " · ";
+  html += climateSourceText(1);html += " · ";html += climateSourceText(2);
   html += F("</b><span>Schimmelrisiko</span><b class='");
   html += moldRiskCssClass();
   html += "'>" + String(moldRiskText());
+  if(outdoorClimateInUse.load(std::memory_order_relaxed))html += uiText(" (MQTT-Außenwerte; keine Raum-Schimmelbewertung)"," (MQTT outdoor data; no indoor mold assessment)");
   html += F("</b><span>Taupunkt</span><b>");
   html += numberOrDash(dewPointC) + " °C";
   html += F("</b><span>Kritische Oberflächentemperatur</span><b>");
-  html += numberOrDash(moldCriticalSurfaceTemperatureC) + " °C";
+  html += outdoorClimateInUse.load(std::memory_order_relaxed) ? String("N/A") : numberOrDash(moldCriticalSurfaceTemperatureC) + " °C";
   html += F("</b><span>Dauer erhöhter Feuchte</span><b>");
-  html += elevatedHumidityDurationText();
+  html += outdoorClimateInUse.load(std::memory_order_relaxed) ? String("N/A") : elevatedHumidityDurationText();
   html += F("</b><p class='statusNote muted'>Oberflächen unterhalb dieses Werts können 80 % relative Feuchte erreichen.</p><span>Luftdruck auf Meereshöhe</span><b>");
   html += numberOrDash(airPressureHpa) + " hPa";
   html += F("</b><span>Stationsdruck (BME280 roh)</span><b>");
@@ -5804,7 +5886,7 @@ PsramBuffer webPage(bool configurationPage = false, bool includeRouteCache = tru
   html += mqttLastError.length() ? htmlEscape(mqttLastError) : "keiner";
   html += F("</b><span>MQTT DNS / TCP / CONNACK</span><b>");
   html += String(mqttRuntimeReport.dnsMs)+" / "+String(mqttRuntimeReport.tcpMs)+" / "+String(mqttRuntimeReport.connackMs)+" ms";
-  for(unsigned i=0;i<4;++i){
+  for(unsigned i=0;i<MQTT_TOPIC_COUNT;++i){
     html += "</b><span>MQTT Topic ";html+=String(i+1);html+=uiText(" / SUBACK / OK / ungültig</span><b>"," / SUBACK / valid / invalid</span><b>");
     html+=String(mqttRuntimeReport.subscription[i]);html+=" / ";html+=String(mqttRuntimeReport.valid[i]);html+=" / ";html+=String(mqttRuntimeReport.invalid[i]);
   }
@@ -6064,6 +6146,18 @@ bool validFlightWallHost(const String &host) {
 
 
 bool applyWebSettings() {
+  for(const char*field:{"mqttTemperatureTopic","mqttHumidityTopic","mqttPressureTopic","mqttDewPointTopic"})if(webServer.hasArg(field) && !validMqttClimateTopic(webServer.arg(field))){
+    webServer.send(400,"text/plain; charset=utf-8","Invalid MQTT climate topic");return false;
+  }
+  float requestedMqttElevation=mqttWeatherElevationM;
+  if(webServer.hasArg("mqttWeatherElevation")){
+    const String text=webServer.arg("mqttWeatherElevation");char*end=nullptr;
+    requestedMqttElevation=strtof(text.c_str(),&end);
+    if(end==text.c_str() || *end || !isfinite(requestedMqttElevation) || requestedMqttElevation< -500 || requestedMqttElevation>9000){
+      webServer.send(400,"text/plain; charset=utf-8","Invalid MQTT station elevation");return false;
+    }
+  }
+
 #if FLIGHTWALL_HAS_MATRIX && FLIGHTWALL_MATRIX_HEIGHT == 64
   uint8_t requestedLayout = matrixLargeLayout.load(std::memory_order_relaxed);
   if (webServer.hasArg("matrixLayout") &&
@@ -6246,6 +6340,11 @@ bool applyWebSettings() {
     windSpeedTopic.trim();
     windGustTopic.trim();
     rainTopic.trim();
+    if(webServer.hasArg("mqttTemperatureTopic")){mqttTemperatureTopic=webServer.arg("mqttTemperatureTopic");mqttTemperatureTopic.trim();}
+    if(webServer.hasArg("mqttHumidityTopic")){mqttHumidityTopic=webServer.arg("mqttHumidityTopic");mqttHumidityTopic.trim();}
+    if(webServer.hasArg("mqttPressureTopic")){mqttPressureTopic=webServer.arg("mqttPressureTopic");mqttPressureTopic.trim();}
+    if(webServer.hasArg("mqttDewPointTopic")){mqttDewPointTopic=webServer.arg("mqttDewPointTopic");mqttDewPointTopic.trim();}
+    if(webServer.hasArg("mqttWeatherElevation"))mqttWeatherElevationM=requestedMqttElevation;
 #if FLIGHTWALL_HAS_MATRIX
     smoothTransitions = webServer.hasArg("smooth");
     bool anyPageEnabled = false;
@@ -6296,6 +6395,11 @@ bool applyWebSettings() {
     preferences.putString("windSpdTop", windSpeedTopic);
     preferences.putString("windGstTop", windGustTopic);
     preferences.putString("rainTop", rainTopic);
+    preferences.putString("mqttTempTop", mqttTemperatureTopic);
+    preferences.putString("mqttHumTop", mqttHumidityTopic);
+    preferences.putString("mqttPresTop", mqttPressureTopic);
+    preferences.putString("mqttDewTop", mqttDewPointTopic);
+    preferences.putFloat("mqttElevM",mqttWeatherElevationM);
     preferences.putBool("quietOn", quietHoursEnabled);
     preferences.putUShort("quietStart", quietHoursStartMinutes);
     preferences.putUShort("quietEnd", quietHoursEndMinutes);
@@ -6653,11 +6757,12 @@ void handleMqttTest() {
   if(webServer.hasArg("mqttUser"))settings.user=webServer.arg("mqttUser");
   settings.user.trim();
   if(webServer.hasArg("mqttPassword") && webServer.arg("mqttPassword").length())settings.password=webServer.arg("mqttPassword");
-  const char *names[]={"windDirectionTopic","windSpeedTopic","windGustTopic","rainTopic"};
+  const char *names[]={"windDirectionTopic","windSpeedTopic","windGustTopic","rainTopic","mqttTemperatureTopic","mqttHumidityTopic","mqttPressureTopic","mqttDewPointTopic"};
   bool valid=validFlightWallHost(settings.host) && settings.host.length()<=96 && settings.user.length()<=64 && settings.password.length()<=96;
-  for(unsigned i=0;i<4;++i){
+  for(unsigned i=0;i<MQTT_TOPIC_COUNT;++i){
     if(webServer.hasArg(names[i]))settings.topics[i]=webServer.arg(names[i]);
     if(settings.topics[i].length()>128)valid=false;
+    if(i>=4 && !validMqttClimateTopic(settings.topics[i]))valid=false;
     for(size_t n=0;n<settings.topics[i].length();++n)if(static_cast<uint8_t>(settings.topics[i][n])<32)valid=false;
   }
   if(!valid){webServer.send(400,"text/plain; charset=utf-8",uiText("Ungültige MQTT-Testwerte.","Invalid MQTT test settings."));return;}
@@ -7017,6 +7122,17 @@ void handleStatusApi() {
   json += String(environmentSensorAvailable ? "true" : "false");
   json += ",\"environment_idle_display_enabled\":";
   json += String(environmentIdleDisplayEnabled ? "true" : "false");
+  json += ",\"temperature_age_seconds\":";json += resolvedClimate.updated[0]?String((millis()-resolvedClimate.updated[0])/1000):String("null");
+  json += ",\"humidity_age_seconds\":";json += resolvedClimate.updated[1]?String((millis()-resolvedClimate.updated[1])/1000):String("null");
+  json += ",\"pressure_age_seconds\":";json += resolvedClimate.updated[2]?String((millis()-resolvedClimate.updated[2])/1000):String("null");
+  json += ",\"dew_point_age_seconds\":";json += resolvedClimate.updated[3]?String((millis()-resolvedClimate.updated[3])/1000):String("null");
+  json += ",\"temperature_source\":\"";json += WeatherFallback::name(resolvedClimate.sources[0]);json += "\"";
+  json += ",\"humidity_source\":\"";json += WeatherFallback::name(resolvedClimate.sources[1]);json += "\"";
+  json += ",\"pressure_source\":\"";json += WeatherFallback::name(resolvedClimate.sources[2]);json += "\"";
+  json += ",\"dew_point_source\":\"";json += WeatherFallback::name(resolvedClimate.sources[3]);json += "\"";
+  json += ",\"mold_risk_applicable\":";json += resolvedClimate.moldEligible && !outdoorClimateInUse.load(std::memory_order_relaxed)?"true":"false";
+  json += ",\"mold_risk_reason\":\"";json += outdoorClimateInUse.load(std::memory_order_relaxed)?"outdoor_mqtt":resolvedClimate.moldEligible?"local_sensor":"missing_local_climate";json += "\"";
+  json += ",\"mqtt_weather_elevation_m\":";json += jsonNumberOrNull(mqttWeatherElevationM);
   json += ",\"ambient_temperature_c\":";
   json += jsonNumberOrNull(ambientTemperatureC);
   json += ",\"relative_humidity_percent\":";
@@ -7024,9 +7140,9 @@ void handleStatusApi() {
   json += ",\"dew_point_c\":";
   json += jsonNumberOrNull(dewPointC);
   json += ",\"mold_critical_surface_temperature_c\":";
-  json += jsonNumberOrNull(moldCriticalSurfaceTemperatureC);
+  json += outdoorClimateInUse.load(std::memory_order_relaxed)?String("null"):jsonNumberOrNull(moldCriticalSurfaceTemperatureC);
   json += ",\"mold_risk\":\"";
-  json += String(moldRiskLevel == MoldRiskLevel::High
+  json += String(outdoorClimateInUse.load(std::memory_order_relaxed) ? "unavailable" : moldRiskLevel == MoldRiskLevel::High
           ? "high" : moldRiskLevel == MoldRiskLevel::Elevated
           ? "elevated" : moldRiskLevel == MoldRiskLevel::Normal
           ? "low" : "unavailable");
@@ -8153,6 +8269,9 @@ bool parseMqttWeatherValue(uint8_t index, const char *text, float &number) {
     if (!parseMqttNumber(value,number) && !parseMqttCompassDirection(value,number)) return false;
     number=fmodf(number,360.0f);if(number<0)number+=360.0f;return true;
   }
+  if(index>=4){
+    return index<MQTT_TOPIC_COUNT && parseMqttNumber(value,number) && WeatherFallback::valid(index-4,number);
+  }
   if (!parseMqttNumber(value,number) || number<0) return false;
   if(index==3)number*=10.0f;
   return isfinite(number);
@@ -8162,7 +8281,9 @@ MqttSettings storedMqttSettings() {
   MqttSettings settings;settings.host=mqttHost;settings.port=mqttPort;
   settings.user=mqttUser;settings.password=mqttPassword;
   settings.topics[0]=windDirectionTopic;settings.topics[1]=windSpeedTopic;
-  settings.topics[2]=windGustTopic;settings.topics[3]=rainTopic;return settings;
+  settings.topics[2]=windGustTopic;settings.topics[3]=rainTopic;
+  settings.topics[4]=mqttTemperatureTopic;settings.topics[5]=mqttHumidityTopic;
+  settings.topics[6]=mqttPressureTopic;settings.topics[7]=mqttDewPointTopic;return settings;
 }
 
 MqttSession *createMqttSession() {
@@ -8177,6 +8298,10 @@ void publishMqttWeather(const MqttReport &report) {
   for(unsigned i=0;i<4;++i)if(report.valid[i]){
     *values[i]=report.values[i];*updated[i]=report.updated[i];
     if(!lastMqttMessage || static_cast<int32_t>(report.updated[i]-lastMqttMessage)>0)lastMqttMessage=report.updated[i];
+  }
+  for(unsigned i=0;i<4;++i)if(report.valid[i+4]){
+    mqttClimate.values[i]=report.values[i+4];mqttClimate.updated[i]=report.updated[i+4];
+    if(!lastMqttMessage || static_cast<int32_t>(report.updated[i+4]-lastMqttMessage)>0)lastMqttMessage=report.updated[i+4];
   }
   xSemaphoreGive(weatherMutex);
 }
@@ -8196,7 +8321,7 @@ void renderMqttTestResult(const MqttSession *session, bool cancelled) {
     page+=uiText("<p>Getestete Werte werden nicht gespeichert. Passwort und Benutzer werden nicht ausgegeben. Keine Testnachrichten veröffentlicht.</p>","<p>Tested settings are not saved. Credentials are not displayed. No test messages are published.</p>");
     page+=uiText("<table><tr><th>Topic</th><th>SUBACK</th><th>Empfangen / gültig / ungültig</th></tr>","<table><tr><th>Topic</th><th>SUBACK</th><th>Received / valid / invalid</th></tr>");
     unsigned configured=0;
-    for(unsigned i=0;i<4;++i)if(session->settings.topics[i].length()){
+    for(unsigned i=0;i<MQTT_TOPIC_COUNT;++i)if(session->settings.topics[i].length()){
       ++configured;page+="<tr><td>";appendRouteTestHtmlText(page,session->settings.topics[i].c_str());page+="</td><td>";
       if(r.subscription[i]>=0 && r.subscription[i]<=2)page+="OK";
       else if(r.subscription[i]>=3)page+=uiText("abgelehnt","denied");
@@ -8205,7 +8330,7 @@ void renderMqttTestResult(const MqttSession *session, bool cancelled) {
       page+="</td><td>";page+=String(r.received[i]);page+=" / ";page+=String(r.valid[i]);page+=" / ";page+=String(r.invalid[i]);page+="</td></tr>";
     }
     page+="</table>";
-    bool badData=false;for(unsigned i=0;i<4;++i)if(r.received[i] && !r.lastValid[i])badData=true;
+    bool badData=false;for(unsigned i=0;i<MQTT_TOPIC_COUNT;++i)if(r.received[i] && !r.lastValid[i])badData=true;
     bool ok=r.connected && session->subscriptionsReady();manualNetworkJob.status=ok && !badData?200:502;
     if(badData)page+=uiText("<p>MQTT-Nachrichten empfangen, aber mindestens ein letzter Wetterwert ist ungültig.</p>","<p>MQTT messages received, but at least one latest weather value is invalid.</p>");
     if(ok && !session->allDataValid())page+=uiText("<p>Verbindung/Abonnements OK; Datenempfang noch nicht für alle Topics bestätigt. Ohne Retained-Wert kann ein späterer Messwert erforderlich sein.</p>","<p>Connection/subscriptions OK; valid data has not arrived on every topic yet. Without retained values, the next update may arrive later.</p>");
@@ -8233,6 +8358,7 @@ void mqttTask(void *) {
       if(runtime && loaded!=mqttConfigRevision){
         {MqttIoScope io;runtime->close();}
         runtime->settings=storedMqttSettings();loaded=mqttConfigRevision;lastMqttAttempt=0;
+        if(xSemaphoreTake(weatherMutex,pdMS_TO_TICKS(20))==pdTRUE){mqttClimate={};xSemaphoreGive(weatherMutex);}
       }
       if(!usable || !mqttWeatherEnabled){
         if(runtime && runtime->report.connected){MqttIoScope io;runtime->close();}
@@ -8253,7 +8379,7 @@ void mqttTask(void *) {
           if(mqttConnected){
             if(runtime->subscriptionsDenied())mqttLastError="MQTT-Abonnementsfehler";
             else if(!runtime->subscriptionsReady() && millis()-runtime->report.connectedAtMs>=8000)mqttLastError="MQTT-SUBACK fehlt";
-            for(unsigned i=0;i<4;++i)if(runtime->report.received[i] && !runtime->report.lastValid[i])mqttLastError="MQTT-Wetterwert ungültig";
+            for(unsigned i=0;i<MQTT_TOPIC_COUNT;++i)if(runtime->report.received[i] && !runtime->report.lastValid[i])mqttLastError="MQTT-Wetterwert ungültig";
           }
           if(mqttConnected){networkRecovery.progress();publishMqttWeather(runtime->report);}
         }
@@ -8747,6 +8873,12 @@ void setup() {
   windGustTopic = preferences.getString(
       "windGstTop", DEFAULT_WIND_GUST_TOPIC);
   rainTopic = preferences.getString("rainTop", DEFAULT_RAIN_TOPIC);
+  mqttTemperatureTopic=preferences.getString("mqttTempTop","zons/weather/outTemp_C");
+  mqttHumidityTopic=preferences.getString("mqttHumTop","zons/weather/outHumidity");
+  mqttPressureTopic=preferences.getString("mqttPresTop","zons/weather/pressure_mbar");
+  mqttDewPointTopic=preferences.getString("mqttDewTop","zons/weather/dewpoint_C");
+  mqttWeatherElevationM=preferences.getFloat("mqttElevM",40.0f);
+  if(!isfinite(mqttWeatherElevationM)||mqttWeatherElevationM< -500||mqttWeatherElevationM>9000)mqttWeatherElevationM=40;
   quietHoursEnabled = preferences.getBool("quietOn", false);
   quietHoursStartMinutes = constrain(
       preferences.getUShort("quietStart", 23 * 60 + 55),
@@ -8984,6 +9116,7 @@ void loop() {
   serviceLightSensor();
 #endif
   serviceEnvironmentSensor();
+  serviceEnvironmentWeather();
 #if FLIGHTWALL_HAS_MATRIX
   const bool bootWasVisible = bootScreenVisible;
   bootScreenVisible = bootScreen.update(now, WiFi.status() == WL_CONNECTED,

@@ -5,7 +5,7 @@ import subprocess,tempfile
 root=Path(__file__).resolve().parents[1];source=(root/'src/main.cpp').read_text()
 def function(signature):
  a=source.index(signature);return source[a:source.index('\n}\n',a)+3]
-helpers='\n'.join(function(x) for x in ['bool prepareSiteProfilesRestore(', 'bool prepareSiteProfilesSubmission(', 'bool applyActiveSiteProfile(', 'bool validSiteNameSetting(', 'bool siteProfilesError(', 'void handleConfigurationRestore()', 'PsramBuffer escapedProfileAttribute(', 'void fillSitePageValues('])
+helpers='\n'.join(function(x) for x in ['bool validMqttClimateTopic(', 'bool prepareSiteProfilesRestore(', 'bool prepareSiteProfilesSubmission(', 'bool applyActiveSiteProfile(', 'bool validSiteNameSetting(', 'bool siteProfilesError(', 'void handleConfigurationRestore()', 'PsramBuffer escapedProfileAttribute(', 'void fillSitePageValues('])
 code=r'''
 #include "SiteProfiles.hpp"
 #include "AirportCoordinates.hpp"
@@ -33,9 +33,9 @@ bool settingsWritePreparing=false,settingsWriteInProgress=false;
 int preferencesMutex=2;uint32_t manualRebootAt=0;
 constexpr int BRIGHTNESS_LEVEL_COUNT=7,PAGE_COUNT=8;
 struct Prefs {
- bool fail=false;int writes=0;std::string blob;std::map<std::string,double> numbers;
+ bool fail=false;int writes=0;std::string blob;std::map<std::string,double> numbers;std::map<std::string,std::string> texts;
  size_t putBytes(const char*,const void*p,size_t n){if(fail)return 0;++writes;blob.assign(static_cast<const char*>(p),n);return n;}
- void putString(const char*,const String&){++writes;}
+ void putString(const char*k,const String&v){texts[k]=v.c_str();++writes;}
  void putBool(const char*,bool){++writes;}
  void putUChar(const char*k,int v){numbers[k]=v;++writes;}
  void putUShort(const char*k,int v){numbers[k]=v;++writes;}
@@ -123,6 +123,16 @@ int main(){
  auto post=[&]{std::string json;serializeJson(request,json);webServer.args["plain"]=String(json.c_str());handleConfigurationRestore();};
  post();assert(webServer.status==200&&preferences.numbers["siteLat"]==52.0&&preferences.numbers["observerElevM"]==-10);
  SiteProfiles saved;assert(saved.decode(preferences.blob.c_str(),preferences.blob.size())&&saved.active()==1);
+ // New MQTT configuration is validated before any write; older backups retain it.
+ request["settings"]["mqtt_temperature_topic"]="zons/weather/outTemp_C";
+ request["settings"]["mqtt_weather_elevation_m"]=40;
+ post();assert(webServer.status==200&&preferences.texts["mqttTempTop"]=="zons/weather/outTemp_C"&&preferences.numbers["mqttElevM"]==40);
+ int mqttWrites=preferences.writes;manualRebootAt=0;
+ for(const char*bad:{"weather/#","weather/+"}){request["settings"]["mqtt_temperature_topic"]=bad;post();assert(webServer.status==400&&preferences.writes==mqttWrites&&!manualRebootAt);}
+ request["settings"]["mqtt_temperature_topic"]="zons/weather/outTemp_C";
+ request["settings"]["mqtt_weather_elevation_m"]="40m";post();assert(webServer.status==400&&preferences.writes==mqttWrites);
+ request["settings"]["mqtt_weather_elevation_m"]=10000;post();assert(webServer.status==400&&preferences.writes==mqttWrites);
+ request["settings"].remove("mqtt_temperature_topic");request["settings"].remove("mqtt_weather_elevation_m");post();assert(webServer.status==200&&preferences.texts["mqttTempTop"]=="zons/weather/outTemp_C"&&preferences.numbers["mqttElevM"]==40);
  int previousWrites=preferences.writes;manualRebootAt=0;request["settings"]["active_site_profile"]=99;
  post();assert(webServer.status==400&&preferences.writes==previousWrites&&!manualRebootAt);
  request["settings"]["active_site_profile"]=1;preferences.fail=true;

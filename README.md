@@ -61,7 +61,7 @@ unterschiedlichen Firmwareimages und WLAN-Rückfallmodus weiter unten.
 
 | Merkmal | Stand |
 |---|---|
-| Firmware | `3.6.1-dual-target.72` |
+| Firmware | `3.6.1-dual-target.73` |
 | Controller | Adafruit MatrixPortal S3 oder ESP32-S3 DevKitC-1 N16R8 |
 | Anzeige Matrixcontroller | 2 × 64×32 HUB75 (128×32 Pixel) oder eigener 128×64-Build, optional 125 nutzbare Spalten, und Web-Display |
 | Anzeige Headless-Controller | responsives Web-Display |
@@ -771,7 +771,7 @@ Lux-Schwellen. Manuelle Bedienung:
 Ist „Wetterdaten anzeigen, wenn kein Flugzeug in der Nähe ist“ aktiviert,
 erscheinen alle verfügbaren Messwerte gemeinsam auf einer ruhigen Seite:
 
-- BME280: Temperatur, Feuchte und auf Meereshöhe reduzierter Luftdruck
+- BME280 beziehungsweise MQTT-Klimaergänzung: Temperatur, Feuchte und auf Meereshöhe reduzierter Luftdruck
 - MQTT: Windrichtung, Windgeschwindigkeit, Böen und Regen heute
 
 Die obere Zeile enthält Temperatur, mittig Feuchte und rechts Luftdruck. Die
@@ -787,6 +787,49 @@ Die Option für die Wetter-Ruheanzeige schaltet die gesamte Matrix-Wetterseite
 ein oder aus. Auf dem Headless-Controller werden BME280- und MQTT-Werte
 weiterhin in Status und API verarbeitet, aber nicht als lokale Ruheanzeige
 dargestellt.
+
+### MQTT-Klimawerte ohne lokalen Wettersensor
+
+Ab `.73` ergänzt MQTT fehlende Temperatur-, Feuchte- und Druckwerte. Frische
+lokale BME280-Werte haben je Messwert Vorrang; MQTT-Werte verfallen nach
+15 Minuten ohne gültige Nachricht. Die Wetter-Ruheanzeige funktioniert auch
+ohne BME280 und zeigt bereits verfügbare Teilwerte. Auf 128×64 muss die
+Leerlaufwahl Wetter erlauben: **Untere Hälfte** zeigt Wetter oben und Radar
+unten; **Aus** und **Volle Höhe** ersetzen weiterhin die Wetteranzeige.
+
+Die vier zusätzlichen Topics sind unter `/config` konfigurierbar. Die
+Voreinstellungen sind einfache Zahlen ohne JSON-Hülle oder Einheit:
+
+| Messwert | Topic | Einheit |
+|---|---|---|
+| Außentemperatur | `zons/weather/outTemp_C` | °C, auch negative Werte |
+| Außenfeuchte | `zons/weather/outHumidity` | % relative Feuchte, 0–100 |
+| Stationsdruck | `zons/weather/pressure_mbar` | hPa beziehungsweise mbar |
+| Außentaupunkt | `zons/weather/dewpoint_C` | °C, auch negative Werte |
+
+Die separat gespeicherte Höhe der **MQTT-Wetterstation** beträgt standardmäßig
+40 m NHN. Ausschließlich dieser Wert wird auf MQTT-Stationsdruck angewendet;
+BME280-Druck verwendet weiterhin die Controller-Standorthöhe. Der Status zeigt
+Stationsdruck und auf Meereshöhe reduzierten Druck getrennt. MQTT liefert
+bereits den Taupunkt; fehlt ein frischer Taupunkt, wird er nur aus einem
+zusammengehörigen MQTT-Temperatur-/Feuchtepaar berechnet. Lokale Paare haben
+für den Taupunkt ebenfalls Vorrang. Gemischte Messorte werden nicht verrechnet.
+
+**MQTT-Klimawerte sind Außenwerte.** Sobald Temperatur oder Feuchte aus MQTT
+kommen, steht das Schimmelrisiko auf **N/A**. Vorhandene Risikotimer und eine
+alte Warnung werden zurückgesetzt; eine kritische Oberflächentemperatur wird
+nicht berechnet. Nur ein frisches lokales BME280-Temperatur-/Feuchtepaar darf
+die bisherige lokale Schimmelbewertung speisen. Eine ausschließliche
+MQTT-Druckergänzung verändert diese lokale Bewertung nicht.
+
+Statusseite und API zeigen die Quelle und das Alter der Messwerte. Die API
+behält `mold_risk: "unavailable"` für N/A und ergänzt `mold_risk_applicable`
+sowie den Grund `outdoor_mqtt`. Der MQTT-Hintergrundtest prüft jetzt bis zu
+acht konfigurierte Topics mit SUBACK und Datenvalidierung. Topicwechsel
+verwerfen alte MQTT-Klimawerte. Die neuen Topics und `mqtt_weather_elevation_m`
+sind in Sicherung/Wiederherstellung enthalten; ältere Sicherungen erhalten
+bestehende Ergänzungen. Broker, Zugangsdaten, Wind- und Regen-Topics bleiben
+beim Firmwareupdate unverändert.
 
 ### Schimmelrisiko
 
@@ -911,7 +954,7 @@ Das Routentest-Feld wird beim Seitenaufruf mit dem aktuellen Callsign vorbelegt.
 
 ### Liste der Konfigurationsoptionen
 
-Stand: **`.70`**. Die Tabellen beschreiben die Bedienung unter `/config`.
+Stand: **`.73`**. Die Tabellen beschreiben die Bedienung unter `/config`.
 **Beide** bedeutet Matrix- und Headless-Variante, **Matrix** nur den
 Matrixcontroller. Angegebene Grenzen und Schrittweiten entsprechen dem Formular.
 
@@ -993,6 +1036,8 @@ Ein normaler Wechsel von Standort, Radius oder Höhenfilter benötigt keinen Neu
 | Topic Windrichtung | Bis zu 128 Zeichen; Richtung in Grad oder unterstütztes Kompasskürzel | Beide |
 | Topic Windgeschwindigkeit | Bis zu 128 Zeichen; Wert in km/h | Beide |
 | Topic Windböen | Bis zu 128 Zeichen; Wert in km/h | Beide |
+| MQTT-Klimatopics | Temperatur, Feuchte, Stationsdruck und Taupunkt; konkrete Topicnamen bis 128 Bytes | Beide |
+| Höhe der MQTT-Wetterstation | −500 bis 9000 m NHN; Standard 40 m, unabhängig vom Controllerstandort | Beide |
 | Topic Regen heute | Bis zu 128 Zeichen; Eingang in cm, Anzeige in mm | Beide |
 
 BME280 und BH1750 werden automatisch erkannt; ihre I²C-Adressen werden nicht
@@ -1602,7 +1647,7 @@ Ein empfangener, aber ungültiger letzter Wert wird gesondert als Datenfehler
 gekennzeichnet. Passwort und Benutzername werden nicht ausgegeben.
 
 Wetter-Topics sind konkrete Topicnamen mit höchstens 128 Bytes im Test;
-Wildcard-Abonnements werden bei der Zuordnung zu den vier Wetterwerten nicht
+Wildcard-Abonnements werden bei der Zuordnung zu den acht Wetterwerten nicht
 unterstützt. Werte müssen Zahlen ohne Einheit sein; Windrichtung akzeptiert
 auch die dokumentierten Kompasskürzel. Windrichtung wird normiert, negative
 Wind-/Regenwerte sowie nicht endliche Zahlen werden verworfen. Regen wird
